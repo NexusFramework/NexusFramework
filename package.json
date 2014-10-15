@@ -1,0 +1,60 @@
+{
+	"name": "NexusFramework",
+	"author": "NexusTools",
+	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
+	"description": "Web Framework the intent to export sites compatible with Cordova and node-webkit, providing its own client and server side API. In heavy development, most likely will not work for you yet.",
+	"version": "0.0.1",
+	"licenses": [
+		{
+			"type": "Apache License 2.0", 
+			"url": "https://github.com/NexusTools/NexusFrameworkJS/blob/master/LICENSE.md"
+		}
+	],
+	"keywords": [
+		"TypeScript",
+		"NexusTools",
+		"NexusFramework",
+		"dynamic",
+		"website",
+		"websockets",
+		"integration",
+		"extendable",
+		"modular",
+		"nosejs",
+		"compiler",
+		"language",
+		"javascript",
+        "template",
+		"html",
+		"sass",
+		"scss"
+	],
+	"bugs": {
+		"url" : "https://github.com/NexusTools/NexusFrameworkJS/issues"
+	},
+	"repository" : { 
+		"type" : "git",	
+		"url" : "https://github.com/NexusTools/NexusFrameworkJS.git"  
+	},
+	"preferGlobal" : true,
+	"main" : "index",
+	"bin" : {
+		"nf-manage" : "./bin/nf-manage",
+		"nf-debug" : "./bin/nf-debug",
+		"nf-host" : "./bin/nf-host"
+	},
+	"engines" : {
+		"node" : ">=1.0.0"
+	},
+	"dependencies": {
+		"express": "latest",
+		"node-sass": "latest",
+		"typeinclude": "latest",
+		"nhp": "latest",
+		"ws": "latest"
+	},
+	"devDependencies": {
+		"istanbul": "0.3.2",
+    	"mocha": "~1.21.4"
+	}
+}
