@@ -1,15 +1,15 @@
 {
-	"name": "NexusFramework",
+	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"description": "Web Framework the intent to export sites compatible with Cordova and node-webkit, providing its own client and server side API. In heavy development, most likely will not work for you yet.",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
 			"url": "https://github.com/NexusTools/NexusFrameworkJS/blob/master/LICENSE.md"
 		}
 	],
+	"description": "Web Framework the intent to export sites compatible with Cordova and node-webkit, providing its own client and server side API. In heavy development, most likely will not work for you yet.",
 	"keywords": [
 		"TypeScript",
 		"NexusTools",
@@ -36,9 +36,14 @@
 		"type" : "git",	
 		"url" : "https://github.com/NexusTools/NexusFrameworkJS.git"  
 	},
-	"preferGlobal" : true,
-	"main" : "index",
-	"bin" : {
+	"scripts": {
+		"test": "mocha --timeout 10000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
+		"test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly --  --timeout 20000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
+        "postinstall": "tscac src"
+	},
+	"preferGlobal": true,
+	"main": "index",
+	"bin": {
 		"nf-manage" : "./bin/nf-manage",
 		"nf-debug" : "./bin/nf-debug",
 		"nf-host" : "./bin/nf-host"
@@ -50,6 +55,9 @@
 		"express": "latest",
 		"node-sass": "latest",
 		"typeinclude": "latest",
+        "compression": "latest",
+		"underscore": "latest",
+        "weakmap": "latest",
 		"nhp": "latest",
 		"ws": "latest"
 	},

@@ -1,4 +1,6 @@
-function PageModule(uri) {
+@include PathResolver
+
+function PageModule(uri, resolver:PathResolver) {
 }
 
 PageModule.prototype.getErrorCode = function() {
@@ -8,3 +10,5 @@ PageModule.prototype.getErrorCode = function() {
 PageModule.prototype.getErrorMessage = function() {
 	return this.error.message;
 }
+
+@main PageModule

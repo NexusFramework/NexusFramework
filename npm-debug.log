@@ -1,0 +1,101 @@
+0 info it worked if it ends with ok
+1 verbose cli [ '/usr/bin/node', '/usr/bin/npm', 'install', 'underscore' ]
+2 info using npm@1.4.28
+3 info using node@v0.10.33
+4 verbose node symlink /usr/bin/node
+5 verbose readDependencies using package.json deps
+6 verbose cache add [ 'underscore@latest', null ]
+7 verbose cache add name=undefined spec="underscore@latest" args=["underscore@latest",null]
+8 verbose parsed url { protocol: null,
+8 verbose parsed url   slashes: null,
+8 verbose parsed url   auth: null,
+8 verbose parsed url   host: null,
+8 verbose parsed url   port: null,
+8 verbose parsed url   hostname: null,
+8 verbose parsed url   hash: null,
+8 verbose parsed url   search: null,
+8 verbose parsed url   query: null,
+8 verbose parsed url   pathname: 'underscore@latest',
+8 verbose parsed url   path: 'underscore@latest',
+8 verbose parsed url   href: 'underscore@latest' }
+9 verbose cache add name="underscore" spec="latest" args=["underscore","latest"]
+10 verbose parsed url { protocol: null,
+10 verbose parsed url   slashes: null,
+10 verbose parsed url   auth: null,
+10 verbose parsed url   host: null,
+10 verbose parsed url   port: null,
+10 verbose parsed url   hostname: null,
+10 verbose parsed url   hash: null,
+10 verbose parsed url   search: null,
+10 verbose parsed url   query: null,
+10 verbose parsed url   pathname: 'latest',
+10 verbose parsed url   path: 'latest',
+10 verbose parsed url   href: 'latest' }
+11 verbose addNamed [ 'underscore', 'latest' ]
+12 verbose addNamed [ null, null ]
+13 silly lockFile 546e1155-underscore-latest underscore@latest
+14 verbose lock underscore@latest /home/katelyn/.npm/546e1155-underscore-latest.lock
+15 info addNameTag [ 'underscore', 'latest' ]
+16 verbose request where is /underscore
+17 verbose request registry https://registry.npmjs.org/
+18 verbose request id 76cd7225f5bcfb25
+19 verbose url raw /underscore
+20 verbose url resolving [ 'https://registry.npmjs.org/', './underscore' ]
+21 verbose url resolved https://registry.npmjs.org/underscore
+22 verbose request where is https://registry.npmjs.org/underscore
+23 info trying registry request attempt 1 at 10:02:32
+24 verbose etag "3U3L3XQXK6N2047DFWI14HFWJ"
+25 http GET https://registry.npmjs.org/underscore
+26 http 304 https://registry.npmjs.org/underscore
+27 silly registry.get cb [ 304,
+27 silly registry.get   { date: 'Mon, 27 Oct 2014 14:02:33 GMT',
+27 silly registry.get     server: 'Apache',
+27 silly registry.get     via: '1.1 varnish',
+27 silly registry.get     'last-modified': 'Mon, 27 Oct 2014 14:02:28 GMT',
+27 silly registry.get     'cache-control': 'max-age=60',
+27 silly registry.get     etag: '"3U3L3XQXK6N2047DFWI14HFWJ"',
+27 silly registry.get     age: '38',
+27 silly registry.get     'x-served-by': 'cache-dfw1832-DFW',
+27 silly registry.get     'x-cache': 'HIT',
+27 silly registry.get     'x-cache-hits': '2',
+27 silly registry.get     'x-timer': 'S1414418553.312374,VS0,VE0',
+27 silly registry.get     vary: 'Accept',
+27 silly registry.get     'content-length': '0',
+27 silly registry.get     'keep-alive': 'timeout=10, max=50',
+27 silly registry.get     connection: 'Keep-Alive' } ]
+28 verbose etag https://registry.npmjs.org/underscore from cache
+29 verbose addNamed [ 'underscore', '1.7.0' ]
+30 verbose addNamed [ '1.7.0', '1.7.0' ]
+31 silly lockFile 900da168-underscore-1-7-0 underscore@1.7.0
+32 verbose lock underscore@1.7.0 /home/katelyn/.npm/900da168-underscore-1-7-0.lock
+33 silly lockFile 0bc9860b--underscore-underscore-1-7-0-tgz https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz
+34 verbose lock https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz /home/katelyn/.npm/0bc9860b--underscore-underscore-1-7-0-tgz.lock
+35 verbose addRemoteTarball [ 'https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz',
+35 verbose addRemoteTarball   '6bbaf0877500d36be34ecaa584e0db9fef035209' ]
+36 info retry fetch attempt 1 at 10:02:33
+37 verbose fetch to= /tmp/npm-6855-OZNNOhcg/registry.npmjs.org/underscore/-/underscore-1.7.0.tgz
+38 http GET https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz
+39 http 200 https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz
+40 silly lockFile 0bc9860b--underscore-underscore-1-7-0-tgz https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz
+41 silly lockFile 0bc9860b--underscore-underscore-1-7-0-tgz https://registry.npmjs.org/underscore/-/underscore-1.7.0.tgz
+42 silly lockFile 900da168-underscore-1-7-0 underscore@1.7.0
+43 silly lockFile 900da168-underscore-1-7-0 underscore@1.7.0
+44 silly lockFile 546e1155-underscore-latest underscore@latest
+45 silly lockFile 546e1155-underscore-latest underscore@latest
+46 error Error: EACCES, mkdir '/home/katelyn/.npm/underscore/1.7.0'
+46 error  { [Error: EACCES, mkdir '/home/katelyn/.npm/underscore/1.7.0']
+46 error   errno: 3,
+46 error   code: 'EACCES',
+46 error   path: '/home/katelyn/.npm/underscore/1.7.0',
+46 error   parent: 'nexusframework' }
+47 error Please try running this command again as root/Administrator.
+48 error System Linux 3.16.0-23-generic
+49 error command "/usr/bin/node" "/usr/bin/npm" "install" "underscore"
+50 error cwd /home/katelyn/Projects/NexusFrameworkJS
+51 error node -v v0.10.33
+52 error npm -v 1.4.28
+53 error path /home/katelyn/.npm/underscore/1.7.0
+54 error code EACCES
+55 error errno 3
+56 error stack Error: EACCES, mkdir '/home/katelyn/.npm/underscore/1.7.0'
+57 verbose exit [ 3, true ]
