@@ -39,7 +39,7 @@
 	"scripts": {
 		"test": "mocha --timeout 10000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
 		"test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly --  --timeout 20000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
-        "postinstall": "tscac src"
+        "postinstall": "tscac modules"
 	},
 	"preferGlobal": true,
 	"main": "index",
@@ -52,10 +52,12 @@
 		"node" : ">=1.0.0"
 	},
 	"dependencies": {
+		"async": "latest",
 		"express": "latest",
 		"node-sass": "latest",
 		"typeinclude": "latest",
         "compression": "latest",
+        "express-useragent": "latest",
 		"underscore": "latest",
         "weakmap": "latest",
 		"nhp": "latest",

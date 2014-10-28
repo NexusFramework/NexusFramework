@@ -1,6 +1,8 @@
 @include DelegateEntry
 @include Virtual
 
+@target ES5
+
 class RegistryEntry extends DelegateEntry {
     
     private _name:String;

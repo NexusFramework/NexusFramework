@@ -1,5 +1,5 @@
-@nodereq string.prototype.startswith|sps
 @nodereq path
+require("string.prototype.startswith");
 
 @target ES5
 

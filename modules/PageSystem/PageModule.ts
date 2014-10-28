@@ -1,14 +1,16 @@
 @include PathResolver
+@reference PageError
 
-function PageModule(uri, resolver:PathResolver) {
-}
+@target ES5
 
-PageModule.prototype.getErrorCode = function() {
-	return this.error.code;
-}
-
-PageModule.prototype.getErrorMessage = function() {
-	return this.error.message;
+class PageModule {
+    private _error:PageError;
+    constructor(uri, resolver:PathResolver) {
+    }
+    
+    get error():PageError {
+        return this._error;
+    }
 }
 
 @main PageModule

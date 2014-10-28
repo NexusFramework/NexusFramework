@@ -9,10 +9,10 @@ class PathResolver {
         this._parent = parent;
     }
     
-    public resolve(test:Function => (features:PathFeatures[])):Path {
+    public resolve(test:Function):Path {
         
     }
     
 };
 
-@nodereq PathResolver
+@main PathResolver

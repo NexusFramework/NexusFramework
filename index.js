@@ -19,7 +19,7 @@ var nexusframework = typeinclude("NexusFramework", classPath);
 module.exports = function(rootDirectory, opts) {
     // Initialize a NexusFramework instance
     var frameworkInstance = new nexusframework(rootDirectory, opts);
-    var router = frameworkInstance.createRouter();
+    var router = frameworkInstance.router();
     
     // Map instance functions onto the router method
     for(var key in frameworkInstance) {
@@ -37,4 +37,4 @@ module.exports = function(rootDirectory, opts) {
     };
     return router;
 };
-module.exports.NexusFramework = nexusframework;
+module.exports.Framework = nexusframework;
