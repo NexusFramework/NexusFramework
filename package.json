@@ -2,7 +2,7 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
@@ -44,9 +44,6 @@
 	"preferGlobal": true,
 	"main": "index",
 	"bin": {
-		"nf-manage" : "./bin/nf-manage",
-		"nf-debug" : "./bin/nf-debug",
-		"nf-host" : "./bin/nf-host"
 	},
 	"engines" : {
 		"node" : ">=1.0.0"
