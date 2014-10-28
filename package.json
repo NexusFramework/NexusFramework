@@ -2,7 +2,7 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
@@ -39,7 +39,7 @@
 	"scripts": {
 		"test": "mocha --timeout 10000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
 		"test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly --  --timeout 20000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
-        "postinstall": "tscac modules"
+        "postinstall": "tscac modules || true"
 	},
 	"preferGlobal": true,
 	"main": "index",
