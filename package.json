@@ -2,7 +2,7 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
@@ -51,9 +51,7 @@
 	"dependencies": {
 		"async": "latest",
         "express": "latest",
-        "node-sass": "latest",
         "compression": "latest",
-        "express-useragent": "latest",
         "string.prototype.startswith": "latest",
         "typeinclude": "latest",
         "underscore": "latest",
