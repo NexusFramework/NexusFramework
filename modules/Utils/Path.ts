@@ -1,5 +1,5 @@
 @nodereq path
-require("string.prototype.startswith");
+@nodereq string.prototype.startswith:_sw
 
 @target ES5
 

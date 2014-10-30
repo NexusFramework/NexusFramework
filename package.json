@@ -2,7 +2,7 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
@@ -50,15 +50,16 @@
 	},
 	"dependencies": {
 		"async": "latest",
-		"express": "latest",
-		"node-sass": "latest",
-		"typeinclude": "latest",
+        "express": "latest",
+        "node-sass": "latest",
         "compression": "latest",
         "express-useragent": "latest",
-		"underscore": "latest",
+        "string.prototype.startswith": "latest",
+        "typeinclude": "latest",
+        "underscore": "latest",
         "weakmap": "latest",
-		"nhp": "latest",
-		"ws": "latest"
+        "nhp": "latest",
+        "ws": "latest"
 	},
 	"devDependencies": {
 		"istanbul": "0.3.2",
