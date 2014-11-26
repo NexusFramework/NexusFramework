@@ -47,7 +47,7 @@ module.exports = function(config, next, service) {
     
     var pages;
     if(config.pages)
-        pages = nhpi.template(root, config.pages);
+        pages = path.resolve(root, config.pages);
     else {
         if(config.root)
             pages = root;
