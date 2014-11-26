@@ -2,7 +2,7 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
@@ -53,7 +53,7 @@
         "express": "^4.10.4",
         "consolidate": "latest",
         "lodash": "latest",
-        "nhp": ">=0.4.3"
+        "nhp": ">=0.4.4"
 	},
 	"devDependencies": {
 		"istanbul": "0.3.2",
