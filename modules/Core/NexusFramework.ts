@@ -1,8 +1,8 @@
-@nodereq ws
 @nodereq fs
 @nodereq path
 @nodereq events
 @nodereq express
+@nodereq websocket
 @nodereq underscore:_
 @nodereq async
 @nodereq util
@@ -56,6 +56,7 @@ class NexusFramework extends events.EventEmitter {
     private _themes:ThemeRegistry;
     private _theme:Theme;
     
+    private _wsServer;
     private _configFile:String;
     private _config:Object;
     
@@ -65,6 +66,31 @@ class NexusFramework extends events.EventEmitter {
     
     constructor(rootDirectory, opts:Object = {}) {
         super();
+        this._wsServer = new websocket.server();
+        this._wsServer.on('request', function(request) {
+            /*if (!originIsAllowed(request.origin)) {
+              // Make sure we only accept requests from an allowed origin
+              request.reject();
+              console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.');
+              return;
+            }*/
+
+            var connection = request.accept('echo-protocol', request.origin);
+            console.log((new Date()) + ' Connection accepted.');
+            connection.on('message', function(message) {
+                if (message.type === 'utf8') {
+                    console.log('Received Message: ' + message.utf8Data);
+                    connection.sendUTF(message.utf8Data);
+                }
+                else if (message.type === 'binary') {
+                    console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
+                    connection.sendBytes(message.binaryData);
+                }
+            });
+            connection.on('close', function(reasonCode, description) {
+                console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
+            });
+        });
         
         this._opts = opts;
         this._root = path.normalize(rootDirectory);
@@ -147,6 +173,13 @@ class NexusFramework extends events.EventEmitter {
             parsed.pathname = parsed.pathname.substring(0, parsed.pathname.length-1);
         parsed.path = parsed.pathname + (parsed.search || "");
         return parsed;
+    }
+
+    public headers() {
+        return function(req, res, next) {
+            res.set("X-Framework", "NexusFramework/" + NexusFramework.version);
+            next();
+        }
     }
     
     public createDirectoryRouter(prefix:String = "/media", directory:String = "./media") {
@@ -245,7 +278,7 @@ class NexusFramework extends events.EventEmitter {
                         });
                     });
                 else
-                    res.sendFile(_path);
+                    res.render(_path);
                 
             });
         };
@@ -315,11 +348,22 @@ class NexusFramework extends events.EventEmitter {
     }
     
     private _initRouter() {
+        try {
+            this._wsServer.unmount({
+                httpServer: this._router
+            });
+        } catch(e) {}
         this._router = express();
+        try {
+            this._wsServer.mount({
+                httpServer: this._router
+            });
+        } catch(e) {}
+        
         if(this._config.compression)
             this._router.use(require("compression")());
         
-        
+        this._router.use(this.headers());
         this._router.use(this.directoryRouter());
         this._router.use(this.pagePreprocessor());
         this._router.use(this.pageRouter());
