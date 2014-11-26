@@ -2,7 +2,7 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
@@ -11,23 +11,21 @@
 	],
 	"description": "Web Framework the intent to export sites compatible with Cordova and node-webkit, providing its own client and server side API. In heavy development, most likely will not work for you yet.",
 	"keywords": [
-		"TypeScript",
 		"NexusTools",
 		"NexusFramework",
 		"dynamic",
 		"website",
-		"websockets",
-		"integration",
-		"extendable",
 		"modular",
-		"nosejs",
-		"compiler",
-		"language",
+        "pages",
+        "views",
+        "express",
+        "netgate",
 		"javascript",
         "template",
 		"html",
 		"sass",
-		"scss"
+		"scss",
+		"nhp"
 	],
 	"bugs": {
 		"url" : "https://github.com/NexusTools/NexusFrameworkJS/issues"
