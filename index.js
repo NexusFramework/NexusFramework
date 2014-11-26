@@ -1,8 +1,8 @@
 var consolidate = require("consolidate");
 var express = require("express");
-var lodash = require("lodash");
 var async = require("async");
 var path = require("path");
+var _ = require("lodash");
 var nhp = require("nhp");
 var fs = require("fs");
 
@@ -28,7 +28,7 @@ view = new RegExp(view + ")$", "i");
 // model detection, defaults to get
 var staticmodel = /^([^\.]+)\.json$/;
 var model = /^([^\.]+)(?:\.(get|put|post|delete))?\.js$/;
-module.exports = function(config, next, service) {
+module.exports = function(config, service, logger, next) {
     var root = path.resolve(config.root || process.cwd());
     
     var constants = config.constants || {};
@@ -41,7 +41,7 @@ module.exports = function(config, next, service) {
     
     var skeleton;
     if(config.skeleton)
-        skeleton = nhpi.template(root, config.skeleton);
+        skeleton = nhpi.template(path.resolve(root, config.skeleton));
     else
         skeleton = nhpi.template(path.resolve(__dirname, "resources", "skeleton.nhp"));
     
@@ -111,11 +111,15 @@ module.exports = function(config, next, service) {
                     if(err)
                         return next(err);
                     
+                    logger.info("Mapping", mapping);
                     var router = express.Router();
                     for(var key in mapping) {
                         var map = mapping[key];
                         if(key == "index")
                             key = "";
+                        
+                        if(map.constants && !map.models.get)
+                            map.models.get = true;
                         
                         key = "/" + key;
                         if("router" in map)
@@ -124,26 +128,61 @@ module.exports = function(config, next, service) {
                             (function(statics) {
                                 for(var method in map.models) {
                                     (function(view, model, method) {
+                                        logger.debug("Mounting", method, key, model, view);
+                                        if(model === true) {
+                                            router[method](key, function(req, res, next) {
+                                                if(err)
+                                                    return next(err);
+
+                                                var context = {};
+                                                _.merge(context, req);
+                                                if(statics)
+                                                    _.merge(context, statics);
+                                                context.page = view[0];
+
+                                                skeleton.run(context, res, function(err) {
+                                                    if(err) 
+                                                        return next(err);
+
+                                                    try {
+                                                       res.end();
+                                                    } catch(e) {}
+                                                });
+                                            });
+                                            
+                                            return;
+                                        }
+                                        
                                         try {
-                                            var modelInst = require(model);
+                                            var modelInst;
+                                            try {
+                                                modelInst = require(model);
+                                            } catch(e) {
+                                                logger.error(e);
+                                                if(!statics)
+                                                    throw e;
+                                                
+                                                modelInst = function(req, res, callback) {
+                                                    callback();
+                                                }
+                                            }
+                                            
                                             router[method](key, function(req, res, next) {
                                                 try {
-                                                    modelInst(req, res, function(err, context) {
+                                                    modelInst(req, res, function(err, pagecontext) {
                                                         if(err)
                                                             return next(err);
-
-                                                        if(statics) {
-                                                            console.log("Adding statics");
-                                                            var pageconsts = {};
-                                                            lodash.extend(pageconsts, statics);
-                                                            if(context)
-                                                                lodash.extend(pageconsts, context);
-                                                            context = pageconsts;
-                                                        } else
-                                                            context = context || {};
+                                                        if(!_.isObject(pagecontext))
+                                                            return next(); // Skip if no context was passed
+                                                        
+                                                        var context = {};
+                                                        _.merge(context, req);
+                                                        if(statics)
+                                                            _.merge(context, statics);
+                                                        if(context)
+                                                            _.merge(context, pagecontext);
                                                         context.page = view[0];
 
-                                                        console.dir(context);
                                                         skeleton.run(context, res, function(err) {
                                                             if(err) 
                                                                 return next(err);
@@ -170,7 +209,13 @@ module.exports = function(config, next, service) {
                 });
             });
         };
-        genRoute(pages, next);
+        genRoute(pages, function(err, router) {
+            if(err)
+                return next(err);
+            
+            console.dir(router);
+            next(null, router);
+        });
     };
     
     // Wait for skeleton to compile if it isn't before generating the routes
