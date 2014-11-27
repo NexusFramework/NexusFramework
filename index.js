@@ -1,4 +1,5 @@
 var consolidate = require("consolidate");
+var argwrap = require("argwrap");
 var express = require("express");
 var async = require("async");
 var path = require("path");
@@ -116,12 +117,23 @@ module.exports = function(config, service, logger, next) {
                     var router = express.Router();
                     if("__route" in mapping) {
                         // Dynamic route specific middleware!
-                        router.use(require(mapping.__route.models.get));
+                        var middleware = require(mapping.__route.models.get);
+                        middleware = argwrap(middleware, ["req", "res", "next", "service", "logger"]);
+                        router.use(function(req, res, next) {
+                            middleware({
+                                req: req,
+                                res: res,
+                                next: next,
+                                service: service,
+                                logger: logger
+                            });
+                        });
                         delete mapping.__route;
                     }
                     if("__exists" in mapping) {
                         // Dynamic existance check, adds another layer...
                         exists = require(mapping.__exists.models.get);
+                        exists = argwrap(exists, ["req", "res", "next", "skip", "service", "logger"]);
                         delete mapping.__exists;
                     }
                     
@@ -169,24 +181,27 @@ module.exports = function(config, service, logger, next) {
                                             var modelInst;
                                             try {
                                                 modelInst = require(model);
+                                                if(!_.isFunction(modelInst))
+                                                    throw new Error("Not a function: " + model);
                                             } catch(e) {
-                                                logger.error(e);
                                                 if(!statics)
                                                     throw e;
                                                 
-                                                modelInst = function(req, res, callback) {
-                                                    callback();
+                                                modelInst = function(req, res, next) {
+                                                    next();
                                                 }
                                             }
+                                            modelInst = argwrap(modelInst, ["req", "res", "callback", "render",
+                                                                            "next", "constants", "service", "logger"]);
                                             
                                             router[method](key, function(req, res, next) {
                                                 try {
-                                                    modelInst(req, res, function(err, pagecontext) {
+                                                    var cont = function(err, pagecontext) {
                                                         if(err)
                                                             return next(err);
                                                         if(!_.isObject(pagecontext))
                                                             return next(); // Skip if no context was passed
-                                                        
+
                                                         var context = {};
                                                         _.merge(context, req);
                                                         if(statics)
@@ -203,7 +218,20 @@ module.exports = function(config, service, logger, next) {
                                                                res.end();
                                                             } catch(e) {}
                                                         });
-                                                    }, constants, service);
+                                                    };
+                                                    
+                                                    modelInst({
+                                                        req: req,
+                                                        res: res,
+                                                        next: cont,
+                                                        callback: cont,
+                                                        render: function(context) {
+                                                            next(null, context || {});
+                                                        },
+                                                        constants: constants,
+                                                        service: service,
+                                                        logger: logger
+                                                    });
                                                 } catch(e) {
                                                     next(e);
                                                 }
@@ -219,10 +247,17 @@ module.exports = function(config, service, logger, next) {
                     
                     if(exists)
                         next(null, function(req, res, next) {
-                            exists(req, res, function next_exists(err) {
-                                if(err) return next(err);
-                                router(req, res, next);
-                            }, next /* Skip */);
+                            exists({
+                                req: req,
+                                res: res,
+                                next: function next_exists(err) {
+                                    if(err) return next(err);
+                                    router(req, res, next);
+                                },
+                                skip: next,
+                                service: service,
+                                logger: logger
+                            });
                         });
                     else
                         next(null, router);
