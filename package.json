@@ -2,14 +2,14 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"licenses": [
 		{
 			"type": "Apache License 2.0", 
 			"url": "https://github.com/NexusTools/NexusFrameworkJS/blob/master/LICENSE.md"
 		}
 	],
-	"description": "Web Framework the intent to export sites compatible with Cordova and node-webkit, providing its own client and server side API. In heavy development, most likely will not work for you yet.",
+	"description": "NetGate handler which uses a NHP skeleton system to provide a website templating system, compatible with other express rendering engines for the page content. Scans the page structure and generates very efficient routes.",
 	"keywords": [
 		"NexusTools",
 		"NexusFramework",

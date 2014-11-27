@@ -111,8 +111,20 @@ module.exports = function(config, service, logger, next) {
                     if(err)
                         return next(err);
                     
-                    logger.info("Mapping", mapping);
+                    var exists;
+                    logger.debug("Mapping", mapping);
                     var router = express.Router();
+                    if("__route" in mapping) {
+                        // Dynamic route specific middleware!
+                        router.use(require(mapping.__route.models.get));
+                        delete mapping.__route;
+                    }
+                    if("__exists" in mapping) {
+                        // Dynamic existance check, adds another layer...
+                        exists = require(mapping.__exists.models.get);
+                        delete mapping.__exists;
+                    }
+                    
                     for(var key in mapping) {
                         var map = mapping[key];
                         if(key == "index")
@@ -205,7 +217,15 @@ module.exports = function(config, service, logger, next) {
                         }
                     }
                     
-                    next(null, router);
+                    if(exists)
+                        next(null, function(req, res, next) {
+                            exists(req, res, function next_exists(err) {
+                                if(err) return next(err);
+                                router(req, res, next);
+                            }, next /* Skip */);
+                        });
+                    else
+                        next(null, router);
                 });
             });
         };
@@ -213,7 +233,6 @@ module.exports = function(config, service, logger, next) {
             if(err)
                 return next(err);
             
-            console.dir(router);
             next(null, router);
         });
     };
