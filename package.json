@@ -52,7 +52,7 @@
         "express": "^4.10.4",
         "consolidate": "latest",
         "lodash": "latest",
-        "nhp": ">=0.4.4"
+        "nhp": ">=0.4.5"
 	},
 	"devDependencies": {
 		"istanbul": "^0.3.2",

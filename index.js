@@ -164,6 +164,7 @@ module.exports = function(config, service, logger, next) {
                                                     _.merge(context, statics);
                                                 context.page = view[0];
 
+                                                res.type("html");
                                                 skeleton.run(context, res, function(err) {
                                                     if(err) 
                                                         return next(err);
@@ -210,6 +211,7 @@ module.exports = function(config, service, logger, next) {
                                                             _.merge(context, pagecontext);
                                                         context.page = view[0];
 
+                                                        res.type("html");
                                                         skeleton.run(context, res, function(err) {
                                                             if(err) 
                                                                 return next(err);
