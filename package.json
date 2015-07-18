@@ -2,10 +2,10 @@
 	"name": "nexusframework",
 	"author": "NexusTools",
 	"homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-	"version": "0.1.7",
+	"version": "0.1.8",
 	"licenses": [
 		{
-			"type": "Apache License 2.0", 
+			"type": "Apache License 2.0",
 			"url": "https://github.com/NexusTools/NexusFrameworkJS/blob/master/LICENSE.md"
 		}
 	],
@@ -30,9 +30,9 @@
 	"bugs": {
 		"url" : "https://github.com/NexusTools/NexusFrameworkJS/issues"
 	},
-	"repository" : { 
-		"type" : "git",	
-		"url" : "https://github.com/NexusTools/NexusFrameworkJS.git"  
+	"repository" : {
+		"type" : "git",
+		"url" : "https://github.com/NexusTools/NexusFrameworkJS.git"
 	},
 	"scripts": {
 		"test": "mocha --timeout 10000 --require test/support/env --reporter spec --globals __typeinclude__ --check-leaks test/",
