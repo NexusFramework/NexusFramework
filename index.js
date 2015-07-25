@@ -188,6 +188,7 @@ module.exports = function(config, service, logger, next) {
                                                 if(!statics)
                                                     throw e;
                                                 
+																logger.warn(e);
                                                 modelInst = function(req, res, next) {
                                                     next();
                                                 }
