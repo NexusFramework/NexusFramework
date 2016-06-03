@@ -2,14 +2,14 @@
     "name": "nexusframework",
     "author": "NexusTools",
     "homepage": "https://www.nexustools.net/projects#nexusframeworkjs",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "licenses": [
         {
             "type": "Apache License 2.0",
             "url": "https://github.com/NexusTools/NexusFrameworkJS/blob/master/LICENSE.md"
         }
     ],
-    "description": "NetGate handler which uses a NHP skeleton system to provide a website templating system, compatible with other express rendering engines for the page content. Scans the page structure and generates very efficient routes.",
+    "description": "NexusFork handler which uses a NHP skeleton system to provide a website templating system, compatible with other express rendering engines for the page content. Scans the page structure and generates efficient routes.",
     "keywords": [
         "NexusTools",
         "NexusFramework",

@@ -26,6 +26,8 @@ for(var key in consolidate) {
 }
 view = new RegExp(view + ")$", "i");
 
+var disableRequestType = !!process.env.NO_REQUEST_TYPE;
+
 // model detection, defaults to get
 var staticmodel = /^([^\.]+)\.json$/;
 var model = /^([^\.]+)(?:\.(get|put|post|delete))?\.js$/;
@@ -157,22 +159,32 @@ module.exports = function(config, service, logger, next) {
                                             router[method](key, function(req, res, next) {
                                                 if(err)
                                                     return next(err);
+                                                
+                                                var jsonResponse = !disableRequestType && /^(text\/)?json$/i.test(req.get("request-type"));
 
                                                 var context = {};
-                                                _.merge(context, req);
+                                                if(!jsonResponse)
+                                                    _.merge(context, req);
                                                 if(statics)
                                                     _.merge(context, statics);
-                                                context.page = view[0];
+                                                if(jsonResponse)
+                                                    context.page = path.relative(root, view[0]);
+                                                else
+                                                    context.page = view[0];
 
-                                                res.type("html");
-                                                skeleton.run(context, res, function(err) {
-                                                    if(err) 
-                                                        return next(err);
+                                                if(jsonResponse)
+                                                    res.json(context);
+                                                else {
+                                                    res.type("html");
+                                                    skeleton.run(context, res, function(err) {
+                                                        if(err) 
+                                                            return next(err);
 
-                                                    try {
-                                                       res.end();
-                                                    } catch(e) {}
-                                                });
+                                                        try {
+                                                           res.end();
+                                                        } catch(e) {}
+                                                    });
+                                                }
                                             });
                                             
                                             return;
@@ -188,10 +200,10 @@ module.exports = function(config, service, logger, next) {
                                                 if(!statics)
                                                     throw e;
                                                 
-																logger.warn(e);
+						logger.warn(e);
                                                 modelInst = function(req, res, next) {
                                                     next();
-                                                }
+                                                };
                                             }
                                             modelInst = argwrap(modelInst, ["req", "res", "callback", "render",
                                                                             "next", "constants", "service", "logger"]);
@@ -203,24 +215,34 @@ module.exports = function(config, service, logger, next) {
                                                             return next(err);
                                                         if(!_.isObject(pagecontext))
                                                             return next(); // Skip if no context was passed
+                                                
+                                                        var jsonResponse = !disableRequestType && /^(text\/)?json$/i.test(req.get("request-type"));
 
                                                         var context = {};
-                                                        _.merge(context, req);
+                                                        if(!jsonResponse)
+                                                            _.merge(context, req);
                                                         if(statics)
                                                             _.merge(context, statics);
                                                         if(context)
                                                             _.merge(context, pagecontext);
-                                                        context.page = view[0];
+                                                        if(jsonResponse)
+                                                            context.page = path.relative(root, view[0]);
+                                                        else
+                                                            context.page = view[0];
+                                                        
+                                                        if(jsonResponse)
+                                                            res.json(context);
+                                                        else {
+                                                            res.type("html");
+                                                            skeleton.run(context, res, function(err) {
+                                                                if(err) 
+                                                                    return next(err);
 
-                                                        res.type("html");
-                                                        skeleton.run(context, res, function(err) {
-                                                            if(err) 
-                                                                return next(err);
-
-                                                            try {
-                                                               res.end();
-                                                            } catch(e) {}
-                                                        });
+                                                                try {
+                                                                   res.end();
+                                                                } catch(e) {}
+                                                            });
+                                                        }
                                                     };
                                                     
                                                     modelInst({
@@ -283,4 +305,4 @@ module.exports = function(config, service, logger, next) {
         skeleton.once("error", next);
         skeleton.once("compiled", scanPages);
     }
-}
+};
