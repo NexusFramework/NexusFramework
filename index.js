@@ -5,6 +5,7 @@ var async = require("async");
 var path = require("path");
 var _ = require("lodash");
 var nhp = require("nhp");
+var url = require("url");
 var fs = require("fs");
 
 // Inject NHP into possible page engines
@@ -26,7 +27,9 @@ for(var key in consolidate) {
 }
 view = new RegExp(view + ")$", "i");
 
-var disableRequestType = !!process.env.NO_REQUEST_TYPE;
+var disableExposure = !!process.env.NO_EXPOSURE;
+var disableRequestType = !disableExposure && !!process.env.NO_REQUEST_TYPE;
+var disableTemplateSource = !disableExposure && !!process.env.NO_TEMPLATE_SOURCE;
 
 // model detection, defaults to get
 var staticmodel = /^([^\.]+)\.json$/;
@@ -40,6 +43,7 @@ module.exports = function(config, service, logger, next) {
     else
         constants.body = path.resolve(__dirname, "resources", "body.nhp");
     
+    var errordoc = config.errordoc;
     var nhpi = nhp = new nhp(constants);
     
     var skeleton;
@@ -293,12 +297,93 @@ module.exports = function(config, service, logger, next) {
             if(err)
                 return next(err);
             
-            next(null, router);
+            if(disableTemplateSource) {
+                if(errordoc)
+                    next(null, function(req, res, next) {
+                        var oldSendStatus = res.sendStatus;
+                        res.sendStatus = function(status) {
+                            var errorPage = errordoc[status];
+                            if(errorPage) {
+                                var purl = url.parse(req.url);
+                                purl.path = errorPage;
+                                purl.search = "";
+                                purl.query = "";
+                                req.url = url.format(purl);
+                                router.call(this, req, res, next);
+                            } else
+                                oldSendStatus.call(res, status);
+                        };
+                        router.apply(this, arguments);
+                    });
+                else
+                    next(null, router);
+            } else if(errordoc)
+                next(null, function(req, res, next) {
+                    var oldSendStatus = res.sendStatus;
+                    res.sendStatus = function(status) {
+                        var errorPage = errordoc[status];
+                        if(errorPage) {
+                            var purl = url.parse(req.url);
+                            purl.path = errorPage;
+                            purl.search = "";
+                            purl.query = "";
+                            req.url = url.format(purl);
+                            router.call(this, req, res, next);
+                        } else
+                            oldSendStatus.call(res, status);
+                    };
+                    
+                    var template, resolved;
+                    if(req.path === "/:tmpl" && (template = req.get("template"))) {
+                        if(!/\.nhp$/i.test(template) || (resolved = path.resolve(root, template)).indexOf(root) !== 0) {
+                            res.sendStatus(403);
+                            return;
+                        }
+
+                        var template = nhpi.template(resolved);
+                        if(template.isCompiled() && template._source) {
+                            res.type("javascript");
+                            res.send(template._source);
+                        } else {
+                            template.once("compiled", function() {
+                                res.type("javascript");
+                                res.send(template._source);
+                            });
+                        }
+                        return;
+                    }
+
+                    router.apply(this, arguments);
+                });
+            else
+                next(null, function(req, res) {
+                    var template, resolved;
+                    if(req.path === "/:tmpl" && (template = req.get("template"))) {
+                        if(!/\.nhp$/i.test(template) || (resolved = path.resolve(root, template)).indexOf(root) !== 0) {
+                            res.sendStatus(403);
+                            return;
+                        }
+
+                        var template = nhpi.template(resolved);
+                        if(template.isCompiled() && template._source) {
+                            res.type("javascript");
+                            res.send(template._source);
+                        } else {
+                            template.once("compiled", function() {
+                                res.type("javascript");
+                                res.send(template._source);
+                            });
+                        }
+                        return;
+                    }
+
+                    router.apply(this, arguments);
+                });
         });
     };
     
     // Wait for skeleton to compile if it isn't before generating the routes
-    if(skeleton.isCompiled)
+    if(skeleton.isCompiled())
         scanPages();
     else {
         // FIX: Its possible for compiled to be called after error if the file changes after the first error...
