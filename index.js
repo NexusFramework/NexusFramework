@@ -304,14 +304,19 @@ module.exports = function (config, service, logger, next) {
 			if (disableTemplateSource) {
 				if (errordoc)
 					next(null, function (req, res, next) {
+						var used = {};
 						var oldSendStatus = res.sendStatus;
 						res.sendStatus = function (status) {
-							var errorPage = errordoc["" + status];
-							if (errorPage) {
+							var st = "" + status;
+							var errorPage = errordoc[st];
+							if (errorPage && !(st in used)) {
+								used[st] = true;
+
 								var purl = url.parse(req.url);
 								purl.pathname = "/" + errorPage;
 								purl.search = "";
 								purl.query = "";
+								req.errorUrl = req.originalUrl;
 								req.originalUrl = req.url = url.format(purl);
 								
 								res.status(status);
@@ -325,16 +330,21 @@ module.exports = function (config, service, logger, next) {
 					next(null, router);
 			} else if (errordoc)
 				next(null, function (req, res, next) {
+					var used = {};
 					var oldSendStatus = res.sendStatus;
 					res.sendStatus = function (status) {
-						var errorPage = errordoc["" + status];
-						if (errorPage) {
+						var st = "" + status;
+						var errorPage = errordoc[st];
+						if (errorPage && !(st in used)) {
+							used[st] = true;
+							
 							var purl = url.parse(req.url);
 							purl.pathname = "/" + errorPage;
 							purl.search = "";
 							purl.query = "";
+							req.errorUrl = req.originalUrl;
 							req.originalUrl = req.url = url.format(purl);
-							
+
 							res.status(status);
 							router.call(this, req, res, next);
 						} else
