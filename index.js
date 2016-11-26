@@ -151,6 +151,12 @@ module.exports = function (config, service, logger, next) {
 						if (map.constants && !map.models.get)
 							map.models.get = true;
 
+						if(/%/.test(key))
+							key = key.replace(/%([a-z0-9]{2}|%)/g, function(match, p1, offset) {
+								if(p1 === "%")
+									return "%";
+								return String.fromCharCode(parseInt(p1, 16));
+							});
 						key = "/" + key;
 						if ("router" in map)
 							router.use(key, map.router);

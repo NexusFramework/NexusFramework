@@ -2,7 +2,7 @@
 
 NexusFrameworkJS
 ================
-NetGate handler which uses a NHP skeleton system to provide a website templating system, compatible with other express rendering engines for the page content.
+NexusFork handler which uses a NHP skeleton system to provide a website templating system, compatible with other express rendering engines for the page content.
 Scans the page structure and generates very efficient routes.
 
 Explanation
@@ -32,7 +32,7 @@ app.post("/login", function(req, res, next) {
     if(err) return next(err);
     if(!pagecontext) return next();
     /* nhp skeleton renderer using pagecontext merged with constants and req */
-  }, constants /* constants from config of handler */, service /* NetGate service controller */);
+  }, constants /* constants from config of handler */, service /* NexusFork service controller */);
 });
 
 var profileRouter = express.Router();
@@ -42,7 +42,7 @@ profileRouter.post("/*", function(req, res, next) {
     if(err) return next(err);
     if(!pagecontext) return next();
     /* nhp skeleton renderer using pagecontext merged with constants and req */
-  }, constants /* constants from config of handler */, service /* NetGate service controller */);
+  }, constants /* constants from config of handler */, service /* NexusFork service controller */);
 });
 app.use("/profile", profileRouter);
 ```
