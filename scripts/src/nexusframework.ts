@@ -782,7 +782,8 @@ Object.defineProperties(window, {
                                 } catch(e) {
                                     console.warn(e);
                                 }
-                            }
+                            } else
+                                console.log("Navigating", url);
                         };
                         private element: HTMLAnchorElement;
                         create(element: HTMLAnchorElement): void {

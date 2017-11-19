@@ -779,6 +779,8 @@ Object.defineProperties(window, {
                                         console.warn(e);
                                     }
                                 }
+                                else
+                                    console.log("Navigating", url);
                             };
                         }
                         create(element) {
