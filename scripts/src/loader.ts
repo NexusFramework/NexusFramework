@@ -257,7 +257,7 @@
                             if(/\.slim$/.test(name))
                                 name = name.substring(0, name.length-5);
                             if(/\.umd$/.test(name))
-                                name = name.substring(0, name.length-5);
+                                name = name.substring(0, name.length-4);
                             match = name.match(/^(.+)\-\d+$/);
                             if (match)
                                 name = match[1];

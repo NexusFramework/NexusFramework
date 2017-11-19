@@ -43,6 +43,13 @@ const determineName = function (name) {
         name = name.replace(/\.(css|js)(\?.*)?$/i, "");
     if (/\.min$/.test(name))
         name = name.substring(0, name.length - 4);
+    if (/\.slim$/.test(name))
+        name = name.substring(0, name.length - 5);
+    if (/\.umd$/.test(name))
+        name = name.substring(0, name.length - 4);
+    match = name.match(/^(.+)\-\d+$/);
+    if (match)
+        name = match[1];
     return name;
 };
 const isUnsupportedBrowser = function (browser) {
