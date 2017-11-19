@@ -628,7 +628,7 @@ Object.defineProperties(window, {
                     }
                     const transportPageSystem = {
                         requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any): void{
-                            if (self.pagesysprerequest && self.pagesysprerequest(path)) {
+                            if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                 self.defaultRequestPage(path, post);
                                 return;
                             }
@@ -658,7 +658,7 @@ Object.defineProperties(window, {
                         this.pagesysimpl = {
                             requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any): void{
                                 if (io.connected) {
-                                    if (self.pagesysprerequest && self.pagesysprerequest(path)) {
+                                    if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                         self.defaultRequestPage(path, post);
                                         return;
                                     }
@@ -779,7 +779,9 @@ Object.defineProperties(window, {
                                     try {
                                         e.preventDefault();
                                     } catch(e) {}
-                                } catch(e) {}
+                                } catch(e) {
+                                    console.warn(e);
+                                }
                             }
                         };
                         private element: HTMLAnchorElement;

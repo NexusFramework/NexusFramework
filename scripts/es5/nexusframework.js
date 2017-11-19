@@ -670,7 +670,7 @@ Object.defineProperties(window, {
                     };
                     var transportPageSystem = {
                         requestPage: function (path, cb, post) {
-                            if (self.pagesysprerequest && self.pagesysprerequest(path)) {
+                            if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                 self.defaultRequestPage(path, post);
                                 return;
                             }
@@ -699,7 +699,7 @@ Object.defineProperties(window, {
                         this.pagesysimpl = {
                             requestPage: function (path, cb, post) {
                                 if (io_1.connected) {
-                                    if (self.pagesysprerequest && self.pagesysprerequest(path)) {
+                                    if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                         self.defaultRequestPage(path, post);
                                         return;
                                     }
@@ -827,7 +827,9 @@ Object.defineProperties(window, {
                                         }
                                         catch (e) { }
                                     }
-                                    catch (e) { }
+                                    catch (e) {
+                                        console.warn(e);
+                                    }
                                 }
                             };
                         }

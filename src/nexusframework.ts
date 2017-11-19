@@ -2120,7 +2120,9 @@ export class NexusFramework extends events.EventEmitter {
                 try {
                     const render = res.render;
                     Object.defineProperty(res, "render", {
-                        value: (filename: string, options: any, callback: (err: Error, html?: string) => void) => {
+                        value: (filename: string, options: any, callback?: (err: Error, html?: string) => void) => {
+                            if (options instanceof Function)
+                                callback = options;
                             if (this.app.get("view engine") == "nhp") {
                                 var vars = {};
                                 _.extend(vars, res.app.locals);
@@ -2138,10 +2140,15 @@ export class NexusFramework extends events.EventEmitter {
                         configurable: true,
                         value: (filename: string, options: any) => {
                             if (req.app.get("view engine") == "nhp") {
+                                var vars = {};
+                                _.extend(vars, res.app.locals);
+                                _.extend(vars, res.locals);
+                                if (options)
+                                    _.extend(vars, options);
                                 if (pagesys) {
                                     const pagesysskeleton = req.pagesysskeleton || this.pagesysskeleton;
                                     if(pagesysskeleton) {
-                                        pagesysskeleton(filename, options, req, res, function(err, data) {
+                                        pagesysskeleton(filename, vars, req, res, function(err, data) {
                                             if (err)
                                                 next(err);
                                             else if(data)
@@ -2160,11 +2167,6 @@ export class NexusFramework extends events.EventEmitter {
                                     else
                                         out.end();
                                 };
-                                var vars = {};
-                                _.extend(vars, res.app.locals);
-                                _.extend(vars, res.locals);
-                                if (options)
-                                    _.extend(vars, options);
                                 const skeleton = (legacy && (req.legacyskeleton || this.legacyskeleton)) || req.skeleton || this.skeleton;
                                 if (!res.get("content-type"))
                                     res.type("text/html; charset=utf-8"); // Default to utf8 html

@@ -9,7 +9,6 @@
             href = protocol + href;
         return href;
     };
-    const n = function () { };
     const rmClass = function (elements, visibleClass) {
         var element;
         const classRegex = new RegExp("(^|\\s+)" + visibleClass.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
