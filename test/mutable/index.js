@@ -1,0 +1,1 @@
+module.exports = function(req, res){res.json({"tuna":312,"farmer":"Yellow"});}

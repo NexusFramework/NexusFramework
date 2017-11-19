@@ -1,0 +1,5 @@
+<h1>About NexusFramework</h1>
+<p>NexusFramework is a NodeJS Server framework, and is powering this website!</p>
+<p>It uses TypeScript, ExpressJS and Socket.IO to provide a rich API and deep control,<br />
+and a page loading system that uses ajax or socket.io (when available) to dynamically load content!</p>
+<p>Check it out <a href="https://nexustools.com/projects/nexusframework/nodejs">on NexusTools</a> or <a href="https://github.com/NexusTools/NexusFrameworkJS">on GitHub</a>.</p>

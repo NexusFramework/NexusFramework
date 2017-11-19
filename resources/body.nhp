@@ -1,1 +1,0 @@
-<page class="{{env.pageclass}}"><?include page?></page>

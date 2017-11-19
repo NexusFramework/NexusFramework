@@ -1,0 +1,22 @@
+{
+    "compileOnSave": true,
+    "compilerOptions": {
+        "target": "ES6",
+        "declaration": true,
+        "module": "commonjs",
+        "sourceMap": true
+    },
+    "files": [
+        "index.ts",
+        "compileScripts.ts",
+        "test/tests.ts"
+    ],
+    "include": [
+        "src/*.ts",
+        "helpers/*.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "**/*.spec.ts"
+    ]
+}

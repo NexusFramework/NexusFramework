@@ -1,0 +1,23 @@
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>{{title}}</title>
+        <style>
+        body {
+            margin: 2em;
+            background: #ccc;
+            font-family: Helvetica, Arial, sans-serif;
+        }
+        h1 {
+            margin: 0;
+        }
+        </style>
+    </head>
+    <body>
+        <h1>Your Browser is Not Supported</h1>
+        <p>Sorry but your browser is not supported by this website.<br />
+        please upgrade or switch browsers to continue.</p>
+        <pre style="font-size: 0.8em; padding: 4px; background: white; border-radius: 4px"><b>User-Agent Information:</b>
+        {{{JSON.stringify(useragent, undefined, 2)}}}</pre>
+    </body>
+</html>

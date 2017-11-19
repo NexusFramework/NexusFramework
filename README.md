@@ -2,58 +2,10 @@
 
 NexusFrameworkJS
 ================
-NexusFork handler which uses a NHP skeleton system to provide a website templating system, compatible with other express rendering engines for the page content.
-Scans the page structure and generates very efficient routes.
+A NodeJS Server framework compatible with ExpressJS and NexusFork.
 
-Explanation
------------
-The page structure:
-```
- - pages
-   - index.nhp
-   - index.json
-   - login.nhp
-   - login.post.js
-   - login.js
-   - profile
-     - *.js
-     - *.nhp
-```
-
-translates into something like
-
-``` javascript
-app.get("/", /* nhp skeleton renderer using req and index.json for constants */);
-app.get("/login", /* nhp skeleton renderer using req and login.json for constants */);
-
-var loginPost = require("login.post.js");
-app.post("/login", function(req, res, next) {
-  var constants = loginPost(req, res, function(err, pagecontext) {
-    if(err) return next(err);
-    if(!pagecontext) return next();
-    /* nhp skeleton renderer using pagecontext merged with constants and req */
-  }, constants /* constants from config of handler */, service /* NexusFork service controller */);
-});
-
-var profileRouter = express.Router();
-var profileAstrixGet = require("*.js");
-profileRouter.post("/*", function(req, res, next) {
-  var constants = profileAstrixGet(req, res, function(err, pagecontext) {
-    if(err) return next(err);
-    if(!pagecontext) return next();
-    /* nhp skeleton renderer using pagecontext merged with constants and req */
-  }, constants /* constants from config of handler */, service /* NexusFork service controller */);
-});
-app.use("/profile", profileRouter);
-```
-
-This makes the process of configuring express's routes extremely simply by allowing a page structure to generate them for you, and uses express' routers to allow migrating the code between folders very easy since /profile/someuser would have the req.url set to /someuser in *.js
-
-Other Renderers
----------------
-Support for using other rendering engines for the page content is being worked on.
-Any engines provided by consolidatejs will be supported, and detected automatically by the file extension of the view for any page.
-In other words, index.jade instead of index.nhp will use jade instead of nhp to render the page content!
+It uses TypeScript, ExpressJS and Socket.IO to provide a rich API and deep control,
+and a page loading system that uses ajax or socket.io (when available) to dynamically load content!
 
 Legal
 =====
