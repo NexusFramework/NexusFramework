@@ -240,11 +240,30 @@
                         else
                             cb();
                     };
-                    if (!name) {
-                        if (inlineOrVersion === true)
+                    var url;
+                    if (name) {
+                        if (inlineOrVersion !== true) {
+                            url = source = resolveUrl(source);
+                            const q = url.indexOf("?");
+                            if (q == -1)
+                                url += "?";
+                            else
+                                url += "&";
+                            url += "v=" + inlineOrVersion;
+                        }
+                    }
+                    else {
+                        if (inlineOrVersion === true) {
                             name = "inline-" + stringHash(source);
+                        }
                         else {
-                            source = resolveUrl(source);
+                            url = source = resolveUrl(source);
+                            const q = url.indexOf("?");
+                            if (q == -1)
+                                url += "?";
+                            else
+                                url += "&";
+                            url += "v=" + inlineOrVersion;
                             var name = source;
                             var index = name.lastIndexOf("/");
                             if (index > -1)
@@ -284,7 +303,8 @@
                         return callCallbacks(new Error("`" + name + "` is required but was not included before this script."));
                     const parseResource = function (data) {
                         const next = function () {
-                            data += "\n//# sourceURL=" + source;
+                            if (url)
+                                data += "\n//# sourceURL=" + source;
                             processResource(data);
                         };
                         if (deps.length) {
@@ -305,15 +325,6 @@
                     if (inlineOrVersion === true)
                         parseResource(source);
                     else {
-                        var url = source;
-                        if (inlineOrVersion) {
-                            const q = url.indexOf("?");
-                            if (q == -1)
-                                url += "?";
-                            else
-                                url += "&";
-                            url += "v=" + inlineOrVersion;
-                        }
                         var request = new XMLHttpRequest();
                         request.open("GET", url);
                         request.onreadystatechange = function () {
