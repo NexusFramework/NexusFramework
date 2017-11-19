@@ -10,6 +10,7 @@ interface NexusFrameworkResource {
     deps: string[];
 }
 declare interface NexusFrameworkLoader {
+    load(data: any, cb: (err?: Error) => void): void;
     /**
      * Loads a resource.
      * Downloads the file asynchroniously and reads any header for @ tags.
@@ -68,9 +69,11 @@ declare interface NexusFrameworkPageSystemOptions {
      */
     handler?: (res: NexusFrameworkTransportResponse) => boolean;
     /**
-     * Convert the current page.
+     * Method to call before attempting to make a page request.
+     * 
+     * @returns True to continue, False to abort.
      */
-    initializestate?: () => NexusFrameworkPageSystemResponse;
+    prerequest?: (path: string) => boolean;
     /**
      * Disables using the loader-progress elements.
      */

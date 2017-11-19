@@ -374,7 +374,7 @@ Object.defineProperties(window, {
                         for (var i = 0; i < this.progressBarContainer.length; i++) {
                             const container = this.progressBarContainer[i];
                             if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
-                                container.className += " loader-progress-visible";
+                                container.className = (container.className + " loader-progress-visible").trim();
                         }
                     }
                     else {
@@ -619,6 +619,10 @@ Object.defineProperties(window, {
                     };
                     const transportPageSystem = {
                         requestPage(path, cb, post) {
+                            if (self.pagesysprerequest && self.pagesysprerequest(path)) {
+                                self.defaultRequestPage(path, post);
+                                return;
+                            }
                             if (!opts.noprogress) {
                                 self.disableAll();
                                 self.fadeInProgress();
@@ -644,6 +648,10 @@ Object.defineProperties(window, {
                         this.pagesysimpl = {
                             requestPage(path, cb, post) {
                                 if (io.connected) {
+                                    if (self.pagesysprerequest && self.pagesysprerequest(path)) {
+                                        self.defaultRequestPage(path, post);
+                                        return;
+                                    }
                                     if (!opts.noprogress) {
                                         self.disableAll();
                                         self.fadeInProgress();
@@ -679,6 +687,7 @@ Object.defineProperties(window, {
                         this.pagesysimpl = transportPageSystem;
                     var base = document.getElementsByTagName("base");
                     base = base && base[0];
+                    this.pagesysprerequest = opts.prerequest;
                     this.pagesyshandler = opts.handler || ((res) => {
                         try {
                             const contentType = res.headers['content-type'][0];
@@ -711,7 +720,7 @@ Object.defineProperties(window, {
                                     childs = child.children;
                                     break;
                                 case "SCRIPT":
-                                    const match = child.innerHTML.match(/^NexusFrameworkLoader\.__load\((.+)\);?$/);
+                                    const match = child.innerHTML.match(/^NexusFrameworkLoader\.load\((.+)\);?$/);
                                     if (match)
                                         loaderScript = JSON.parse(match[1]);
                                     break;
@@ -740,23 +749,22 @@ Object.defineProperties(window, {
                         toAdd.forEach(function (el) {
                             document.body.appendChild(el);
                         });
-                        window.NexusFrameworkLoader['__load'](loaderScript, this.fadeOutProgress.bind(this));
+                        window.NexusFrameworkLoader.load(loaderScript, this.fadeOutProgress.bind(this));
                         return true;
                     });
                     var forwardPopState;
-                    const skip = /(^|#.*)$/;
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent {
                         constructor() {
                             this.handler = (e) => {
                                 if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
                                     return;
-                                const href = this.element.getAttribute("href");
-                                if (skip.test(href))
-                                    return;
-                                const url = this.element.href;
+                                var url = this.element.href;
                                 if (startsWith.test(url)) {
                                     try {
+                                        const match = url.match(/^(.+)#.*$/);
+                                        if (match)
+                                            url = match[1];
                                         self.requestPage(url.substring(self.url.length));
                                         try {
                                             e.stopPropagation();
@@ -878,7 +886,7 @@ Object.defineProperties(window, {
                             location.reload(true);
                         }
                     });
-                    history.replaceState(genState(opts.initializestate ? opts.initializestate() : undefined), document.title, location.href);
+                    history.replaceState(genState(), document.title, location.href);
                     return true;
                 }
                 defaultRequestPage(path, post) {

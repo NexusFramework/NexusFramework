@@ -1847,6 +1847,60 @@ class NexusFramework extends events.EventEmitter {
                     });
                 }
                 catch (e) { }
+                const getLoaderData = function () {
+                    const resarray = [];
+                    const gfontkeys = Object.keys(gfonts);
+                    if (gfontkeys.length) {
+                        var gfonturl = "https://fonts.googleapis.com/css?family=";
+                        // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
+                        var first = true;
+                        gfontkeys.forEach(function (font) {
+                            if (first)
+                                first = false;
+                            else
+                                gfonturl += "|";
+                            const styles = gfonts[font];
+                            gfonturl += encodeURIComponent(font);
+                            if (styles.length == 1 && styles[0] == "400")
+                                return;
+                            gfonturl += ":";
+                            gfonturl += styles.join(",");
+                        });
+                        styles.unshift({
+                            name: "google-fonts",
+                            source: gfonturl,
+                            version: "1.0",
+                            deps: []
+                        });
+                    }
+                    const alreadySent = req.io && (req.io['__sent_resources'] || (req.io['__sent_resources'] = []));
+                    const skip = alreadySent ? function (resource) {
+                        const key = resource.type + ":" + resource.name;
+                        if (alreadySent.indexOf(key) > -1)
+                            return true;
+                        alreadySent.push(key);
+                        return false;
+                    } : function () { return false; };
+                    styles.forEach(function (style) {
+                        style['type'] = "style";
+                        if (skip(style))
+                            return;
+                        resarray.push(style);
+                    });
+                    scripts.forEach(function (script) {
+                        script['type'] = "script";
+                        if (skip(script))
+                            return;
+                        resarray.push(script);
+                    });
+                    return resarray;
+                };
+                try {
+                    Object.defineProperty(res, "getLoaderData", {
+                        value: getLoaderData
+                    });
+                }
+                catch (e) { }
                 try {
                     const writefooter = res.locals.__writefooter = (out) => {
                         if (!servedAfterBody)
@@ -1900,53 +1954,8 @@ class NexusFramework extends events.EventEmitter {
                                 out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
                                 out.write("</script>");
                             }
-                            out.write("<script type=\"text/javascript\">NexusFrameworkLoader.__load(");
-                            const resarray = [];
-                            const gfontkeys = Object.keys(gfonts);
-                            if (gfontkeys.length) {
-                                var gfonturl = "https://fonts.googleapis.com/css?family=";
-                                // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
-                                var first = true;
-                                gfontkeys.forEach(function (font) {
-                                    if (first)
-                                        first = false;
-                                    else
-                                        gfonturl += "|";
-                                    const styles = gfonts[font];
-                                    gfonturl += encodeURIComponent(font);
-                                    if (styles.length == 1 && styles[0] == "400")
-                                        return;
-                                    gfonturl += ":";
-                                    gfonturl += styles.join(",");
-                                });
-                                styles.unshift({
-                                    name: "google-fonts",
-                                    source: gfonturl,
-                                    version: "1.0",
-                                    deps: []
-                                });
-                            }
-                            const alreadySent = req.io && (req.io['__sent_resources'] || (req.io['__sent_resources'] = []));
-                            const skip = alreadySent ? function (resource) {
-                                const key = resource.type + ":" + resource.name;
-                                if (alreadySent.indexOf(key) > -1)
-                                    return true;
-                                alreadySent.push(key);
-                                return false;
-                            } : function () { return false; };
-                            styles.forEach(function (style) {
-                                style['type'] = "style";
-                                if (skip(style))
-                                    return;
-                                resarray.push(style);
-                            });
-                            scripts.forEach(function (script) {
-                                script['type'] = "script";
-                                if (skip(script))
-                                    return;
-                                resarray.push(script);
-                            });
-                            out.write(JSON.stringify(resarray));
+                            out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
+                            out.write(JSON.stringify(getLoaderData()));
                             out.write(")</script>");
                         }
                     };
@@ -2065,15 +2074,13 @@ class NexusFramework extends events.EventEmitter {
                 try {
                     const render = res.render;
                     Object.defineProperty(res, "render", {
-                        value: (filename, options, callback, noskeleton) => {
-                            if (req.app.get("view engine") == "nhp") {
+                        value: (filename, options, callback) => {
+                            if (this.app.get("view engine") == "nhp") {
                                 var vars = {};
                                 _.extend(vars, res.app.locals);
                                 _.extend(vars, res.locals);
                                 if (options)
                                     _.extend(vars, options);
-                                if (!res.get("content-type"))
-                                    res.type("text/html; charset=utf-8"); // Default to utf8 html
                                 this.nhp.render(filename, vars, callback);
                             }
                             else

@@ -163,7 +163,7 @@
         };
         const loadCallbacks: {[index: string]: Function[]} = {};
         const NexusFrameworkLoaderImpl = {
-            __load(resources: NexusFrameworkResource[], oncomplete?: Function) {
+            load(resources: NexusFrameworkResource[], oncomplete?: Function) {
                 if (resources.length) {
                     resetProgress(resources.length);
                     resources.forEach(function(resource) {
@@ -305,7 +305,7 @@
                     const parseResource = function(data: string) {
                         const next = function() {
                             if (url)
-                                data += "\n//# sourceURL=" + source;
+                                data += "\n//# sourceURL=" + url;
                             processResource(data);
                         };
                         if (deps.length) {

@@ -168,6 +168,11 @@ declare module nexusframework {
          * Try to position this just before the ending </body> tag.
          */
         sendFooterHtml(out?: NodeJS.WritableStream): void;
+        
+        /**
+         * Retreive the data used by NexusFrameworkLoader.load().
+         */
+        getLoaderData(): any;
     }
     export interface RequestHandler {
         (req: Request, res: Response, next: (err?: Error) => void): void;
