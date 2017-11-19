@@ -135,6 +135,7 @@ class SocketIORequest extends events.EventEmitter implements http.IncomingMessag
         this.httpVersionMajor = upgradedRequest.httpVersionMajor;
         this.httpVersion = upgradedRequest.httpVersion;
         this.headers = headers;
+        this.headers['host'] = this.headers['host'] || upgradedRequest.headers['host'];
         this.headers['user-agent'] = this.headers['user-agent'] || upgradedRequest.headers['user-agent'];
         const acceptsLanguage = this.headers['accepts-language'] || upgradedRequest.headers['accepts-language'];
         if (acceptsLanguage)
@@ -169,16 +170,6 @@ class SocketIORequest extends events.EventEmitter implements http.IncomingMessag
     }
     get accepted(): express.MediaType[]{
         throw new Error("Not supported");
-    }
-    // @deprecated
-    get host() {
-        return this.hostname;
-    }
-    get hostname() {
-        return url.parse(this.url).hostname;
-    }
-    get protocol() {
-        return url.parse(this.url).protocol;
     }
     get query() {
         return url.parse(this.url, true).query || {};
@@ -2342,8 +2333,11 @@ export class NexusFramework extends events.EventEmitter {
         req['acceptsCharsets'] = express_req.acceptsCharsets;
         req['acceptsEncodings'] = express_req.acceptsEncodings;
         req['acceptsLanguages'] = express_req.acceptsLanguages;
-        if (!req['ip'])
-            req['ip'] = req.connection.remoteAddress;
+        Object.defineProperty(req, "ip", Object.getOwnPropertyDescriptor(express_req, "ip"));
+        Object.defineProperty(req, "ips", Object.getOwnPropertyDescriptor(express_req, "ips"));
+        Object.defineProperty(req, "host", Object.getOwnPropertyDescriptor(express_req, "host"));
+        Object.defineProperty(req, "hostname", Object.getOwnPropertyDescriptor(express_req, "hostname"));
+        Object.defineProperty(req, "subdomains", Object.getOwnPropertyDescriptor(express_req, "subdomains"));
         res['req'] = req;
         res['app'] = this.app;
         res['vary'] = express_res.vary;

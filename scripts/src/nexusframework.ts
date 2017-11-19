@@ -190,10 +190,14 @@ Object.defineProperties(window, {
                 reportEvent: NOOP,
                 reportPage: NOOP
             };
-            const urlResolverA = document.createElement("a");
+            const r = document.createElement("a");
+            const protocol = location.href.match(/^\w+:/)[0];
             const resolveUrl = function(url: string) {
-                urlResolverA.setAttribute("href", url);
-                return urlResolverA.href;
+                r.setAttribute("href", url);
+                var href = r.href;
+                if (/^\/\//.test(href))
+                    href = protocol + href;
+                return href;
             }
             interface PageSystemImpl {
                 requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any): void;
@@ -747,9 +751,15 @@ Object.defineProperties(window, {
                         return true;
                     });
                     var forwardPopState: any[];
+                    const skip = /(^|#.*)$/;
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent implements NexusFrameworkComponent {
                         private readonly handler = (e: Event) => {
+                            if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
+                                return;
+                            const href = this.element.getAttribute("href");
+                            if (skip.test(href))
+                                return;
                             const url = this.element.href;
                             if (startsWith.test(url)) {
                                 try {

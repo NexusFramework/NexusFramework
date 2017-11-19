@@ -1,9 +1,13 @@
 (function (w) {
     var d = window.document;
     var r = d.createElement("a");
+    var protocol = location.href.match(/^\w+:/)[0];
     var resolveUrl = function (url) {
         r.setAttribute("href", url);
-        return r.href;
+        var href = r.href;
+        if (/^\/\//.test(href))
+            href = protocol + href;
+        return href;
     };
     var n = function () { };
     var rmClass = function (elements, visibleClass) {
@@ -258,6 +262,13 @@
                                 name = name.replace(/\.(css|js)(\?.*)?$/i, "");
                             if (/\.min$/.test(name))
                                 name = name.substring(0, name.length - 4);
+                            if (/\.slim$/.test(name))
+                                name = name.substring(0, name.length - 5);
+                            if (/\.umd$/.test(name))
+                                name = name.substring(0, name.length - 5);
+                            match = name.match(/^(.+)\-\d+$/);
+                            if (match)
+                                name = match[1];
                         }
                     }
                     var key_1 = type + ":" + name;

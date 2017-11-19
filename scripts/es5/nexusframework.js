@@ -222,10 +222,14 @@ Object.defineProperties(window, {
                 reportEvent: NOOP,
                 reportPage: NOOP
             };
-            var urlResolverA = document.createElement("a");
+            var r = document.createElement("a");
+            var protocol = location.href.match(/^\w+:/)[0];
             var resolveUrl = function (url) {
-                urlResolverA.setAttribute("href", url);
-                return urlResolverA.href;
+                r.setAttribute("href", url);
+                var href = r.href;
+                if (/^\/\//.test(href))
+                    href = protocol + href;
+                return href;
             };
             var addAnimationEnd = function (el, handler) {
                 el.addEventListener("transitionend", handler);
@@ -791,11 +795,17 @@ Object.defineProperties(window, {
                         return true;
                     });
                     var forwardPopState;
+                    var skip = /(^|#.*)$/;
                     var startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     var AnchorElementComponent = (function () {
                         function AnchorElementComponent() {
                             var _this = this;
                             this.handler = function (e) {
+                                if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic"))
+                                    return;
+                                var href = _this.element.getAttribute("href");
+                                if (skip.test(href))
+                                    return;
                                 var url = _this.element.href;
                                 if (startsWith.test(url)) {
                                     try {

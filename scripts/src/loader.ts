@@ -2,9 +2,13 @@
 (function(w) {
     const d = window.document;
     const r = d.createElement("a");
+    const protocol = location.href.match(/^\w+:/)[0];
     const resolveUrl = function(url: string) {
         r.setAttribute("href", url);
-        return r.href;
+        var href = r.href;
+        if (/^\/\//.test(href))
+            href = protocol + href;
+        return href;
     }
     const n = function(){}
     const rmClass = function(elements: HTMLCollection, visibleClass: string) {
@@ -250,6 +254,13 @@
                                 name = name.replace(/\.(css|js)(\?.*)?$/i, "");
                             if(/\.min$/.test(name))
                                 name = name.substring(0, name.length-4);
+                            if(/\.slim$/.test(name))
+                                name = name.substring(0, name.length-5);
+                            if(/\.umd$/.test(name))
+                                name = name.substring(0, name.length-5);
+                            match = name.match(/^(.+)\-\d+$/);
+                            if (match)
+                                name = match[1];
                         }
                     }
                     const key = type + ":" + name;
