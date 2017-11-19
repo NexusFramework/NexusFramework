@@ -1188,14 +1188,30 @@ class NexusFramework extends events.EventEmitter {
                 });
                 const res = new SocketIOResponse(cb);
                 try {
-                    this.__http(req, res, function (err) {
-                        if (err) {
-                            req['logger'].warn(err);
-                            res.sendFailure(err);
-                        }
-                        else
-                            res.sendStatus(404);
-                    });
+                    if (this.app)
+                        this.app(req, res, function (err) {
+                            if (err) {
+                                req['logger'].warn(err);
+                                if (res['sendFailure'])
+                                    res.sendFailure(err);
+                                else
+                                    res.sendStatus(500);
+                            }
+                            else
+                                res.sendStatus(404);
+                        });
+                    else
+                        this.__http(req, res, function (err) {
+                            if (err) {
+                                req['logger'].warn(err);
+                                if (res['sendFailure'])
+                                    res.sendFailure(err);
+                                else
+                                    res.sendStatus(500);
+                            }
+                            else
+                                res.sendStatus(404);
+                        });
                 }
                 catch (e) {
                     res.sendFailure(e);
@@ -2242,10 +2258,7 @@ class NexusFramework extends events.EventEmitter {
     use(middleware) {
         this.stack.push(middleware);
     }
-    /**
-     * Express compatible handler
-     */
-    __express(req, res, next) {
+    nexusforkUpgrade(req, res) {
         try {
             Object.defineProperty(req, "services", {
                 value: {
@@ -2260,12 +2273,15 @@ class NexusFramework extends events.EventEmitter {
             });
         }
         catch (e) { }
-        this.handle(req, res, next);
     }
     /**
-     * HTTP compatible handler
+     * Express compatible handler
      */
-    __http(req, res, next) {
+    __express(req, res, next) {
+        this.nexusforkUpgrade(req, res);
+        this.handle(req, res, next);
+    }
+    expressUpgrade(req, res) {
         req['res'] = res;
         req['app'] = this.app;
         req['is'] = express_req.is;
@@ -2302,6 +2318,12 @@ class NexusFramework extends events.EventEmitter {
         res['sendfile'] = notSupported;
         res['sendFile'] = notSupported;
         res['download'] = notSupported;
+    }
+    /**
+     * HTTP compatible handler
+     */
+    __http(req, res, next) {
+        this.expressUpgrade(req, res);
         this.__express(req, res, next);
     }
     close(cb) {

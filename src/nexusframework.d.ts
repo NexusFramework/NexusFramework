@@ -92,10 +92,12 @@ export declare class NexusFramework extends events.EventEmitter {
      */
     handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void): void;
     use(middleware: nexusframework.RequestHandler): void;
+    private nexusforkUpgrade(req, res);
     /**
      * Express compatible handler
      */
     __express(req: express.Request, res: express.Response, next: express.NextFunction): void;
+    private expressUpgrade(req, res);
     /**
      * HTTP compatible handler
      */

@@ -1274,13 +1274,28 @@ export class NexusFramework extends events.EventEmitter {
                 });
                 const res = new SocketIOResponse(cb);
                 try {
-                    this.__http(req, res, function (err?: Error) {
-                        if (err) {
-                            req['logger'].warn(err);
-                            (res as any as nexusframework.Response).sendFailure(err);
-                        } else
-                            (res as any as nexusframework.Response).sendStatus(404);
-                    });
+                    if (this.app)
+                        this.app(req as any, res as any, function (err?: Error) {
+                            if (err) {
+                                req['logger'].warn(err);
+                                if(res['sendFailure'])
+                                    (res as any as nexusframework.Response).sendFailure(err);
+                                else
+                                    (res as any as nexusframework.Response).sendStatus(500);
+                            } else
+                                (res as any as nexusframework.Response).sendStatus(404);
+                        });
+                    else
+                        this.__http(req, res, function (err?: Error) {
+                            if (err) {
+                                req['logger'].warn(err);
+                                if(res['sendFailure'])
+                                    (res as any as nexusframework.Response).sendFailure(err);
+                                else
+                                    (res as any as nexusframework.Response).sendStatus(500);
+                            } else
+                                (res as any as nexusframework.Response).sendStatus(404);
+                        });
                 } catch(e) {
                     (res as any as nexusframework.Response).sendFailure(e);
                 }
@@ -2279,10 +2294,7 @@ export class NexusFramework extends events.EventEmitter {
         this.stack.push(middleware);
     }
    
-    /**
-     * Express compatible handler
-     */
-    public __express(req: express.Request, res: express.Response, next: express.NextFunction) {
+    private nexusforkUpgrade(req: express.Request, res: express.Response) {
         try {
             Object.defineProperty(req, "services", {
                 value: {
@@ -2296,12 +2308,15 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         } catch (e) {}
-        this.handle(req as any, res as any, next);
     }
     /**
-     * HTTP compatible handler
+     * Express compatible handler
      */
-    public __http(req: http.IncomingMessage, res: http.ServerResponse, next: express.NextFunction) {
+    public __express(req: express.Request, res: express.Response, next: express.NextFunction) {
+        this.nexusforkUpgrade(req, res);
+        this.handle(req as any, res as any, next);
+    }
+    private expressUpgrade(req: http.IncomingMessage, res: http.ServerResponse) {
         req['res'] = res;
         req['app'] = this.app;
         req['is'] = express_req.is;
@@ -2338,6 +2353,12 @@ export class NexusFramework extends events.EventEmitter {
         res['sendfile'] = notSupported;
         res['sendFile'] = notSupported;
         res['download'] = notSupported;
+    }
+    /**
+     * HTTP compatible handler
+     */
+    public __http(req: http.IncomingMessage, res: http.ServerResponse, next: express.NextFunction) {
+        this.expressUpgrade(req, res);
         this.__express(req as any, res as any, next);
     }
     

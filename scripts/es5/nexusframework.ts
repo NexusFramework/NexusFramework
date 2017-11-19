@@ -1,1 +1,1 @@
-/mnt/d/Projects/NodeJS/NexusFrameworkJS/scripts/src/nexusframework.ts
+../src/nexusframework.ts
