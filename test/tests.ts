@@ -291,6 +291,18 @@ describe("post", function() {
             cb();
         });
     });
+    it("request /", function(cb) {
+        const json = JSON.stringify(data);
+        request.post("http://localhost:35438/", {
+            headers: {'content-type' : 'text/json'},
+            body: json
+        }, function(err, res, body) {
+            if(err)
+                return cb(err);
+            assert.equal(res.statusCode, 403);
+            cb();
+        });
+    });
 });
 //it("close()", function(cb) {
 //    client.disconnect();

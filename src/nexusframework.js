@@ -5,6 +5,7 @@ const querystring = require("querystring");
 const nulllogger = require("nulllogger");
 const socket_io = require("socket.io");
 const useragent = require("useragent");
+const statuses = require("statuses");
 const chokidar = require("chokidar");
 const express = require("express");
 const events = require("events");
@@ -101,7 +102,6 @@ class SocketIORequest extends events.EventEmitter {
         this.fresh = false;
         this.stale = true;
         this.method = method;
-        this.ip = upgradedRequest['ip'];
         this.url = upath.join("/", path);
         this.connection = upgradedRequest.connection;
         this.httpVersionMinor = upgradedRequest.httpVersionMinor;
@@ -201,7 +201,7 @@ class SocketIOResponse extends stream.Writable {
         super();
         this.headers = {};
         this.useChunkedEncodingByDefault = false;
-        this.statusMessage = "Okay";
+        this.statusMessage = statuses[200];
         this.chunkedEncoding = false;
         this.shouldKeepAlive = true;
         this.headersSent = false;
@@ -213,8 +213,6 @@ class SocketIOResponse extends stream.Writable {
         this.finished = false;
         this.locals = {};
         this.cb = cb;
-    }
-    redirect() {
     }
     flushHeaders() {
         return this;
@@ -242,6 +240,7 @@ class SocketIOResponse extends stream.Writable {
     }
     writeHead(statusCode, reasonPhraseOrHeaders, headers) {
         this.statusCode = statusCode;
+        this.statusMessage = statuses[statusCode] || String(statusCode);
         if (headers) {
             this.statusMessage = reasonPhraseOrHeaders;
         }
@@ -743,36 +742,54 @@ function processMapping(mapping, mapped = {}) {
         mapped.put = lazyLoadMapping(put, "put", mapped);
     else {
         const autoput = mapping['autoput'] || mapping['__autoput'] || mapping['decodedput'] || mapping['__decodedput'];
-        mapped['autoput'] = lazyLoadMapping(autoput, "autoput", mapped);
-        mapped.put = function (req, res, next) {
-            req.processBody(function () {
-                mapped['autoput'](req, res, next);
-            });
-        };
+        if (autoput) {
+            mapped['autoput'] = lazyLoadMapping(autoput, "autoput", mapped);
+            mapped.put = function (req, res, next) {
+                req.processBody(function () {
+                    mapped['autoput'](req, res, next);
+                });
+            };
+        }
+        else if (get)
+            mapped.put = function (req, res, next) {
+                res.sendStatus.call(res, 403);
+            };
     }
     const post = mapping['post'] || mapping['__post'];
     if (post)
         mapped.post = lazyLoadMapping(post, "post", mapped);
     else {
         const autopost = mapping['autopost'] || mapping['__autopost'] || mapping['decodedpost'] || mapping['__decodedpost'];
-        mapped['autopost'] = lazyLoadMapping(autopost, "autopost", mapped);
-        mapped.post = function (req, res, next) {
-            req.processBody(function () {
-                mapped['autopost'](req, res, next);
-            });
-        };
+        if (autopost) {
+            mapped['autopost'] = lazyLoadMapping(autopost, "autopost", mapped);
+            mapped.post = function (req, res, next) {
+                req.processBody(function () {
+                    mapped['autopost'](req, res, next);
+                });
+            };
+        }
+        else if (get)
+            mapped.post = function (req, res, next) {
+                express_res.sendStatus.call(res, 403);
+            };
     }
     const patch = mapping['patch'] || mapping['__patch'];
     if (patch)
         mapped.patch = lazyLoadMapping(patch, "patch", mapped);
     else {
         const autopatch = mapping['autopatch'] || mapping['__autopatch'] || mapping['decodedpatch'] || mapping['__decodedpatch'];
-        mapped['autopatch'] = lazyLoadMapping(autopatch, "autopatch", mapped);
-        mapped.patch = function (req, res, next) {
-            req.processBody(function () {
-                mapped['autopatch'](req, res, next);
-            });
-        };
+        if (autopatch) {
+            mapped['autopatch'] = lazyLoadMapping(autopatch, "autopatch", mapped);
+            mapped.patch = function (req, res, next) {
+                req.processBody(function () {
+                    mapped['autopatch'](req, res, next);
+                });
+            };
+        }
+        else if (get)
+            mapped.patch = function (req, res, next) {
+                express_res.sendStatus.call(res, 403);
+            };
     }
     const head = mapping['head'] || mapping['__head'];
     if (head)
@@ -1182,39 +1199,39 @@ class NexusFramework extends events.EventEmitter {
                 });
             });
             client.on("page", (method, path, post, headers, cb) => {
-                const req = new SocketIORequest(client.conn.request, method, path, post, headers);
+                const req = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers);
                 Object.defineProperty(req, "io", {
                     value: client
                 });
                 const res = new SocketIOResponse(cb);
+                this.expressUpgrade(req, res);
                 try {
-                    if (this.app)
-                        this.app(req, res, function (err) {
-                            if (err) {
-                                req['logger'].warn(err);
-                                if (res['sendFailure'])
-                                    res.sendFailure(err);
-                                else
-                                    res.sendStatus(500);
-                            }
+                    const next = (err) => {
+                        if (err) {
+                            (req.logger || this.logger).warn(err);
+                            if (res.sendFailure)
+                                res.sendFailure(err);
                             else
-                                res.sendStatus(404);
-                        });
+                                res.sendStatus(500);
+                        }
+                        else
+                            res.sendStatus(404);
+                    };
+                    if (this.app) {
+                        const stack = this.app._router.stack;
+                        async.eachSeries(stack, function (layer, next) {
+                            if (layer.name === "expressInit")
+                                next();
+                            else
+                                layer.handle(req, res, next);
+                        }, next);
+                    }
                     else
-                        this.__http(req, res, function (err) {
-                            if (err) {
-                                req['logger'].warn(err);
-                                if (res['sendFailure'])
-                                    res.sendFailure(err);
-                                else
-                                    res.sendStatus(500);
-                            }
-                            else
-                                res.sendStatus(404);
-                        });
+                        this.handle(req, res, next);
                 }
                 catch (e) {
-                    res.sendFailure(e);
+                    (req.logger || this.logger).warn(e);
+                    res.sendStatus(500);
                 }
             });
         });
@@ -2086,7 +2103,7 @@ class NexusFramework extends events.EventEmitter {
                                         return;
                                     }
                                 }
-                                const out = new BufferingWritable(res);
+                                const out = req.io ? res : new BufferingWritable(res);
                                 const callback = function (err) {
                                     if (err)
                                         next(err);
