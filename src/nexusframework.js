@@ -1107,7 +1107,7 @@ class NexusFramework extends events.EventEmitter {
     setupTemplate(root) {
         const Include = nhp.Instructions.Include;
         this.nhp.installProcessor("template", function (file) {
-            return new Include(path.resolve(root, file));
+            return new Include(file, root);
         });
     }
     enableLoader() {
