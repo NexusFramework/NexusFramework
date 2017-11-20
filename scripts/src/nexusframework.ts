@@ -880,6 +880,8 @@ Object.defineProperties(window, {
                         }
                         
                         try {
+                            if (!e.state)
+                                throw new Error("No state, reloading...");
                             if (e.state.user != this.currentUserID)
                                 throw new Error("User has changed since state was created, reloading...");
                             const page = e.state.page;
