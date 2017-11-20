@@ -48,6 +48,10 @@ const _export: {
         instance.mountScripts();
     if (!config.noabout)
         instance.mountAbout();
+    if (config.errordoc)
+        Object.keys(config.errordoc).forEach(function(key) {
+            instance.setErrorDocument(key as any, config.errordoc[key]);
+        })
     if (config.mounts) {
         if (!Array.isArray(config.mounts))
             config.mounts = [config.mounts];

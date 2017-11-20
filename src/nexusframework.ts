@@ -1285,36 +1285,41 @@ export class NexusFramework extends events.EventEmitter {
                 });
             });
             client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
-                const req: nexusframework.Request = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers) as any;
-                Object.defineProperty(req, "io", {
-                    value: client
-                });
-                const res: nexusframework.Response = new SocketIOResponse(cb) as any;
-                this.expressUpgrade(req, res);
                 try {
-                    const next = (err?) => {
-                        if (err) {
-                            (req.logger||this.logger).warn(err);
-                            if(res.sendFailure)
-                                res.sendFailure(err);
-                            else
-                                res.sendStatus(500);
+                    const req: nexusframework.Request = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers) as any;
+                    Object.defineProperty(req, "io", {
+                        value: client
+                    });
+                    const res: nexusframework.Response = new SocketIOResponse(cb) as any;
+                    this.expressUpgrade(req, res);
+                    try {
+                        const next = (err?) => {
+                            if (err) {
+                                (req.logger||this.logger).warn(err);
+                                if(res.sendFailure)
+                                    res.sendFailure(err);
+                                else
+                                    res.sendStatus(500);
+                            } else
+                                res.sendStatus(404);
+                        };
+                        if (this.app) {
+                            const stack: ({name: string, handle: express.RequestHandler})[] = this.app._router.stack;
+                            async.eachSeries(stack, function(layer, next) {
+                                if(layer.name === "expressInit")
+                                    next();
+                                else
+                                    layer.handle(req, res, next);
+                            }, next);
                         } else
-                            res.sendStatus(404);
-                    };
-                    if (this.app) {
-                        const stack: ({name: string, handle: express.RequestHandler})[] = this.app._router.stack;
-                        async.eachSeries(stack, function(layer, next) {
-                            if(layer.name === "expressInit")
-                                next();
-                            else
-                                layer.handle(req, res, next);
-                        }, next);
-                    } else
-                        this.handle(req, res, next);
+                            this.handle(req, res, next);
+                    } catch(e) {
+                        (req.logger||this.logger).warn(e);
+                        res.sendStatus(500);
+                    }
                 } catch(e) {
-                    (req.logger||this.logger).warn(e);
-                    res.sendStatus(500);
+                    console.warn(e);
+                    client.disconnect(true);
                 }
             });
         });
@@ -2361,6 +2366,7 @@ export class NexusFramework extends events.EventEmitter {
         res['req'] = req;
         res['app'] = this.app;
         res['vary'] = express_res.vary;
+        res['status'] = express_res.status;
         res['sendStatus'] = express_res.sendStatus;
         res['contentType'] = express_res.contentType;
         res['clearCookie'] = express_res.clearCookie;

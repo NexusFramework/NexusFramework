@@ -200,7 +200,7 @@ Object.defineProperties(window, {
                 return href;
             }
             interface PageSystemImpl {
-                requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any): void;
+                requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void;
             }
             const addAnimationEnd = function(el: Element, handler: Function) {
                 el.addEventListener("transitionend", handler as any);
@@ -616,6 +616,7 @@ Object.defineProperties(window, {
                     
                     opts = opts || {};
                     const self = this;
+                    var currentResponse: NexusFrameworkPageSystemResponse;
                     const wrapCBUserExtract = (cb: (res: NexusFrameworkTransportResponse) => void) => {
                         return (res: NexusFrameworkTransportResponse) => {
                             const user = res.headers['x-user'];
@@ -627,7 +628,7 @@ Object.defineProperties(window, {
                         }
                     }
                     const transportPageSystem = {
-                        requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any): void{
+                        requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void{
                             if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                 self.defaultRequestPage(path, post);
                                 return;
@@ -656,7 +657,7 @@ Object.defineProperties(window, {
                     if (!opts.noio && this.io) {
                         const io = this.io;
                         this.pagesysimpl = {
-                            requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any): void{
+                            requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void{
                                 if (io.connected) {
                                     if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                         self.defaultRequestPage(path, post);
@@ -673,6 +674,9 @@ Object.defineProperties(window, {
                                     if(val)
                                         headers['cookie'] = val;
                                     io.emit("page", post ? "POST" : "GET", path, post, headers, function(res: NexusFrameworkPageSystemResponse) {
+                                        if (rid != self.activerid)
+                                            return;
+                                        
                                         const cookies = res.headers['set-cookie'];
                                         if(cookies) {
                                             cookies.forEach(function(cookie) {
@@ -689,7 +693,7 @@ Object.defineProperties(window, {
                                         wrapCBUserExtract(_cb)(convertResponse(res, self.resolveUrl(path)));
                                     });
                                 } else
-                                    transportPageSystem.requestPage(path, cb, post);
+                                    transportPageSystem.requestPage(path, cb, post, rid);
                             }
                         }
                     } else
@@ -797,26 +801,33 @@ Object.defineProperties(window, {
                         save() {}
                     }
                     const genState = (withPageState?: NexusFrameworkPageSystemResponse) => {
-                        var data: any = {
-                            user: this.currentUserID
-                        };
                         if (withPageState) {
-                            data.title = document.title,
-                            data.body = this.saveComponents(document.body);
-                            data.basehref = base ? base['href'] : undefined;
-                            data.page = withPageState;
+                            return {
+                                title: document.title,
+                                user: this.currentUserID,
+                                scroll: [window.scrollX, window.scrollY],
+                                body: this.saveComponents(document.body),
+                                basehref: base ? base['href'] : undefined,
+                                page: withPageState
+                            }
                         }
-                        return data;
+                        return undefined;
                     }
                     this.requestPage = (path: string, post?: any, replace = false) => {
                         if (/\..+$/.test(path))
                             this.defaultRequestPage(path, post);
                         else {
                             const rid = ++this.activerid;
-                            document.title = "Loading...";
                             const url = this.resolveUrl(path);
                             console.log(url, replace, rid);
-                            history[replace ? "replaceState" : "pushState"](genState(), "Loading...", url);
+                            if (replace)
+                                history.replaceState(genState(currentResponse), "Loading...", url);
+                            else {
+                                history.replaceState(genState(currentResponse), document.title, location.href);
+                                history.pushState(genState(), "Loading...", url);
+                                currentResponse = undefined;
+                                window.scrollTo(0, 0);
+                            }
                             this.pagesysimpl.requestPage(path, (res) => {
                                 try {
                                     if (rid != this.activerid)
@@ -842,7 +853,7 @@ Object.defineProperties(window, {
                                         throw new Error("Could not handle response");
                                     
                                     const contentType = res.headers['content-type'];
-                                    history.replaceState(genState({
+                                    history.replaceState(genState(currentResponse = {
                                         code: res.code,
                                         headers: res.headers,
                                         data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
@@ -854,7 +865,7 @@ Object.defineProperties(window, {
                                         history.go(-1);
                                     } catch(e) {}
                                 }
-                            }, post);
+                            }, post, rid);
                         }
                     };
                     this.registerComponent("a", AnchorElementComponent);
@@ -877,6 +888,7 @@ Object.defineProperties(window, {
                             document.title = e.state.title;
                             this.pagesyshandler(convertResponse(page));
                             this.restoreComponents(document.body, e.state.body);
+                            window.scrollTo.apply(window, e.state.scroll);
                         } catch(err) {
                             console.warn(err);
                             var url = location.href;
@@ -894,7 +906,6 @@ Object.defineProperties(window, {
                             location.reload(true);
                         }
                     });
-                    history.replaceState(genState(), document.title, location.href);
                     return true;
                 }
                 defaultRequestPage(path: string, post?: any) {

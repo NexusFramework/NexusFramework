@@ -607,6 +607,7 @@ Object.defineProperties(window, {
                         return console.warn("This browser is missing an essential feature required for the dynamic Page System.");
                     opts = opts || {};
                     const self = this;
+                    var currentResponse;
                     const wrapCBUserExtract = (cb) => {
                         return (res) => {
                             const user = res.headers['x-user'];
@@ -618,7 +619,7 @@ Object.defineProperties(window, {
                         };
                     };
                     const transportPageSystem = {
-                        requestPage(path, cb, post) {
+                        requestPage(path, cb, post, rid) {
                             if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                 self.defaultRequestPage(path, post);
                                 return;
@@ -646,7 +647,7 @@ Object.defineProperties(window, {
                     if (!opts.noio && this.io) {
                         const io = this.io;
                         this.pagesysimpl = {
-                            requestPage(path, cb, post) {
+                            requestPage(path, cb, post, rid) {
                                 if (io.connected) {
                                     if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                         self.defaultRequestPage(path, post);
@@ -663,6 +664,8 @@ Object.defineProperties(window, {
                                     if (val)
                                         headers['cookie'] = val;
                                     io.emit("page", post ? "POST" : "GET", path, post, headers, function (res) {
+                                        if (rid != self.activerid)
+                                            return;
                                         const cookies = res.headers['set-cookie'];
                                         if (cookies) {
                                             cookies.forEach(function (cookie) {
@@ -679,7 +682,7 @@ Object.defineProperties(window, {
                                     });
                                 }
                                 else
-                                    transportPageSystem.requestPage(path, cb, post);
+                                    transportPageSystem.requestPage(path, cb, post, rid);
                             }
                         };
                     }
@@ -794,26 +797,33 @@ Object.defineProperties(window, {
                         save() { }
                     }
                     const genState = (withPageState) => {
-                        var data = {
-                            user: this.currentUserID
-                        };
                         if (withPageState) {
-                            data.title = document.title,
-                                data.body = this.saveComponents(document.body);
-                            data.basehref = base ? base['href'] : undefined;
-                            data.page = withPageState;
+                            return {
+                                title: document.title,
+                                user: this.currentUserID,
+                                scroll: [window.scrollX, window.scrollY],
+                                body: this.saveComponents(document.body),
+                                basehref: base ? base['href'] : undefined,
+                                page: withPageState
+                            };
                         }
-                        return data;
+                        return undefined;
                     };
                     this.requestPage = (path, post, replace = false) => {
                         if (/\..+$/.test(path))
                             this.defaultRequestPage(path, post);
                         else {
                             const rid = ++this.activerid;
-                            document.title = "Loading...";
                             const url = this.resolveUrl(path);
                             console.log(url, replace, rid);
-                            history[replace ? "replaceState" : "pushState"](genState(), "Loading...", url);
+                            if (replace)
+                                history.replaceState(genState(currentResponse), "Loading...", url);
+                            else {
+                                history.replaceState(genState(currentResponse), document.title, location.href);
+                                history.pushState(genState(), "Loading...", url);
+                                currentResponse = undefined;
+                                window.scrollTo(0, 0);
+                            }
                             this.pagesysimpl.requestPage(path, (res) => {
                                 try {
                                     if (rid != this.activerid)
@@ -835,7 +845,7 @@ Object.defineProperties(window, {
                                     if (!this.pagesyshandler(res))
                                         throw new Error("Could not handle response");
                                     const contentType = res.headers['content-type'];
-                                    history.replaceState(genState({
+                                    history.replaceState(genState(currentResponse = {
                                         code: res.code,
                                         headers: res.headers,
                                         data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
@@ -849,7 +859,7 @@ Object.defineProperties(window, {
                                     }
                                     catch (e) { }
                                 }
-                            }, post);
+                            }, post, rid);
                         }
                     };
                     this.registerComponent("a", AnchorElementComponent);
@@ -871,6 +881,7 @@ Object.defineProperties(window, {
                             document.title = e.state.title;
                             this.pagesyshandler(convertResponse(page));
                             this.restoreComponents(document.body, e.state.body);
+                            window.scrollTo.apply(window, e.state.scroll);
                         }
                         catch (err) {
                             console.warn(err);
@@ -890,7 +901,6 @@ Object.defineProperties(window, {
                             location.reload(true);
                         }
                     });
-                    history.replaceState(genState(), document.title, location.href);
                     return true;
                 }
                 defaultRequestPage(path, post) {

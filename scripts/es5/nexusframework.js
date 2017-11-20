@@ -658,6 +658,7 @@ Object.defineProperties(window, {
                         return console.warn("This browser is missing an essential feature required for the dynamic Page System.");
                     opts = opts || {};
                     var self = this;
+                    var currentResponse;
                     var wrapCBUserExtract = function (cb) {
                         return function (res) {
                             var user = res.headers['x-user'];
@@ -669,7 +670,7 @@ Object.defineProperties(window, {
                         };
                     };
                     var transportPageSystem = {
-                        requestPage: function (path, cb, post) {
+                        requestPage: function (path, cb, post, rid) {
                             if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                 self.defaultRequestPage(path, post);
                                 return;
@@ -697,7 +698,7 @@ Object.defineProperties(window, {
                     if (!opts.noio && this.io) {
                         var io_1 = this.io;
                         this.pagesysimpl = {
-                            requestPage: function (path, cb, post) {
+                            requestPage: function (path, cb, post, rid) {
                                 if (io_1.connected) {
                                     if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                         self.defaultRequestPage(path, post);
@@ -714,6 +715,8 @@ Object.defineProperties(window, {
                                     if (val)
                                         headers['cookie'] = val;
                                     io_1.emit("page", post ? "POST" : "GET", path, post, headers, function (res) {
+                                        if (rid != self.activerid)
+                                            return;
                                         var cookies = res.headers['set-cookie'];
                                         if (cookies) {
                                             cookies.forEach(function (cookie) {
@@ -730,7 +733,7 @@ Object.defineProperties(window, {
                                     });
                                 }
                                 else
-                                    transportPageSystem.requestPage(path, cb, post);
+                                    transportPageSystem.requestPage(path, cb, post, rid);
                             }
                         };
                     }
@@ -847,16 +850,17 @@ Object.defineProperties(window, {
                         return AnchorElementComponent;
                     }());
                     var genState = function (withPageState) {
-                        var data = {
-                            user: _this.currentUserID
-                        };
                         if (withPageState) {
-                            data.title = document.title,
-                                data.body = _this.saveComponents(document.body);
-                            data.basehref = base ? base['href'] : undefined;
-                            data.page = withPageState;
+                            return {
+                                title: document.title,
+                                user: _this.currentUserID,
+                                scroll: [window.scrollX, window.scrollY],
+                                body: _this.saveComponents(document.body),
+                                basehref: base ? base['href'] : undefined,
+                                page: withPageState
+                            };
                         }
-                        return data;
+                        return undefined;
                     };
                     this.requestPage = function (path, post, replace) {
                         if (replace === void 0) { replace = false; }
@@ -864,10 +868,16 @@ Object.defineProperties(window, {
                             _this.defaultRequestPage(path, post);
                         else {
                             var rid_1 = ++_this.activerid;
-                            document.title = "Loading...";
                             var url_1 = _this.resolveUrl(path);
                             console.log(url_1, replace, rid_1);
-                            history[replace ? "replaceState" : "pushState"](genState(), "Loading...", url_1);
+                            if (replace)
+                                history.replaceState(genState(currentResponse), "Loading...", url_1);
+                            else {
+                                history.replaceState(genState(currentResponse), document.title, location.href);
+                                history.pushState(genState(), "Loading...", url_1);
+                                currentResponse = undefined;
+                                window.scrollTo(0, 0);
+                            }
                             _this.pagesysimpl.requestPage(path, function (res) {
                                 try {
                                     if (rid_1 != _this.activerid)
@@ -889,7 +899,7 @@ Object.defineProperties(window, {
                                     if (!_this.pagesyshandler(res))
                                         throw new Error("Could not handle response");
                                     var contentType = res.headers['content-type'];
-                                    history.replaceState(genState({
+                                    history.replaceState(genState(currentResponse = {
                                         code: res.code,
                                         headers: res.headers,
                                         data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
@@ -903,7 +913,7 @@ Object.defineProperties(window, {
                                     }
                                     catch (e) { }
                                 }
-                            }, post);
+                            }, post, rid_1);
                         }
                     };
                     this.registerComponent("a", AnchorElementComponent);
@@ -925,6 +935,7 @@ Object.defineProperties(window, {
                             document.title = e.state.title;
                             _this.pagesyshandler(convertResponse(page));
                             _this.restoreComponents(document.body, e.state.body);
+                            window.scrollTo.apply(window, e.state.scroll);
                         }
                         catch (err) {
                             console.warn(err);
@@ -944,7 +955,6 @@ Object.defineProperties(window, {
                             location.reload(true);
                         }
                     });
-                    history.replaceState(genState(), document.title, location.href);
                     return true;
                 };
                 NexusFrameworkBase.prototype.defaultRequestPage = function (path, post) {
