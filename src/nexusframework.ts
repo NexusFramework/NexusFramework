@@ -1187,6 +1187,12 @@ export class NexusFramework extends events.EventEmitter {
                 this.nhp.render(filename, options, callback);
         });
     }
+    public setupTemplate(root: string) {
+        const Include = nhp.Instructions.Include;
+        this.nhp.installProcessor("template", function(file) {
+            return new Include(path.resolve(root, file));
+        });
+    }
     public enableLoader() {
         this.loaderEnabled = true;
     }

@@ -15,11 +15,12 @@ const _export = function (config, logger, server, app) {
     if (!config.nologging)
         instance.enableLogging();
     if (config.root) {
-        config.root = path.resolve(config.root || process.cwd());
+        config.root = path.resolve(process.cwd(), config.root);
         config.pages = path.resolve(config.root, config.pages || "pages");
         config.skeleton = path.resolve(config.root, config.skeleton || "theme/skeleton.nhp");
         config.legacyskeleton = config.legacyskeleton ? path.resolve(config.root, config.legacyskeleton) : undefined;
         config.pagesysskeleton = config.pagesysskeleton ? path.resolve(config.root, config.pagesysskeleton) : undefined;
+        instance.setupTemplate(config.root);
         instance.mount("/", config.pages);
     }
     if (config.skeleton)
@@ -38,6 +39,8 @@ const _export = function (config, logger, server, app) {
         instance.enableLoader();
     if (!config.noscripts)
         instance.mountScripts();
+    if (!config.noabout)
+        instance.mountAbout();
     if (config.mounts) {
         if (!Array.isArray(config.mounts))
             config.mounts = [config.mounts];

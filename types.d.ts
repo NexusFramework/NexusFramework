@@ -355,13 +355,18 @@ declare module nexusframework {
          */
         errordoc?: {[index: string]: string};
         /**
-         * When true, scripts will not be served on {{prefix}}/:scripts
+         * When true, the loader will not be enabled for compatible browsers.
+         * The loader is required for the dynamic page system.
          */
         noloader?: boolean;
         /**
          * When true, scripts will not be served on {{prefix}}/:scripts
          */
         noscripts?: boolean;
+        /**
+         * When true, about will not be served on {{prefix}}/:about
+         */
+        noabout?: boolean;
         /**
          * When true, disables logging.
          */
