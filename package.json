@@ -8,7 +8,7 @@
         }
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.14",
+    "version": "0.3.0-beta.15",
     "licenses": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [
@@ -52,7 +52,9 @@
         "chokidar": "^1.7.0",
         "cookie-parser": "^1.4.3",
         "express": "^4.16.2",
+        "isbot": "^2.1.0",
         "lodash": "^4.17.4",
+        "lru-cache": "^4.1.1",
         "multer": "^1.3.0",
         "nhp": "^0.8.9",
         "socket.io": "^2.0.4",
@@ -66,6 +68,7 @@
         "@types/express": "^4.0.39",
         "@types/jquery": "^3.2.16",
         "@types/lodash": "^4.14.85",
+        "@types/lru-cache": "^4.1.0",
         "@types/mocha": "^2.2.44",
         "@types/request": "^2.0.8",
         "@types/socket.io": "^1.4.31",

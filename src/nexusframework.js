@@ -5,12 +5,14 @@ const querystring = require("querystring");
 const nulllogger = require("nulllogger");
 const socket_io = require("socket.io");
 const useragent = require("useragent");
+const lrucache = require("lru-cache");
 const statuses = require("statuses");
 const chokidar = require("chokidar");
 const express = require("express");
 const events = require("events");
 const stream = require("stream");
 const multer = require("multer");
+const isbot = require("isbot");
 const upath = require("upath");
 const async = require("async");
 const http = require("http");
@@ -19,6 +21,8 @@ const _ = require("lodash");
 const url = require("url");
 const nhp = require("nhp");
 const fs = require("fs");
+const uacache = lrucache();
+const namecache = lrucache();
 const padLeft = function (data, count = 8, using = "0") {
     while (data.length < count)
         data = using + data;
@@ -32,7 +36,11 @@ const stringHash = function (data) {
         hash = (((hash << 5) - hash) + data.charCodeAt(i)) | 0;
     return padLeft(hash.toString(16));
 };
-const determineName = function (name) {
+const determineName = function (rawname) {
+    const cached = namecache.get(rawname);
+    if (cached)
+        return cached;
+    var name = rawname;
     var index = name.lastIndexOf("/");
     if (index > -1)
         name = name.substring(index + 1);
@@ -50,6 +58,7 @@ const determineName = function (name) {
     match = name.match(/^(.+)\-\d+([\.\-]\d)*$/);
     if (match)
         name = match[1];
+    namecache.set(rawname, name);
     return name;
 };
 const isUnsupportedBrowser = function (browser) {
@@ -1587,10 +1596,11 @@ class NexusFramework extends events.EventEmitter {
                 }
                 catch (e) { }
                 const generator = "NexusFramework " + pkgjson.version;
-                try {
-                    res.header("X-Generator", generator);
-                }
-                catch (e) { }
+                if (!req.io)
+                    try {
+                        res.header("X-Generator", generator);
+                    }
+                    catch (e) { }
                 try {
                     res.locals.generator = generator;
                 }
@@ -1601,8 +1611,22 @@ class NexusFramework extends events.EventEmitter {
                 catch (e) { }
                 var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
                 var useLoader = pagesys || (this.loaderEnabled && !noScript);
-                var ua = useragent.parse(req.get("user-agent"));
-                _.extend(ua, useragent.is(req.get("user-agent")));
+                const rua = req.get("user-agent");
+                var ua = uacache.get(rua);
+                var legacy, es6;
+                if (ua) {
+                    legacy = ua.legacy;
+                    es6 = ua.es6;
+                }
+                else {
+                    ua = useragent.parse(rua);
+                    _.extend(ua, useragent.is(rua));
+                    if (isbot(rua))
+                        ua.bot = true;
+                    ua.legacy = legacy = isUnsupportedBrowser(ua);
+                    ua.es6 = es6 = !legacy && isES6Browser(ua);
+                    uacache.set(rua, ua);
+                }
                 try {
                     Object.defineProperty(res, "useragent", {
                         configurable: true,
@@ -1614,16 +1638,7 @@ class NexusFramework extends events.EventEmitter {
                     res.locals.useragent = ua;
                 }
                 catch (e) { }
-                const legacy = isUnsupportedBrowser(ua);
-                const es6 = !legacy && isES6Browser(ua);
                 const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
-                if (legacy) {
-                    if (this.logging)
-                        req.logger.warn("Legacy browser detected");
-                    ua.legacy = true;
-                }
-                else if (es6)
-                    ua.es6 = true;
                 if (useLoader && !pagesys && legacy)
                     useLoader = false;
                 var meta = { generator };
@@ -1705,11 +1720,13 @@ class NexusFramework extends events.EventEmitter {
                 try {
                     Object.defineProperty(res, "addNexusFrameworkClient", {
                         configurable: true,
-                        value: (includeSocketIO = true) => {
+                        value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
                             const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
                             if (includeSocketIO) {
                                 addSocketIOClient();
                                 addScript(path, pkgjson.version, "socket.io");
+                                if (autoEnabledPageSystem)
+                                    addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
                             }
                             else
                                 addScript(path, pkgjson.version);
@@ -1818,10 +1835,10 @@ class NexusFramework extends events.EventEmitter {
                 try {
                     Object.defineProperty(res, "setMetaTag", {
                         configurable: true,
-                        value: function (name, value) {
+                        value: function (name, content) {
                             name = name.toLowerCase();
-                            if (value)
-                                meta[name] = value;
+                            if (content)
+                                meta[name] = content;
                             else
                                 delete meta[name];
                         }
@@ -2013,7 +2030,7 @@ class NexusFramework extends events.EventEmitter {
                         Object.keys(meta).forEach(function (key) {
                             out.write("<meta name=\"");
                             out.write(encodeHTML(key, true));
-                            out.write("\" value=\"");
+                            out.write("\" content=\"");
                             out.write(encodeHTML(meta[key]));
                             out.write("\" />");
                         });

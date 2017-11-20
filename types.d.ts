@@ -27,6 +27,7 @@ declare module nexusframework {
     export interface PageSystemSkeleton {
         (template: string, options: any, req: Request, res: Response, next: (err: Error, data?: any) => void): void;
     }
+    export type UA = Agent & Details & {bot?: boolean, es6?: boolean, legacy?: boolean};
     export interface Request extends nexusfork.WebRequest {
         /**
          * The user, if any;
@@ -36,7 +37,7 @@ declare module nexusframework {
          * Information about the seragent of the request.
          * Provided by seragent.
          */
-        useragent?: Agent & Details & {es6?: boolean, legacy?: boolean};
+        useragent?: UA;
         /**
          * The current NHP skeleton.
          */
@@ -63,7 +64,7 @@ declare module nexusframework {
          */
         match?: RegExpMatchArray;
         /**
-         * Requested through the Page System API.
+         * True when requested through the Page System API.
          */
         pagesys?: boolean;
         /**
@@ -103,7 +104,7 @@ declare module nexusframework {
         /**
          * Set a meta tag in the header html.
          */
-        setMetaTag(name: string, value: string): void;
+        setMetaTag(name: string, content?: string): void;
         /**
          * Add a style to the style queue.
          */
@@ -150,8 +151,11 @@ declare module nexusframework {
         addSocketIOClient(): void;
         /**
          * Add the NexusFramework Client to the script queue.
+         * 
+         * @param includeSocketIO Whether or not to include and rely on Socket.IO, true by default
+         * @param autoEnablePageSystem Whether or not to enable the page system automatically, false by default
          */
-        addNexusFrameworkClient(includeSocketIO?: boolean): void;
+        addNexusFrameworkClient(includeSocketIO?: boolean, autoEnablePageSystem?: boolean): void;
         
         /**
          * Write the header html to the stream.

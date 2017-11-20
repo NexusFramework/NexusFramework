@@ -5,6 +5,7 @@ import nulllogger = require("nulllogger");
 import { nexusframework } from "../types";
 import socket_io = require("socket.io");
 import useragent = require("useragent");
+import lrucache = require("lru-cache");
 import statuses = require('statuses');
 import chokidar = require("chokidar");
 import {Application} from "express";
@@ -12,6 +13,7 @@ import express = require("express");
 import events = require("events");
 import stream = require("stream");
 import multer = require("multer");
+import isbot = require("isbot");
 import upath = require("upath");
 import async = require("async");
 import http = require("http");
@@ -20,6 +22,9 @@ import _ = require("lodash");
 import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
+
+const uacache = lrucache<string, nexusframework.UA>();
+const namecache = lrucache<string, string>();
 
 const padLeft = function(data: string, count = 8, using = "0") {
     while (data.length < count)
@@ -33,7 +38,12 @@ const stringHash = function(data: string) {
         hash = (((hash << 5) - hash) + data.charCodeAt(i)) | 0;
     return padLeft(hash.toString(16));
 };
-const determineName = function(name: string) {
+const determineName = function(rawname: string) {
+    const cached = namecache.get(rawname);
+    if (cached)
+        return cached;
+    
+    var name = rawname;
     var index = name.lastIndexOf("/");
     if(index > -1)
         name = name.substring(index+1);
@@ -51,10 +61,11 @@ const determineName = function(name: string) {
     match = name.match(/^(.+)\-\d+([\.\-]\d)*$/);
     if (match)
         name = match[1];
+    namecache.set(rawname, name);
     return name;
 }
 
-const isUnsupportedBrowser = function(browser: useragent.Agent & useragent.Details) {
+const isUnsupportedBrowser = function(browser: nexusframework.UA) {
     const major = parseInt(browser.major);
     return (browser.ie && major < 10) ||
             (browser.chrome && major < 4) ||
@@ -62,7 +73,7 @@ const isUnsupportedBrowser = function(browser: useragent.Agent & useragent.Detai
             (browser.safari && major < 3 && parseInt(browser.minor) < 1) ||
             (browser.opera && major < 3 && parseInt(browser.minor) < 5);
 }
-const isES6Browser = function(browser: useragent.Agent & useragent.Details) {
+const isES6Browser = function(browser: nexusframework.UA) {
     const major = parseInt(browser.major);
     return (browser.chrome && major >= 49) ||
             (browser.firefox && major >= 45) ||
@@ -1656,9 +1667,10 @@ export class NexusFramework extends events.EventEmitter {
                     res.locals.basehref = this.prefix;
                 } catch (e) {}
                 const generator = "NexusFramework " + pkgjson.version;
-                try {
-                    res.header("X-Generator", generator);
-                } catch(e) {}
+                if (!req.io)
+                    try {
+                        res.header("X-Generator", generator);
+                    } catch(e) {}
                 try {
                     res.locals.generator = generator;
                 } catch(e) {}
@@ -1667,8 +1679,22 @@ export class NexusFramework extends events.EventEmitter {
                 } catch(e) {}
                 var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
                 var useLoader = pagesys || (this.loaderEnabled && !noScript);
-                var ua: useragent.Details & useragent.Agent & {es6?:boolean,legacy?:boolean} = useragent.parse(req.get("user-agent")) as any;
-                _.extend(ua, useragent.is(req.get("user-agent")));
+                const rua = req.get("user-agent");
+                var ua: nexusframework.UA = uacache.get(rua);
+                var legacy: boolean, es6: boolean;
+                if (ua) {
+                    legacy = ua.legacy;
+                    es6 = ua.es6;
+                } else {
+                    ua = useragent.parse(rua) as any;
+                    _.extend(ua, useragent.is(rua));
+                    if (isbot(rua))
+                        ua.bot = true;
+                    ua.legacy = legacy = isUnsupportedBrowser(ua);
+                    ua.es6 = es6 = !legacy && isES6Browser(ua);
+                    uacache.set(rua, ua);
+                }
+                
                 try {
                     Object.defineProperty(res, "useragent", {
                         configurable: true,
@@ -1678,15 +1704,7 @@ export class NexusFramework extends events.EventEmitter {
                 try {
                     res.locals.useragent = ua;
                 } catch(e) {}
-                const legacy = isUnsupportedBrowser(ua);
-                const es6 = !legacy && isES6Browser(ua);
                 const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
-                if (legacy) {
-                    if(this.logging)
-                        req.logger.warn("Legacy browser detected");
-                    ua.legacy = true;
-                } else if(es6)
-                    ua.es6 = true;
                 if (useLoader && !pagesys && legacy)
                     useLoader = false;
                 var meta: {[index: string]: string} = {generator};
@@ -1765,11 +1783,13 @@ export class NexusFramework extends events.EventEmitter {
                 try {
                     Object.defineProperty(res, "addNexusFrameworkClient", {
                         configurable: true,
-                        value: (includeSocketIO = true) => {
+                        value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
                             const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
                             if(includeSocketIO) {
                                 addSocketIOClient();
                                 addScript(path, pkgjson.version, "socket.io");
+                                if (autoEnabledPageSystem)
+                                    addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
                             } else
                                 addScript(path, pkgjson.version);
                         }
@@ -1868,10 +1888,10 @@ export class NexusFramework extends events.EventEmitter {
                 try {
                     Object.defineProperty(res, "setMetaTag", {
                         configurable: true,
-                        value: function(name: string, value: string) {
+                        value: function(name: string, content?: string) {
                             name = name.toLowerCase();
-                            if (value)
-                                meta[name] = value;
+                            if (content)
+                                meta[name] = content;
                             else
                                 delete meta[name];
                         }
@@ -2060,7 +2080,7 @@ export class NexusFramework extends events.EventEmitter {
                         Object.keys(meta).forEach(function(key) {
                             out.write("<meta name=\"");
                             out.write(encodeHTML(key, true));
-                            out.write("\" value=\"");
+                            out.write("\" content=\"");
                             out.write(encodeHTML(meta[key]));
                             out.write("\" />");
                         })
