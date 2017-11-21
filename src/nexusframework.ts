@@ -23,7 +23,7 @@ import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
 
-const socket_io_slim_js = path.resolve(__dirname, "../node_modules/socket.io-client/dist/socket.io.slim.js");
+const socket_io_slim_js = require.resolve("socket.io-client/dist/socket.io.slim.js");
 const has_slim_io_js = fs.existsSync(socket_io_slim_js);
 
 const uacache = lrucache<string, nexusframework.UA>();
