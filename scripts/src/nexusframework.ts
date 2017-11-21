@@ -750,6 +750,7 @@ Object.defineProperties(window, {
                         for (var i = childs.length-1; i >= 0; i--) {
                             const child = childs[i];
                             switch (child.nodeName.toUpperCase()) {
+                                case "LINK":
                                 case "SCRIPT":
                                     break;
                                 default:

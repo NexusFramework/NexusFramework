@@ -1433,13 +1433,11 @@ export class NexusFramework extends events.EventEmitter {
                                 "content-type": "text/plain"
                             });
                             res.end("Cannot be served through page system.");
-                        } else {
-                            console.log(urlpath);
+                        } else
                             res.sendFile(filename, function(err) {
                                 if (err)
                                     next(err);
                             });
-                        }
                     } else
                         next();
                 });

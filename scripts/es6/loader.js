@@ -186,44 +186,32 @@
             loadResource(type, source, cb, deps = [], inlineOrVersion, name) {
                 var processResource, callCallbacks;
                 if (type == "script")
-                    processResource = function (data) {
-                        try {
-                            const scriptel = d.createElement('script');
-                            scriptel.src = 'data:application/javascript;base64,' + base64(data);
-                            scriptel.onload = function () {
-                                callCallbacks();
-                            };
-                            scriptel.onerror = function () {
-                                callCallbacks(new Error("Failed to load " + source));
-                            };
-                            d.body.appendChild(scriptel);
-                        }
-                        catch (e) {
-                            (function () {
-                                try {
-                                    eval(data);
-                                    callCallbacks();
-                                }
-                                catch (e) {
-                                    console.warn(e);
-                                    callCallbacks(e);
-                                }
-                            }).call(w);
-                        }
+                    processResource = function (url) {
+                        const scriptel = d.createElement('script');
+                        scriptel.type = "text/javascript";
+                        scriptel.async = true;
+                        scriptel.onload = function () {
+                            callCallbacks();
+                        };
+                        scriptel.onerror = function () {
+                            callCallbacks(new Error("Failed to load " + source));
+                        };
+                        scriptel.src = url;
+                        d.body.appendChild(scriptel);
                     };
                 else if (type == "style")
-                    processResource = function (data) {
+                    processResource = function (url) {
                         const linkel = d.createElement('link');
                         linkel.type = "text/css";
                         linkel.rel = "stylesheet";
-                        linkel.href = 'data:text/css;base64,' + base64(data);
                         linkel.onload = function () {
                             callCallbacks();
                         };
                         linkel.onerror = function () {
                             callCallbacks(new Error("Failed to load " + source));
                         };
-                        d.head.appendChild(linkel);
+                        linkel.href = url;
+                        d.body.appendChild(linkel);
                     };
                 else
                     throw new Error("Unknown type: " + type);
@@ -300,47 +288,26 @@
                     };
                     if (!name.indexOf("/"))
                         return callCallbacks(new Error("`" + name + "` is required but was not included before this script."));
-                    const parseResource = function (data) {
-                        const next = function () {
-                            if (url)
-                                data += "\n//# sourceURL=" + url;
-                            processResource(data);
-                        };
-                        if (deps.length) {
-                            var toLoad = deps.length;
-                            deps.forEach(function (dep) {
-                                NexusFrameworkLoaderImpl.loadResource(type, dep, function (err) {
-                                    if (err)
-                                        callCallbacks(err);
-                                    else if (!--toLoad)
-                                        next();
-                                });
-                            });
-                        }
-                        else
-                            next();
-                    };
                     callbacks = loadCallbacks[key] = [onLoad];
-                    if (inlineOrVersion === true)
-                        parseResource(source);
-                    else {
-                        var request = new XMLHttpRequest();
-                        request.open("GET", url);
-                        request.onreadystatechange = function () {
-                            if (request.readyState === XMLHttpRequest.DONE) {
-                                if (request.status === 200)
-                                    parseResource(request.responseText);
-                                else
-                                    callCallbacks(new Error("Server returned bad status: " + request.statusText + " (" + request.status + ")"));
-                            }
-                        };
-                        try {
-                            request.send();
-                        }
-                        catch (e) {
-                            callCallbacks(e);
-                        }
+                    if (deps.length) {
+                        var toLoad = deps.length;
+                        deps.forEach(function (dep) {
+                            NexusFrameworkLoaderImpl.loadResource(type, dep, function (err) {
+                                if (err)
+                                    callCallbacks(err);
+                                else if (!--toLoad) {
+                                    if (inlineOrVersion === true)
+                                        processResource('data:application/javascript;base64,' + base64(source));
+                                    else
+                                        processResource(source);
+                                }
+                            });
+                        });
                     }
+                    else if (inlineOrVersion === true)
+                        processResource('data:application/javascript;base64,' + base64(source));
+                    else
+                        processResource(source);
                 }
                 catch (e) {
                     console.warn(e);
