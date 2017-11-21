@@ -9,7 +9,8 @@ import http = require("http");
 import nhp = require("nhp");
 export declare function createExtendedRequestHandler(): nexusframework.MappedRequestHandler;
 export interface StaticMountOptions {
-    directoryListing?: boolean;
+    autoIndex?: boolean;
+    mutable?: boolean;
 }
 export declare class NexusFramework extends events.EventEmitter {
     readonly nhp: nhp;

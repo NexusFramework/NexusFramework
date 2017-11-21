@@ -23,6 +23,9 @@ import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
 
+const socket_io_slim_js = path.resolve(__dirname, "../node_modules/socket.io-client/dist/socket.io.slim.js");
+const has_slim_io_js = fs.existsSync(socket_io_slim_js);
+
 const uacache = lrucache<string, nexusframework.UA>();
 const namecache = lrucache<string, string>();
 
@@ -1101,7 +1104,8 @@ interface Resource {
 }
 
 export interface StaticMountOptions {
-    directoryListing?: boolean;
+    autoIndex?: boolean;
+    mutable?: boolean;
 }
 
 export class NexusFramework extends events.EventEmitter {
@@ -1163,7 +1167,7 @@ export class NexusFramework extends events.EventEmitter {
                 value: cookieParser()
             }
         });
-        this.legacyskeleton = this.nhp.template(path.resolve(__dirname, "../legacy/skeleton.nhp"));
+        this.legacyskeleton = this.nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp"));
         const Custom = nhp.Instructions.Custom;
         const genFooterInstruction = new Custom(undefined, function() {
             return "try{__writefooter(__out);}catch(e){__out.write(__error(e));};__next();";
@@ -1268,7 +1272,7 @@ export class NexusFramework extends events.EventEmitter {
     }
     public mountScripts(mpath=":scripts") {
         this.mountStatic(mpath, path.resolve(__dirname, "../scripts/"), {
-            directoryListing: true
+            autoIndex: true
         });
     }
     public mountAbout(mpath=":about") {
@@ -1282,6 +1286,7 @@ export class NexusFramework extends events.EventEmitter {
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
         const iopath = upath.join(this.prefix, path);
         const io = socket_io(this.server, {
+            serveClient: !has_slim_io_js,
             path: iopath
         });
         Object.defineProperty(this, "io", {
@@ -1334,6 +1339,16 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         });
+        if (has_slim_io_js)
+            this.setHandler("/:/socket.io.slim.js", function(req, res, next) {
+                res.sendFile(socket_io_slim_js, {
+                    maxAge: 3.154e+10,
+                    immutable: true
+                }, function(err) {
+                    if (err)
+                        next(err);
+                });
+            });
         return iopath;
     }
 
@@ -1364,6 +1379,11 @@ export class NexusFramework extends events.EventEmitter {
     }
     
     public mountStatic(webpath: string, fspath: string, options?: StaticMountOptions) {
+        var serveOptions = options.mutable ? {} : {
+            maxAge: 3.154e+10,
+            immutable: true
+        };
+        
         webpath = upath.join("/", webpath);
         fspath = path.resolve(process.cwd(), fspath);
         const startsWith = new RegExp("^" + fspath.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$");
@@ -1376,7 +1396,7 @@ export class NexusFramework extends events.EventEmitter {
                     else if(stats) {
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
-                            if (options.directoryListing) {
+                            if (options.autoIndex) {
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
                                     const q = urlpath.indexOf("?");
                                     if(q == -1)
@@ -1419,7 +1439,7 @@ export class NexusFramework extends events.EventEmitter {
                                         res.end("</small></body></html>");
                                     });
                             } else
-                                res.sendStatus(403);
+                                next();
                         } else if (req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath)) {
                             const q = urlpath.indexOf("?");
                             if(q == -1)
@@ -1434,7 +1454,7 @@ export class NexusFramework extends events.EventEmitter {
                             });
                             res.end("Cannot be served through page system.");
                         } else
-                            res.sendFile(filename, function(err) {
+                            res.sendFile(filename, serveOptions, function(err) {
                                 if (err)
                                     next(err);
                             });
@@ -1756,7 +1776,7 @@ export class NexusFramework extends events.EventEmitter {
                     });
                 }
                 const addSocketIOClient = () => {
-                    addScript(upath.join(this.prefix, ":io/socket.io.js"), sckclpkgjson.version);
+                    addScript(upath.join(this.prefix, has_slim_io_js ? ":/socket.io.slim.js" : ":io/socket.io.js"), sckclpkgjson.version);
                 };
                 try {
                     Object.defineProperty(res, "addSocketIOClient", {

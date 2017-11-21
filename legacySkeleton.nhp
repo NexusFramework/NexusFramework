@@ -5,7 +5,7 @@
         <style>
         body {
             margin: 2em;
-            background: #ccc;
+            background: #fafafa;
             font-family: Helvetica, Arial, sans-serif;
         }
         h1 {
