@@ -5,7 +5,7 @@ import { nexusfork } from "nexusfork/types";
 import { nexusframework } from "./types";
 import { Application } from "express";
 import { Server } from "http";
-import path = require("path");
+import _ = require("lodash");
 
 const _export: {
     (config: nexusframework.Config, logger: nulllogger.INullLogger, server: Server, app: Application): nexusfork.WebRequestHandler;
@@ -21,15 +21,8 @@ const _export: {
     const instance = new NexusFramework(app, server, logger, config.prefix);
     if (!config.nologging)
         instance.enableLogging();
-    if(config.root) {
-        config.root = path.resolve(process.cwd(), config.root);
-        config.pages = path.resolve(config.root, config.pages || "pages");
-        config.skeleton = path.resolve(config.root, config.skeleton || "theme/skeleton.nhp");
-        config.legacyskeleton = config.legacyskeleton ? path.resolve(config.root, config.legacyskeleton) : undefined;
-        config.pagesysskeleton = config.pagesysskeleton ? path.resolve(config.root, config.pagesysskeleton) : undefined;
-        instance.setupTemplate(config.root);
-        instance.mount("/", config.pages);
-    }
+    if(config.root)
+        instance.mount("/", config.pages || "pages", config);
     if(config.skeleton)
         instance.setSkeleton(config.skeleton);
     if(config.legacyskeleton)
@@ -56,14 +49,17 @@ const _export: {
         if (!Array.isArray(config.mounts))
             config.mounts = [config.mounts];
         config.mounts.forEach(function(mount) {
-            instance.mount(mount.webpath, mount.fspath, !mount.mutable, mount.skeleton, mount.legacyskeleton);
+            instance.mount(mount.webpath, mount.fspath, mount);
         });
     }
     if (config.modules) {
         if (!Array.isArray(config.modules))
             config.modules = [config.modules];
-        config.modules.forEach(function(mod) {
-            require(mod)(instance);
+        config.modules.forEach(function(modConfig: string | {module: string, [key: string]: any}) {
+            if (_.isString(modConfig))
+                require(modConfig)(instance);
+            else
+                require(modConfig.module)(instance, modConfig);
         });
     }
     return instance.handle.bind(instance);

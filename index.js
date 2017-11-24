@@ -1,7 +1,7 @@
 "use strict";
 /// <reference types="nulllogger" />
 const nexusframework_1 = require("./src/nexusframework");
-const path = require("path");
+const _ = require("lodash");
 const _export = function (config, logger, server, app) {
     if (config.prefix) {
         if (config.prefix[0] != "/")
@@ -15,13 +15,8 @@ const _export = function (config, logger, server, app) {
     if (!config.nologging)
         instance.enableLogging();
     if (config.root) {
-        config.root = path.resolve(process.cwd(), config.root);
-        config.pages = path.resolve(config.root, config.pages || "pages");
-        config.skeleton = path.resolve(config.root, config.skeleton || "theme/skeleton.nhp");
-        config.legacyskeleton = config.legacyskeleton ? path.resolve(config.root, config.legacyskeleton) : undefined;
-        config.pagesysskeleton = config.pagesysskeleton ? path.resolve(config.root, config.pagesysskeleton) : undefined;
         instance.setupTemplate(config.root);
-        instance.mount("/", config.pages);
+        instance.mount("/", config);
     }
     if (config.skeleton)
         instance.setSkeleton(config.skeleton);
@@ -49,14 +44,17 @@ const _export = function (config, logger, server, app) {
         if (!Array.isArray(config.mounts))
             config.mounts = [config.mounts];
         config.mounts.forEach(function (mount) {
-            instance.mount(mount.webpath, mount.fspath, !mount.mutable, mount.skeleton, mount.legacyskeleton);
+            instance.mount(mount.webpath, mount.fspath, mount);
         });
     }
     if (config.modules) {
         if (!Array.isArray(config.modules))
             config.modules = [config.modules];
-        config.modules.forEach(function (mod) {
-            require(mod)(instance);
+        config.modules.forEach(function (modConfig) {
+            if (_.isString(modConfig))
+                require(modConfig)(instance);
+            else
+                require(modConfig.module)(instance, modConfig);
         });
     }
     return instance.handle.bind(instance);

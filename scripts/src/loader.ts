@@ -185,7 +185,9 @@
             },
             loadResource(type: string, source: string, cb: (err?: Error) => void, deps: string[] = [], inlineOrVersion?: boolean | string, name?: string) {
                 var processResource: (data: string) => void, callCallbacks: (err?: Error) => void;
-                if(type == "script")
+                var contentType: string;
+                if(type == "script") {
+                    contentType = "text/javascript";
                     processResource = function(url) {
                         const scriptel = d.createElement('script');
                         scriptel.type = "text/javascript";
@@ -199,7 +201,8 @@
                         scriptel.src = url;
                         d.body.appendChild(scriptel);
                     }
-                else if(type == "style")
+                } else if(type == "style") {
+                    contentType = "text/css";
                     processResource = function(url) {
                         const linkel = d.createElement('link');
                         linkel.type = "text/css";
@@ -213,7 +216,7 @@
                         linkel.href = url;
                         d.body.appendChild(linkel);
                     }
-                else
+                } else
                     throw new Error("Unknown type: " + type);
                 
                 try {
@@ -301,14 +304,14 @@
                                     callCallbacks(err);
                                 else if(!--toLoad) {
                                     if(inlineOrVersion === true)
-                                        processResource('data:application/javascript;base64,' + base64(source));
+                                        processResource('data:'+contentType+';base64,' + base64(source));
                                     else
                                         processResource(source);
                                 }
                             });
                         });
                     } else if(inlineOrVersion === true)
-                        processResource('data:application/javascript;base64,' + base64(source));
+                        processResource('data:'+contentType+';base64,' + base64(source));
                     else
                         processResource(source);
                 } catch(e) {

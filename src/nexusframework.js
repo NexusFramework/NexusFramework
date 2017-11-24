@@ -12,15 +12,16 @@ const express = require("express");
 const events = require("events");
 const stream = require("stream");
 const multer = require("multer");
-const isbot = require("isbot");
 const upath = require("upath");
 const async = require("async");
+const sharp = require("sharp");
 const http = require("http");
 const path = require("path");
 const _ = require("lodash");
 const url = require("url");
 const nhp = require("nhp");
 const fs = require("fs");
+const iconSizes = [310, 196, 152, 150, 144, 128, 120, 114, 96, 76, 72, 70, 64, 60, 57, 48, 24, 16, 32];
 const socket_io_slim_js = require.resolve("socket.io-client/dist/socket.io.slim.js");
 const has_slim_io_js = fs.existsSync(socket_io_slim_js);
 const uacache = lrucache();
@@ -79,6 +80,7 @@ const isES6Browser = function (browser) {
         (browser.opera && major >= 43);
 };
 const multerInstance = multer().any();
+const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 const sckclpkgjson = require("socket.io/package.json");
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
@@ -106,6 +108,33 @@ const overlayHtmlParts = [];
 })(overlayHtml);
 const express_req = express['request'];
 const express_res = express['response'];
+const createInstall = function (proto) {
+    const names = Object.getOwnPropertyNames(proto);
+    const queue = [];
+    names.forEach(function (key) {
+        try {
+            const descriptor = Object.getOwnPropertyDescriptor(proto, key);
+            queue.push(function (target) {
+                if (!(key in target))
+                    Object.defineProperty(target, key, descriptor);
+            });
+        }
+        catch (e) {
+            const val = proto[key];
+            queue.push(function (target) {
+                if (!(key in target))
+                    target[key] = val;
+            });
+        }
+    });
+    return function (target) {
+        queue.forEach(function (copy) {
+            copy(target);
+        });
+    };
+};
+const express_req_install = createInstall(express_req);
+const express_res_install = createInstall(express_res);
 function encodeHTML(html, attr = false) {
     html = html.replace(/</g, "&lt;");
     html = html.replace(/>/g, "&gt;");
@@ -117,10 +146,8 @@ class SocketIORequest extends events.EventEmitter {
     constructor(upgradedRequest, method, path, body, headers) {
         super();
         this.pagesys = true;
-        this.fresh = false;
-        this.stale = true;
         this.method = method;
-        this.url = upath.join("/", path);
+        this.originalUrl = this.url = upath.join("/", path);
         this.connection = upgradedRequest.connection;
         this.httpVersionMinor = upgradedRequest.httpVersionMinor;
         this.httpVersionMajor = upgradedRequest.httpVersionMajor;
@@ -131,7 +158,12 @@ class SocketIORequest extends events.EventEmitter {
         const acceptsLanguage = this.headers['accepts-language'] || upgradedRequest.headers['accepts-language'];
         if (acceptsLanguage)
             this.headers['accepts-language'] = acceptsLanguage;
-        this.headers['accepts'] = this.headers['accepts'] || "application/json, text/json, text/html;q=0.95, application/xhtml+xml;q=0.9, application/xml;q=0.8, text/*;q=0.7";
+        if (!this.headers['accepts']) {
+            this.headers['accepts'] = "application/json,text/json,text/html;q=0.95,application/xhtml+xml,application/xml;q=0.8,text/*;q=0.7";
+            const accepts = upgradedRequest.headers['accepts'];
+            if (accepts && /\Wimage\/webp\W/.test(Array.isArray(accepts) ? accepts[0] : accepts))
+                this.headers['accepts'] += ",image/webp";
+        }
         this.body = body;
     }
     push(...args) { throw new Error("Not supported"); }
@@ -158,15 +190,6 @@ class SocketIORequest extends events.EventEmitter {
             rawHeaders.push(key + ": " + this.headers[key]);
         });
         return rawHeaders;
-    }
-    get accepted() {
-        throw new Error("Not supported");
-    }
-    get query() {
-        return url.parse(this.url, true).query || {};
-    }
-    get path() {
-        return url.parse(this.url).path;
     }
     _destroy() { }
     destroy() { }
@@ -220,6 +243,7 @@ class SocketIOResponse extends stream.Writable {
         this.charset = "utf8";
         this.sendDate = false;
         this.finished = false;
+        // Express
         this.locals = {};
         this.cb = cb;
     }
@@ -261,14 +285,6 @@ class SocketIOResponse extends stream.Writable {
                 this.setHeader(key, headers[key]);
             });
     }
-    json(data) {
-        this.response = data;
-        this.end();
-        return this;
-    }
-    assignSocket(...args) { return undefined; }
-    detachSocket(...args) { return undefined; }
-    writeContinue(...args) { return undefined; }
     setTimeout(...args) { return this; }
     _write(data, encoding, cb) {
         const dat = data.toString("utf8");
@@ -276,8 +292,7 @@ class SocketIOResponse extends stream.Writable {
             this.response += dat;
         cb();
     }
-    end(...args) {
-        super.end.apply(this, args);
+    _final(callback) {
         const headers = {};
         Object.keys(this.headers).forEach((key) => {
             var val = this.headers[key];
@@ -291,6 +306,12 @@ class SocketIOResponse extends stream.Writable {
             data: this.response,
             headers
         });
+        callback();
+    }
+    json(data) {
+        this.response = data;
+        this.end();
+        return this;
     }
 }
 SocketIOResponse.prototype.writeContinue = notSupported;
@@ -363,6 +384,7 @@ class RequestHandlerWithChildren {
                         async.eachSeries(this._children, function (handler, cb) {
                             var match = currentpath.match(handler.pattern);
                             if (match) {
+                                const cmatch = req.match;
                                 try {
                                     Object.defineProperty(req, "match", {
                                         configurable: true,
@@ -378,6 +400,17 @@ class RequestHandlerWithChildren {
                                 req.url = cutPath(req);
                                 handler.handle(req, res, function (err) {
                                     req.url = curl;
+                                    try {
+                                        req.matches.pop();
+                                    }
+                                    catch (e) { }
+                                    try {
+                                        Object.defineProperty(req, "match", {
+                                            configurable: true,
+                                            value: cmatch
+                                        });
+                                    }
+                                    catch (e) { }
                                     cb(err);
                                 });
                             }
@@ -554,12 +587,13 @@ class RequestHandlerChildWithChildren extends RequestHandlerWithChildren {
     constructor(pattern) {
         super();
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 class LeafRequestHandler {
-    constructor(handler) {
+    constructor(handler, actuallyLeaf = true) {
         this.handle = handler;
+        this.leaf = actuallyLeaf;
     }
     children() {
         throw new Error("Leaf has no children.");
@@ -605,23 +639,21 @@ class LeafRequestHandler {
     }
     destroy() { }
 }
+exports.LeafRequestHandler = LeafRequestHandler;
 class LeafRequestChildHandler extends LeafRequestHandler {
-    constructor(handler, pattern) {
-        super(handler);
+    constructor(handler, pattern, actuallyLeaf = true) {
+        super(handler, actuallyLeaf);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 class NHPRequestHandler extends LeafRequestHandler {
-    constructor(impl, skeleton, pagesysskeleton, legacyskeleton, redirect = false) {
+    constructor(impl, redirect = false) {
         super((req, res, next) => {
-            req.skeleton = skeleton || req.nexusframework['skeleton'];
-            req.legacyskeleton = legacyskeleton || req.nexusframework['legacyskeleton'];
-            req.pagesysskeleton = pagesysskeleton || req.nexusframework['pagesysskeleton'];
             const _next = () => {
                 const _next = () => {
                     var urlpath;
-                    if (redirect && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
+                    if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
                         const q = urlpath.indexOf("?");
                         if (q == -1)
                             urlpath = urlpath.substring(0, urlpath.length - 1);
@@ -666,7 +698,6 @@ class NHPRequestHandler extends LeafRequestHandler {
                 _next();
         });
         this.views = {};
-        this.skeleton = skeleton;
         this.impl = impl;
     }
     view(type = "nhp") {
@@ -688,11 +719,12 @@ class NHPRequestHandler extends LeafRequestHandler {
         this.exists = index;
     }
 }
+exports.NHPRequestHandler = NHPRequestHandler;
 class NHPRequestChildHandler extends NHPRequestHandler {
-    constructor(impl, skeleton, pagesysskeleton, legacyskeleton, pattern, redirect = true) {
-        super(impl, skeleton, pagesysskeleton, legacyskeleton, redirect);
+    constructor(impl, pattern, redirect = true) {
+        super(impl, redirect);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 function resolveHandler(mapping, req) {
@@ -719,24 +751,31 @@ function createExtendedRequestHandler() {
     return requestHandler;
 }
 exports.createExtendedRequestHandler = createExtendedRequestHandler;
-function lazyLoadMapping(filename, method, mapping) {
-    if (filename instanceof Function)
-        return filename;
-    return function (req, res, next, broken) {
-        try {
-            const handler = require(filename);
-            if (!(handler instanceof Function))
-                throw new Error("Handler is not a Function: " + filename);
-            req.mapping = mapping;
-            handler(req, res, next, broken);
-            mapping[method] = handler;
-        }
-        catch (e) {
-            mapping[method] = function (a, b, next) {
+function lazyLoadMapping(impl, method, mapping) {
+    if (impl instanceof Function)
+        return impl;
+    if (_.isString(impl))
+        return function (req, res, next, negative) {
+            try {
+                const handler = require(impl);
+                if (!(handler instanceof Function))
+                    throw new Error("Handler is not a Function: " + impl);
+                req.mapping = mapping;
+                handler(req, res, next, negative);
+                mapping[method] = handler;
+            }
+            catch (e) {
+                mapping[method] = function (a, b, next) {
+                    next(e);
+                };
                 next(e);
-            };
-            next(e);
-        }
+            }
+        };
+    const data = impl.data;
+    const handler = lazyLoadMapping(impl.impl, method, mapping);
+    return function (req, res, next, negative) {
+        _.extend(res.locals, data);
+        handler(req, res, next, negative);
     };
 }
 function processMapping(mapping, mapped = {}) {
@@ -808,13 +847,136 @@ function processMapping(mapping, mapped = {}) {
         mapped.del = lazyLoadMapping(del, "del", mapped);
     return mapped;
 }
+const squareImagePathWebpOrPng = /^\/(\d+)\.(webp|png)$/;
+const squareImagePathWebpOrJpeg = /^\/(\d+)\.(webp|jpg)$/;
+const squareImagePathJpeg = /^\/(\d+)\.(jpg)$/;
+const squareImagePathPng = /^\/(\d+)\.(png)$/;
+const imagePathWebpOrPng = /^\/(\d+)x(\d+)\.(webp|png)$/;
+const imagePathWebpOrJpeg = /^\/(\d+)x(\d+)\.(webp|jpg)$/;
+const imagePathJpeg = /^\/(\d+)x(\d+)\.(jpg)$/;
+const imagePathPng = /^\/(\d+)x(\d+)\.(png)$/;
+class SharpResizerRequestHandler extends LeafRequestHandler {
+    constructor(imagefile, options) {
+        super(options.square ? (options.notransparency ? (req, res, next) => {
+            this.handle0square(req.webp ? squareImagePathWebpOrJpeg : squareImagePathJpeg, req, res, next);
+        } : (req, res, next) => {
+            this.handle0square(req.webp ? squareImagePathWebpOrPng : squareImagePathPng, req, res, next);
+        }) : (options.notransparency ? (req, res, next) => {
+            this.handle0(req.webp ? imagePathWebpOrJpeg : imagePathJpeg, req, res, next);
+        } : (req, res, next) => {
+            this.handle0(req.webp ? imagePathWebpOrPng : imagePathPng, req, res, next);
+        }), false);
+        this.cache = lrucache();
+        this.queue = {};
+        this.square = options.square;
+        this.image = sharp(imagefile);
+        this.sizes = options.sizes;
+    }
+    canHandleSize(width, height = width) {
+        if (this.sizes && this.sizes.length) {
+            if (this.square)
+                return this.sizes.indexOf(width) > -1;
+            const length = this.sizes.length;
+            for (var i = 0; i < length; i++) {
+                const size = this.sizes[i];
+                if (size[0] === width && size[1] === height)
+                    return true;
+            }
+            return false;
+        }
+        else
+            return true;
+    }
+    handle0square(reg, req, res, next) {
+        var match = req.path.match(reg);
+        req.logger.info(reg, req.path, match);
+        if (match) {
+            const size = parseInt(match[1]);
+            if (this.canHandleSize(size))
+                this.serve(size, size, match[2], res);
+            else
+                next();
+        }
+        else
+            next();
+    }
+    handle0(reg, req, res, next) {
+        var match = req.path.match(reg);
+        if (match) {
+            const width = parseInt(match[1]);
+            const height = parseInt(match[2]);
+            if (this.canHandleSize(width, height))
+                this.serve(width, height, match[3], res);
+            else
+                next();
+        }
+        else
+            next();
+    }
+    serve(width, height, format, res) {
+        if (res['req'] && res['req'].io) {
+            res.writeHead(200, {
+                "content-disposition": "attachment",
+                "content-type": "text/plain"
+            });
+            res.end("Cannot be served through page system.");
+            return;
+        }
+        const key = width + ":" + height + ":" + format;
+        const writer = this.cache.get(key);
+        if (writer) {
+            writer(res);
+            return;
+        }
+        const queue = this.queue[key] || (this.queue[key] = []);
+        queue.push(res);
+        var contentType;
+        var image = this.image.clone().resize(width, height);
+        switch (format) {
+            case "png":
+                image = image.png({ compressionLevel: 9 });
+                contentType = "image/png";
+                break;
+            case "jpg":
+                image = image.jpeg({ quality: 85 });
+                contentType = "image/jpeg";
+                break;
+            case "webp":
+                image = image.webp();
+                contentType = "image/webp";
+                break;
+            default:
+                throw new Error("Unknown format: " + format);
+        }
+        image.toBuffer((err, data) => {
+            delete this.queue[key];
+            if (err)
+                queue.forEach(function (res) {
+                    res.sendFailure(err);
+                });
+            else {
+                const writer = function (res) {
+                    res.type(contentType);
+                    res.end(data);
+                };
+                queue.forEach(writer);
+                this.cache.set(key, writer);
+            }
+        });
+    }
+}
+class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
+    constructor(imagefile, options, pattern) {
+        super(imagefile, options);
+        this.rawPattern = pattern;
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+    }
+}
 class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
-    constructor(fspath, logger, skeleton, pagesysskeleton, legacyskeleton) {
+    constructor(fspath, logger, options) {
         super();
         this.fspath = fspath;
-        this.skeleton = skeleton;
-        this.legacyskeleton = legacyskeleton;
-        this.pagesysskeleton = pagesysskeleton;
+        this.options = options;
         this.handle = (req, res, next) => {
             this.load((err) => {
                 if (err)
@@ -859,7 +1021,7 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                     }
                     else if (/^([^.]+$)/.test(file)) {
                         const pattern = decodePath(file);
-                        this.setChild(pattern, new LazyLoadingRequestChildHandler(filename, logger, this.skeleton, this.pagesysskeleton, this.legacyskeleton, pattern));
+                        this.setChild(pattern, new LazyLoadingRequestChildHandler(filename, logger, undefined, pattern));
                     }
                     else
                         logger.warn("Ignoring", filename);
@@ -946,13 +1108,20 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                         const handler = createExtendedRequestHandler();
                         const methods = extensions['js'] || {};
                         const json = extensions['json'];
-                        if (json)
+                        if (json) {
                             Object.keys(json).forEach((method) => {
                                 try {
+                                    const jsmethod = methods[method];
                                     const data = require(json[method]) || {};
-                                    methods[method] = (req, res, next) => {
-                                        next(undefined, data, this.skeleton, this.pagesysskeleton, this.legacyskeleton);
-                                    };
+                                    if (jsmethod)
+                                        methods[method] = {
+                                            impl: jsmethod,
+                                            data
+                                        };
+                                    else
+                                        methods[method] = (req, res, next) => {
+                                            next(undefined, data);
+                                        };
                                 }
                                 catch (e) {
                                     methods[method] = function (req, res, next) {
@@ -960,18 +1129,19 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                                     };
                                 }
                             });
+                        }
                         if (!methods)
                             throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
                         processMapping(methods, handler);
                         var leaf;
                         if (key === "index")
-                            this.setIndex(leaf = new NHPRequestHandler(handler, this.skeleton, this.pagesysskeleton, this.legacyskeleton));
+                            this.setIndex(leaf = new NHPRequestHandler(handler));
                         else {
                             const child = this.childAt(key);
                             if (child)
-                                child.setIndex(leaf = new NHPRequestHandler(handler, this.skeleton, this.pagesysskeleton, this.legacyskeleton));
+                                child.setIndex(leaf = new NHPRequestHandler(handler));
                             else
-                                this.setChild(key, leaf = new NHPRequestChildHandler(handler, this.skeleton, this.pagesysskeleton, this.legacyskeleton, key));
+                                this.setChild(key, leaf = new NHPRequestChildHandler(handler, key));
                         }
                         try {
                             leaf.setView(extensions['nhp']['get']);
@@ -979,29 +1149,35 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                         catch (e) { }
                     }
                 });
-                this.handle = (req, res, next) => {
-                    req.skeleton = this.skeleton || req.nexusframework['skeleton'];
-                    super.handle(req, res, next);
-                };
                 delete this.childPaths;
+                if (this.options)
+                    this.handle = (req, res, next) => {
+                        res.renderoptions = {};
+                        _.extend(res.renderoptions, req.nexusframework['renderoptions']);
+                        _.extend(res.renderoptions, this.options);
+                        res.locals.__includeroot = res.renderoptions.root;
+                        super.handle(req, res, next);
+                    };
+                else
+                    delete this.handle;
                 next();
             }
         });
     }
 }
 class LazyLoadingRequestChildHandler extends LazyLoadingRequestHandler {
-    constructor(fspath, logger, skeleton, pagesysskeleton, legacyskeleton, pattern) {
-        super(fspath, logger, skeleton, pagesysskeleton, legacyskeleton);
+    constructor(fspath, logger, options, pattern) {
+        super(fspath, logger, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 class FSWatcherRequestHandler extends RequestHandlerWithChildren {
-    constructor(fspath, logger, skeleton, pagesysskeleton, legacyskeleton) {
+    constructor(fspath, logger, options) {
         super();
-        this.skeleton = skeleton;
-        this.legacyskeleton = legacyskeleton;
-        this.pagesysskeleton = pagesysskeleton;
+        this.skeleton = options.skeleton;
+        this.legacyskeleton = options.legacyskeleton;
+        this.pagesysskeleton = options.pagesysskeleton;
         var onready = [];
         const fswatcher = this.fswatcher = chokidar.watch(fspath, {
             ignorePermissionErrors: true
@@ -1031,32 +1207,42 @@ class FSWatcherRequestHandler extends RequestHandlerWithChildren {
     }
 }
 class FSWatcherRequestChildHandler extends FSWatcherRequestHandler {
-    constructor(fspath, logger, skeleton, pagesysskeleton, legacyskeleton, pattern) {
-        super(fspath, logger, skeleton, pagesysskeleton, legacyskeleton);
+    constructor(fspath, logger, options, pattern) {
+        super(fspath, logger, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+    }
+}
+class Mount {
+    constructor(baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+    handle(req, res, next) {
     }
 }
 class NexusFramework extends events.EventEmitter {
     constructor(app = express(), server, logger = new nulllogger("NexusFramework"), prefix = "/") {
         super();
-        this.root = new RequestHandlerWithChildren();
         if (!server)
             server = new http.Server(app);
+        const _nhp = new nhp();
         Object.defineProperties(this, {
             app: {
                 value: app
             },
             nhp: {
-                value: new nhp()
+                value: _nhp
             },
             stack: {
-                value: []
+                value: [this.upgrade.bind(this)]
             },
             footer: {
                 value: []
             },
             header: {
+                value: []
+            },
+            mounts: {
                 value: []
             },
             afterbody: {
@@ -1077,9 +1263,14 @@ class NexusFramework extends events.EventEmitter {
             cookieParser: {
                 configurable: true,
                 value: cookieParser()
+            },
+            renderoptions: {
+                value: {
+                    legacyskeleton: _nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp")),
+                    errordoc: {}
+                }
             }
         });
-        this.legacyskeleton = this.nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp"));
         const Custom = nhp.Instructions.Custom;
         const genFooterInstruction = new Custom(undefined, function () {
             return "try{__writefooter(__out);}catch(e){__out.write(__error(e));};__next();";
@@ -1099,27 +1290,12 @@ class NexusFramework extends events.EventEmitter {
         this.nhp.installProcessor("afterbody", function () {
             return genAfterBodyInstruction;
         });
-        app.set("view engine", "nhp");
-        app.engine("nhp", (filename, options, callback) => {
-            const skeleton = this.skeleton;
-            if (skeleton) {
-                if (options)
-                    options.page = filename;
-                else
-                    options = {
-                        page: filename
-                    };
-                skeleton.render(options, callback);
-            }
-            else
-                this.nhp.render(filename, options, callback);
-        });
-    }
-    setupTemplate(root) {
         const Include = nhp.Instructions.Include;
         this.nhp.installProcessor("template", function (file) {
-            return new Include(file, root);
+            return new Include(file, "__includeroot");
         });
+        app.set("view engine", "nhp");
+        app.engine("nhp", this.nhp.render.bind(this.nhp));
     }
     enableLoader() {
         this.loaderEnabled = true;
@@ -1157,21 +1333,21 @@ class NexusFramework extends events.EventEmitter {
      */
     setLegacySkeleton(val) {
         if (_.isString(val))
-            this.legacyskeleton = this.nhp.template(val);
+            this.renderoptions.legacyskeleton = this.nhp.template(val);
         else
-            this.legacyskeleton = val;
+            this.renderoptions.legacyskeleton = val;
     }
     setSkeleton(val) {
         if (_.isString(val))
-            this.skeleton = this.nhp.template(val);
+            this.renderoptions.skeleton = this.nhp.template(val);
         else
-            this.skeleton = val;
+            this.renderoptions.skeleton = val;
     }
     setPageSystemSkeleton(val) {
         if (_.isString(val))
-            this.pagesysskeleton = require(val);
+            this.renderoptions.pagesysskeleton = require(val);
         else
-            this.pagesysskeleton = val;
+            this.renderoptions.pagesysskeleton = val;
     }
     setErrorDocument(code, page) {
         if (!page) {
@@ -1182,7 +1358,7 @@ class NexusFramework extends events.EventEmitter {
         }
         else
             page = upath.join("/", page).substring(1);
-        this.errordoc[code] = page;
+        this.renderoptions.errordoc[code] = page;
     }
     mountScripts(mpath = ":scripts") {
         this.mountStatic(mpath, path.resolve(__dirname, "../scripts/"), {
@@ -1192,9 +1368,6 @@ class NexusFramework extends events.EventEmitter {
     mountAbout(mpath = ":about") {
         this.mount(mpath, path.resolve(__dirname, "../about/"));
     }
-    dumpRoot() {
-        this.root.childPaths(this.logger.info.bind(this.logger), true);
-    }
     setupIO(path = ":io") {
         if (!this.server)
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
@@ -1203,11 +1376,12 @@ class NexusFramework extends events.EventEmitter {
             serveClient: !has_slim_io_js,
             path: iopath
         });
-        Object.defineProperty(this, "io", {
-            value: io
-        });
         io.on("connection", (client) => {
             client.on("init", function (sentResources) {
+                if (!_.isArray(sentResources)) {
+                    client.emit("401", "");
+                    client.disconnect(true);
+                }
                 const sent = (client['__sent_resources'] || (client['__sent_resources'] = []));
                 sentResources.forEach(function (res) {
                     if (sent.indexOf(res) == -1)
@@ -1221,7 +1395,10 @@ class NexusFramework extends events.EventEmitter {
                         value: client
                     });
                     const res = new SocketIOResponse(cb);
-                    this.expressUpgrade(req, res);
+                    res['app'] = this.app;
+                    req['app'] = this.app;
+                    res['req'] = req;
+                    req['res'] = res;
                     try {
                         const next = (err) => {
                             if (err) {
@@ -1257,8 +1434,11 @@ class NexusFramework extends events.EventEmitter {
                 }
             });
         });
+        Object.defineProperty(this, "io", {
+            value: io
+        });
         if (has_slim_io_js)
-            this.setHandler("/:/socket.io.slim.js", function (req, res, next) {
+            this.mountHandler("/:scripts/socket.io.slim.js", function (req, res, next) {
                 res.sendFile(socket_io_slim_js, {
                     maxAge: 3.154e+10,
                     immutable: true
@@ -1270,48 +1450,97 @@ class NexusFramework extends events.EventEmitter {
         return iopath;
     }
     /**
-     * Mount a filesystem path onto a web path.
+     * Mount a NHP page system.
      *
      * @param wwwpath The web path
      * @param fspath The filesystem path
-     * @param lazyAndImmutable When true, changes to the filesystem are not honoured and path scanning is done lazily, defaults to true
+     * @param options The optional mount options
      */
-    mount(webpath, fspath, lazyAndImmutable = true, skeleton, pagesysskeleton, legacyskeleton) {
-        webpath = upath.join("/", webpath);
-        fspath = path.resolve(process.cwd(), fspath);
-        if (_.isString(skeleton))
-            skeleton = this.nhp.template(skeleton);
-        if (_.isString(pagesysskeleton))
-            pagesysskeleton = require(pagesysskeleton);
-        if (_.isString(legacyskeleton))
-            legacyskeleton = this.nhp.template(legacyskeleton);
-        if (webpath == "/")
-            this.setIndex(lazyAndImmutable ? new LazyLoadingRequestHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton) : new FSWatcherRequestHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton));
+    mount(webpath, fspath, options = {}) {
+        webpath = upath.join("/", stripPath(webpath));
+        options.root = options.root || process.cwd();
+        fspath = path.resolve(options.root, fspath);
+        if (options.iconfile) {
+            options.iconfile = path.resolve(options.root, options.iconfile);
+            const iconpath = upath.join(webpath, ":icon");
+            this.mountImageResizer(iconpath, options.iconfile, {
+                sizes: iconSizes,
+                square: true
+            });
+            options.icons = upath.join(this.prefix, iconpath, "/");
+        }
+        fspath = path.resolve(options.root, fspath);
+        if (_.isString(options.skeleton))
+            options.skeleton = this.nhp.template(path.resolve(options.root, options.skeleton));
+        if (_.isString(options.pagesysskeleton))
+            options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton));
+        if (_.isString(options.legacyskeleton))
+            options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
+        if (webpath == "/") {
+            const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingRequestHandler(fspath, this.logger, options);
+            this.setDefaultHandler(newHandler);
+            return newHandler;
+        }
         else {
-            const cpath = stripPath(webpath);
-            const last = cpath.lastIndexOf("/");
-            const end = cpath.substring(last + 1);
-            this.root.setChild(webpath, lazyAndImmutable ? new LazyLoadingRequestChildHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton, end) : new FSWatcherRequestChildHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton, end), true);
+            const newHandler = options.mutable ? new FSWatcherRequestChildHandler(fspath, this.logger, options, webpath) : new LazyLoadingRequestChildHandler(fspath, this.logger, options, webpath);
+            for (var i = 0; i < this.mounts.length; i++) {
+                const mount = this.mounts[i];
+                if (mount.rawPattern === webpath) {
+                    mount.destroy();
+                    this.mounts[i] = newHandler;
+                    return;
+                }
+            }
+            this.mounts.push(newHandler);
+            return newHandler;
         }
     }
+    mountImageResizer(webpath, imagefile, options = {}) {
+        webpath = upath.join("/", stripPath(webpath));
+        if (webpath == "/") {
+            const newHandler = new SharpResizerRequestHandler(imagefile, options);
+            this.setDefaultHandler(newHandler);
+            return newHandler;
+        }
+        else {
+            const newHandler = new SharpResizerRequestChildHandler(imagefile, options, webpath);
+            for (var i = 0; i < this.mounts.length; i++) {
+                const mount = this.mounts[i];
+                if (mount.rawPattern === webpath) {
+                    mount.destroy();
+                    this.mounts[i] = newHandler;
+                    return;
+                }
+            }
+            this.mounts.push(newHandler);
+            return newHandler;
+        }
+    }
+    /**
+     * Mount a directory.
+     *
+     * @param webpath The web path
+     * @param fspath The filesystem path
+     * @param options The mount options
+     */
     mountStatic(webpath, fspath, options) {
         var serveOptions = options.mutable ? {} : {
             maxAge: 3.154e+10,
             immutable: true
         };
-        webpath = upath.join("/", webpath);
         fspath = path.resolve(process.cwd(), fspath);
-        const startsWith = new RegExp("^" + fspath.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$");
+        const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
         const handler = function (req, res, next) {
             const filename = path.resolve(fspath, req.path.substring(1));
             if (startsWith.test(filename))
                 fs.stat(filename, function (err, stats) {
-                    if (err)
+                    if (err && err.code != "ENOENT")
                         next(err);
                     else if (stats) {
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
+                                req.logger.info(urlpath);
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
                                     const q = urlpath.indexOf("?");
                                     if (q == -1)
@@ -1384,18 +1613,7 @@ class NexusFramework extends events.EventEmitter {
             else
                 res.sendStatus(403);
         };
-        if (webpath == "/")
-            this.setIndex(new LeafRequestHandler(handler));
-        else {
-            const cpath = stripPath(webpath);
-            const end = cpath.substring(cpath.lastIndexOf("/") + 1);
-            this.root.setChild(webpath, new LeafRequestChildHandler(handler, end), true);
-        }
-    }
-    setIndex(handler) {
-        if (this.root)
-            this.root.destroy();
-        this.root = handler;
+        return this.mountHandler(webpath, handler, false);
     }
     /**
      * Set a request handler for the specified path.
@@ -1403,34 +1621,36 @@ class NexusFramework extends events.EventEmitter {
      *
      * @param path The path
      * @param handler The request handler
+     * @param leaf Whether or not this handler is a leaf, or branch
      */
-    setHandlerEntry(path, handler, createIfNotExists = true) {
-        this.root.setChild(path, handler, createIfNotExists);
-    }
-    /**
-     * Set a request handler for the specified path.
-     * Replaces any existing request handler.
-     *
-     * @param path The path
-     * @param handler The request handler
-     */
-    setHandler(webpath, handler, createIfNotExists = true) {
-        webpath = upath.join("/", webpath);
-        if (webpath == "/")
-            this.setIndex(new LeafRequestHandler(handler));
+    mountHandler(webpath, handler, leaf = true) {
+        webpath = upath.join("/", stripPath(webpath));
+        if (webpath == "/") {
+            const newHandler = new LeafRequestHandler(handler, leaf);
+            this.setDefaultHandler(newHandler);
+            return newHandler;
+        }
         else {
-            const cpath = stripPath(webpath);
-            const last = cpath.lastIndexOf("/");
-            const end = cpath.substring(last + 1);
-            this.root.setChild(webpath, new LeafRequestChildHandler(handler, end), true);
+            const newHandler = new LeafRequestChildHandler(handler, webpath, leaf);
+            for (var i = 0; i < this.mounts.length; i++) {
+                const mount = this.mounts[i];
+                if (mount.rawPattern === webpath) {
+                    mount.destroy();
+                    this.mounts[i] = newHandler;
+                    return;
+                }
+            }
+            this.mounts.push(newHandler);
+            return newHandler;
         }
     }
-    handlerAt(path, createIfNotExists = false) {
-        path = upath.join("/", path);
-        if (path === "/")
-            return this.root;
-        else
-            return this.root.childAt(path, createIfNotExists);
+    /**
+     * Set the default handler, its the handler that gets used when no mounts take the request.
+     */
+    setDefaultHandler(handler) {
+        if (this.default)
+            this.default.destroy();
+        this.default = handler;
     }
     /**
      * Start listening on a specific port.
@@ -1449,860 +1669,12 @@ class NexusFramework extends events.EventEmitter {
             this.cookieParser(req, res, (err) => {
                 if (err)
                     return next(err);
-                const errordoc = this.errordoc;
-                try {
-                    Object.defineProperty(req, "logger", {
-                        configurable: true,
-                        value: this.logger.extend(req.path)
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(req, "matches", {
-                        configurable: true,
-                        value: []
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(req, "nexusframework", {
-                        value: this
-                    });
-                }
-                catch (e) { }
-                try {
-                    if (req.io)
-                        Object.defineProperty(req, "readBody", {
-                            configurable: true,
-                            value: function (cb, ...processors) {
-                                cb(undefined, "");
-                            }
-                        });
-                    else
-                        Object.defineProperty(req, "readBody", {
-                            configurable: true,
-                            value: function (cb, limit = 8192) {
-                                var buffer = "";
-                                req.setEncoding("utf8");
-                                var onError, onData, onEnd;
-                                req.on("error", onError = function (error) {
-                                    req.removeListener("error", onError);
-                                    req.removeListener("data", onData);
-                                    req.removeListener("end", onEnd);
-                                    return cb(error);
-                                });
-                                req.on("data", onData = function (chunk) {
-                                    if (buffer.length + chunk.length >= limit) {
-                                        req.removeListener("error", onError);
-                                        req.removeListener("data", onData);
-                                        req.removeListener("end", onEnd);
-                                        return cb(new Error("Too much data, limit is " + limit + "bytes"));
-                                    }
-                                    buffer += chunk;
-                                });
-                                req.on("end", onEnd = function () {
-                                    req.removeListener("error", onError);
-                                    req.removeListener("data", onData);
-                                    req.removeListener("end", onEnd);
-                                    cb(undefined, buffer);
-                                });
-                            }
-                        });
-                }
-                catch (e) { }
-                try {
-                    if (req.io)
-                        Object.defineProperty(req, "processBody", {
-                            configurable: true,
-                            value: function (cb, ...processors) {
-                                cb();
-                            }
-                        });
-                    else
-                        Object.defineProperty(req, "processBody", {
-                            configurable: true,
-                            value: function (cb, ...processors) {
-                                const contentType = req.get("content-type");
-                                if (!processors.length)
-                                    processors = [0 /* URLEncoded */, 2 /* JSONBody */, 1 /* MultipartFormData */];
-                                req.body = {};
-                                try {
-                                    processors.forEach(function (processor) {
-                                        switch (processor) {
-                                            case 2 /* JSONBody */:
-                                                if (/\/(x\-)?json$/.test(contentType)) {
-                                                    req.readBody(function (err, data) {
-                                                        if (err)
-                                                            return cb(err);
-                                                        try {
-                                                            req.body = JSON.parse(data);
-                                                            cb();
-                                                        }
-                                                        catch (e) {
-                                                            cb(e);
-                                                        }
-                                                    });
-                                                    throw true;
-                                                }
-                                                break;
-                                            case 0 /* URLEncoded */:
-                                                if (/\/(((x\-)?www\-)?form\-)?urlencoded$/.test(contentType)) {
-                                                    req.readBody(function (err, data) {
-                                                        if (err)
-                                                            return cb(err);
-                                                        try {
-                                                            req.body = querystring.parse(data);
-                                                            cb();
-                                                        }
-                                                        catch (e) {
-                                                            cb(e);
-                                                        }
-                                                    });
-                                                    throw true;
-                                                }
-                                                break;
-                                            case 1 /* MultipartFormData */:
-                                                if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
-                                                    multerInstance(req, res, cb);
-                                                    throw true;
-                                                }
-                                                break;
-                                        }
-                                    });
-                                    cb(new Error("Unsupported content submitted"));
-                                }
-                                catch (e) {
-                                    if (e !== true)
-                                        throw e;
-                                }
-                            }
-                        });
-                }
-                catch (e) { }
-                var pagesys;
-                if (req.xhr || req.io) {
-                    try {
-                        res.locals.xhrOrIO = true;
-                    }
-                    catch (e) { }
-                    try {
-                        Object.defineProperty(req, "xhrOrIO", {
-                            value: true
-                        });
-                    }
-                    catch (e) { }
-                    if (req.accepts("json")) {
-                        pagesys = true;
-                        try {
-                            res.locals.pagesys = true;
-                        }
-                        catch (e) { }
-                        try {
-                            Object.defineProperty(req, "pagesys", {
-                                configurable: true,
-                                value: true
-                            });
-                        }
-                        catch (e) { }
-                    }
-                }
-                try {
-                    res.locals.basehref = this.prefix;
-                }
-                catch (e) { }
-                const generator = "NexusFramework " + pkgjson.version;
-                if (!req.io)
-                    try {
-                        res.header("X-Generator", generator);
-                    }
-                    catch (e) { }
-                try {
-                    res.locals.generator = generator;
-                }
-                catch (e) { }
-                try {
-                    res.locals.frameworkVersion = pkgjson.version;
-                }
-                catch (e) { }
-                var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
-                var useLoader = pagesys || (this.loaderEnabled && !noScript);
-                const rua = req.get("user-agent");
-                var ua = uacache.get(rua);
-                var legacy, es6;
-                if (ua) {
-                    legacy = ua.legacy;
-                    es6 = ua.es6;
-                }
-                else {
-                    ua = useragent.parse(rua);
-                    _.extend(ua, useragent.is(rua));
-                    if (isbot(rua))
-                        ua.bot = true;
-                    ua.legacy = legacy = isUnsupportedBrowser(ua);
-                    ua.es6 = es6 = !legacy && isES6Browser(ua);
-                    uacache.set(rua, ua);
-                }
-                try {
-                    Object.defineProperty(res, "useragent", {
-                        configurable: true,
-                        value: ua
-                    });
-                }
-                catch (e) { }
-                try {
-                    res.locals.useragent = ua;
-                }
-                catch (e) { }
-                const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
-                if (useLoader && !pagesys && legacy)
-                    useLoader = false;
-                var meta = { generator };
-                var footerRenderers = this.footer.slice(0);
-                var headerRenderers = this.header.slice(0);
-                var afterbodyRenderers = this.afterbody.slice(0);
-                var gfonts = {};
-                var scripts = [];
-                var styles = [];
-                try {
-                    Object.defineProperty(res, "enableLoader", {
-                        configurable: true,
-                        value: function () {
-                            useLoader = true;
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addGoogleFont", {
-                        configurable: true,
-                        value: (family, weight, italic) => {
-                            var font = gfonts[family];
-                            if (!font)
-                                font = gfonts[family] = [];
-                            var style = "" + (weight || 400);
-                            if (italic)
-                                style += "i";
-                            if (font.indexOf(style) == -1)
-                                font.push(style);
-                        }
-                    });
-                }
-                catch (e) { }
-                const addScript = function (source, version, ...deps) {
-                    for (var i = 0; i < scripts.length; i++) {
-                        const script = scripts[i];
-                        if (script.source === source) {
-                            if (deps.length) {
-                                Array.prototype.push.apply(script, deps);
-                                script.deps = _.uniq(script.deps);
-                            }
-                            script.version = version;
-                            return;
-                        }
-                    }
-                    scripts.push({
-                        name: determineName(source),
-                        source,
-                        version,
-                        deps
-                    });
-                };
-                const addSocketIOClient = () => {
-                    addScript(upath.join(this.prefix, has_slim_io_js ? ":/socket.io.slim.js" : ":io/socket.io.js"), sckclpkgjson.version);
-                };
-                try {
-                    Object.defineProperty(res, "addSocketIOClient", {
-                        configurable: true,
-                        value: addSocketIOClient
-                    });
-                }
-                catch (e) { }
-                const addInlineScript = function (source, ...deps) {
-                    scripts.push({
-                        name: "inline-" + stringHash(source),
-                        source,
-                        inline: true,
-                        deps
-                    });
-                };
-                try {
-                    Object.defineProperty(res, "addInlineScript", {
-                        configurable: true,
-                        value: addInlineScript
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addNexusFrameworkClient", {
-                        configurable: true,
-                        value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
-                            const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
-                            if (includeSocketIO) {
-                                addSocketIOClient();
-                                addScript(path, pkgjson.version, "socket.io");
-                                if (autoEnabledPageSystem)
-                                    addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
-                            }
-                            else
-                                addScript(path, pkgjson.version);
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addScript", {
-                        configurable: true,
-                        value: addScript
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addFooterRenderer", {
-                        configurable: true,
-                        value: function (renderer) {
-                            footerRenderers.push(renderer instanceof Function ? renderer : function (out) {
-                                out.write("" + renderer);
-                            });
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addBodyClassName", {
-                        configurable: true,
-                        value: function (name) {
-                            const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
-                            if (!classRegex.test(res.locals.bodyclass))
-                                res.locals.bodyclass = (res.locals.bodyclass + " " + name).trim();
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "removeBodyClassName", {
-                        configurable: true,
-                        value: function (name) {
-                            const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
-                            res.locals.bodyclass = res.locals.bodyclass.replace(classRegex, function (match, p1) {
-                                return /^\s.+\s$/.test(match) ? " " : "";
-                            });
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addAfterBodyRenderer", {
-                        configurable: true,
-                        value: function (renderer) {
-                            afterbodyRenderers.push(renderer instanceof Function ? renderer : function (out) {
-                                out.write("" + renderer);
-                            });
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addStyle", {
-                        configurable: true,
-                        value: function (source, version, ...deps) {
-                            for (var i = 0; i < styles.length; i++) {
-                                const style = styles[i];
-                                if (style.source === source) {
-                                    style.version = version;
-                                    return;
-                                }
-                            }
-                            styles.push({
-                                name: determineName(source),
-                                source,
-                                version,
-                                deps
-                            });
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addInlineStyle", {
-                        configurable: true,
-                        value: function (source, ...deps) {
-                            styles.push({
-                                name: "inline-" + stringHash(source),
-                                source,
-                                inline: true,
-                                deps
-                            });
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "addHeaderRenderer", {
-                        configurable: true,
-                        value: function (renderer) {
-                            headerRenderers.push(renderer instanceof Function ? renderer : function (out) {
-                                out.write("" + renderer);
-                            });
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "setMetaTag", {
-                        configurable: true,
-                        value: function (name, content) {
-                            name = name.toLowerCase();
-                            if (content)
-                                meta[name] = content;
-                            else
-                                delete meta[name];
-                        }
-                    });
-                }
-                catch (e) { }
-                var servedLoader;
-                var servedAfterBody;
-                try {
-                    const writeafterbody = res.locals.__writeafterbody = (out) => {
-                        afterbodyRenderers.forEach(function (renderer) {
-                            renderer(out);
-                        });
-                        if (useLoader) {
-                            const locals = res.locals;
-                            locals.progressContainerHead = locals.progressContainerHead || "";
-                            locals.progressContainerFoot = locals.progressContainerFoot || "";
-                            locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
-                            locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
-                            overlayHtmlParts.forEach(function (step) {
-                                step(out, locals);
-                            });
-                            servedLoader = true;
-                        }
-                        servedAfterBody = true;
-                        try {
-                            out['flush']();
-                        }
-                        catch (e) { }
-                    };
-                    Object.defineProperty(res, "writeAfterBodyHtml", {
-                        value: function (out) {
-                            writeafterbody(out || res);
-                        }
-                    });
-                }
-                catch (e) { }
-                const getLoaderData = function () {
-                    const resarray = [];
-                    const gfontkeys = Object.keys(gfonts);
-                    if (gfontkeys.length) {
-                        var gfonturl = "https://fonts.googleapis.com/css?family=";
-                        // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
-                        var first = true;
-                        gfontkeys.forEach(function (font) {
-                            if (first)
-                                first = false;
-                            else
-                                gfonturl += "|";
-                            const styles = gfonts[font];
-                            gfonturl += encodeURIComponent(font);
-                            if (styles.length == 1 && styles[0] == "400")
-                                return;
-                            gfonturl += ":";
-                            gfonturl += styles.join(",");
-                        });
-                        styles.unshift({
-                            name: "google-fonts",
-                            source: gfonturl,
-                            version: "1.0",
-                            deps: []
-                        });
-                    }
-                    const alreadySent = req.io && (req.io['__sent_resources'] || (req.io['__sent_resources'] = []));
-                    const skip = alreadySent ? function (resource) {
-                        const key = resource.type + ":" + resource.name;
-                        if (alreadySent.indexOf(key) > -1)
-                            return true;
-                        alreadySent.push(key);
-                        return false;
-                    } : function () { return false; };
-                    styles.forEach(function (style) {
-                        style['type'] = "style";
-                        if (skip(style))
-                            return;
-                        resarray.push(style);
-                    });
-                    scripts.forEach(function (script) {
-                        script['type'] = "script";
-                        if (skip(script))
-                            return;
-                        resarray.push(script);
-                    });
-                    return resarray;
-                };
-                try {
-                    Object.defineProperty(res, "getLoaderData", {
-                        value: getLoaderData
-                    });
-                }
-                catch (e) { }
-                try {
-                    const writefooter = res.locals.__writefooter = (out) => {
-                        if (!servedAfterBody)
-                            afterbodyRenderers.forEach(function (renderer) {
-                                renderer(out);
-                            });
-                        if (!noScript) {
-                            const user = req.user;
-                            if (user)
-                                addInlineScript("NexusFramework['currentUserID'] = " + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframework");
-                            if (useLoader) {
-                                if (!servedLoader) {
-                                    const locals = res.locals;
-                                    locals.progressContainerHead = locals.progressContainerHead || "";
-                                    locals.progressContainerFoot = locals.progressContainerFoot || "";
-                                    locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
-                                    locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
-                                    overlayHtmlParts.forEach(function (step) {
-                                        step(out, locals);
-                                    });
-                                }
-                            }
-                            else {
-                                // TODO: Sort dependencies
-                                scripts.forEach(function (script) {
-                                    if (script.inline) {
-                                        out.write("<script type=\"text/javascript\">");
-                                        out.write(script.source);
-                                        out.write("</script>");
-                                    }
-                                    else {
-                                        out.write("<script type=\"text/javascript\" src=\"");
-                                        if (script.version) {
-                                            var _url = url.parse(script.source, true);
-                                            _url.query = _url.query || {};
-                                            _url.query.v = script.version;
-                                            script.source = url.format(_url);
-                                        }
-                                        out.write(encodeHTML(url.format(script.source), true));
-                                        out.write("\"></script>");
-                                    }
-                                });
-                            }
-                        }
-                        footerRenderers.forEach(function (renderer) {
-                            renderer(out);
-                        });
-                        if (useLoader) {
-                            if (!pagesys) {
-                                out.write("<script type=\"text/javascript\">");
-                                out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
-                                out.write("</script>");
-                            }
-                            out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
-                            out.write(JSON.stringify(getLoaderData()));
-                            out.write(")</script>");
-                        }
-                    };
-                    Object.defineProperty(res, "writeFooterHtml", {
-                        value: function (out) {
-                            writefooter(out || res);
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    const writeheader = res.locals.__writeheader = (out) => {
-                        if (req.method.toUpperCase() === "GET") {
-                            if (noScript) {
-                                try {
-                                    res.cookie("noscript", "true", { expires: new Date(+(new Date) + 3.154e+10) });
-                                }
-                                catch (e) { }
-                                const _url = url.parse(req.originalUrl, true);
-                                _url.query = _url.query || {};
-                                out.write('<script>document.cookie=\"noscript=; Path=/; Expires=Thu, 1 Nov 1970 00:00:00 GMT\";location.href = ');
-                                delete _url.query.noscript;
-                                _url.search = "?" + querystring.stringify(_url.query);
-                                if (_url.search == "?") {
-                                    _url.search = undefined;
-                                    _url.path = _url.pathname;
-                                }
-                                else
-                                    _url.path = _url.pathname + _url.search;
-                                delete _url.href;
-                                out.write(JSON.stringify(url.format(_url)));
-                                out.write('</script>');
-                            }
-                            else {
-                                out.write('<noscript><meta http-equiv="refresh" content="0; url=\'');
-                                const _url = url.parse(req.originalUrl, true);
-                                _url.query = _url.query || {};
-                                _url.query.noscript = "1";
-                                out.write(encodeHTML(url.format(_url), true));
-                                out.write('\'" /></noscript>');
-                            }
-                        }
-                        Object.keys(meta).forEach(function (key) {
-                            out.write("<meta name=\"");
-                            out.write(encodeHTML(key, true));
-                            out.write("\" content=\"");
-                            out.write(encodeHTML(meta[key]));
-                            out.write("\" />");
-                        });
-                        if (useLoader) {
-                            if (!pagesys) {
-                                out.write("<style>");
-                                out.write(overlayCss);
-                                out.write("</style>");
-                            }
-                        }
-                        else {
-                            const gfontkeys = Object.keys(gfonts);
-                            if (gfontkeys.length) {
-                                out.write("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=");
-                                // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
-                                var first = true;
-                                gfontkeys.forEach(function (font) {
-                                    if (first)
-                                        first = false;
-                                    else
-                                        out.write("|");
-                                    const styles = gfonts[font];
-                                    out.write(encodeURIComponent(font));
-                                    if (styles.length == 1 && styles[0] == "400")
-                                        return;
-                                    out.write(":");
-                                    out.write(styles.join(","));
-                                });
-                                out.write("\">");
-                            }
-                            // TODO: Sort dependencies
-                            styles.forEach(function (style) {
-                                if (style.inline) {
-                                    out.write("<style>");
-                                    out.write(style.source);
-                                    out.write("</style>");
-                                }
-                                else {
-                                    out.write("<link rel=\"stylesheet\" href=\"");
-                                    if (style.version) {
-                                        var _url = url.parse(style.source, true);
-                                        _url.query = _url.query || {};
-                                        _url.query.v = style.version;
-                                        style.source = url.format(_url);
-                                    }
-                                    out.write(encodeHTML(url.format(style.source), true));
-                                    out.write("\">");
-                                }
-                            });
-                        }
-                        headerRenderers.forEach(function (renderer) {
-                            renderer(out);
-                        });
-                    };
-                    Object.defineProperty(res, "writeFooterHtml", {
-                        value: function (out) {
-                            writeheader(out || res);
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    res.locals.bodyclass = "";
-                }
-                catch (e) { }
-                try {
-                    res.locals.title = "Title Not Set";
-                }
-                catch (e) { }
-                try {
-                    const render = res.render;
-                    Object.defineProperty(res, "render", {
-                        value: (filename, options, callback) => {
-                            if (options instanceof Function)
-                                callback = options;
-                            if (this.app.get("view engine") == "nhp") {
-                                var vars = {};
-                                _.extend(vars, res.app.locals);
-                                _.extend(vars, res.locals);
-                                if (options)
-                                    _.extend(vars, options);
-                                this.nhp.render(filename, vars, callback);
-                            }
-                            else
-                                render.call(res, filename, options, callback);
-                        }
-                    });
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(res, "sendRender", {
-                        configurable: true,
-                        value: (filename, options) => {
-                            if (req.app.get("view engine") == "nhp") {
-                                var vars = {};
-                                _.extend(vars, res.app.locals);
-                                _.extend(vars, res.locals);
-                                if (options)
-                                    _.extend(vars, options);
-                                if (pagesys) {
-                                    const pagesysskeleton = req.pagesysskeleton || this.pagesysskeleton;
-                                    if (pagesysskeleton) {
-                                        pagesysskeleton(filename, vars, req, res, function (err, data) {
-                                            if (err)
-                                                next(err);
-                                            else if (data)
-                                                res.json(data);
-                                            else
-                                                next(new Error("Server Error: No data passed"));
-                                        });
-                                        return;
-                                    }
-                                }
-                                const out = req.io ? res : new BufferingWritable(res);
-                                const callback = function (err) {
-                                    if (err)
-                                        next(err);
-                                    else
-                                        out.end();
-                                };
-                                const skeleton = (legacy && (req.legacyskeleton || this.legacyskeleton)) || req.skeleton || this.skeleton;
-                                if (!res.get("content-type"))
-                                    res.type("text/html; charset=utf-8"); // Default to utf8 html
-                                if (skeleton) {
-                                    vars['page'] = filename;
-                                    skeleton.renderToStream(vars, out, callback);
-                                }
-                                else
-                                    this.nhp.renderToStream(filename, vars, out, callback);
-                            }
-                            else
-                                res.render(filename, options, function (err, html) {
-                                    if (err)
-                                        next(err);
-                                    else {
-                                        var buff = Buffer.from(html, "utf8");
-                                        res.writeHead(200, {
-                                            "Content-Length": buff.length
-                                        });
-                                        if (req.method == "HEAD")
-                                            res.end();
-                                        else
-                                            res.end(buff);
-                                    }
-                                });
-                        }
-                    });
-                }
-                catch (e) { }
-                if (errordoc && Object.keys(errordoc).length) {
-                    const builtInSendStatus = res.sendStatus.bind(req);
-                    const used = {};
-                    try {
-                        Object.defineProperty(res, "sendStatus", {
-                            configurable: true,
-                            value: (code, _err) => {
-                                var st = "" + code;
-                                var handler;
-                                if (!used[st] && (handler = (errordoc[st] || errordoc["*"]))) {
-                                    used[st] = true;
-                                    try {
-                                        res.locals.errorCode = code;
-                                    }
-                                    catch (e) { }
-                                    try {
-                                        Object.defineProperty(req, "errorCode", {
-                                            configurable: true,
-                                            value: code
-                                        });
-                                    }
-                                    catch (e) { }
-                                    try {
-                                        res.locals.error = _err;
-                                    }
-                                    catch (e) { }
-                                    try {
-                                        Object.defineProperty(req, "error", {
-                                            configurable: true,
-                                            value: _err
-                                        });
-                                    }
-                                    catch (e) { }
-                                    res.status(code);
-                                    res.addBodyClassName("error-page");
-                                    res.addBodyClassName("error-" + code);
-                                    req.url = url.resolve("/", handler);
-                                    this.root.handle(req, res, function (err) {
-                                        if (err)
-                                            next(err);
-                                        else
-                                            builtInSendStatus(code, _err);
-                                    });
-                                }
-                                else
-                                    builtInSendStatus(code, _err);
-                            }
-                        });
-                    }
-                    catch (e) { }
-                    if ("500" in errordoc || "*" in errordoc) {
-                        const builtInSendFailure = res.sendFailure && res.sendFailure.bind(req);
-                        try {
-                            const used = {};
-                            Object.defineProperty(res, "sendFailure", {
-                                configurable: true,
-                                value: (_err) => {
-                                    var handler;
-                                    if (!used["500"] && (handler = (errordoc["500"] || errordoc["*"]))) {
-                                        used["500"] = true;
-                                        handler = upath.join("/", handler);
-                                        try {
-                                            Object.defineProperty(req, "errorCode", {
-                                                configurable: true,
-                                                value: 500
-                                            });
-                                        }
-                                        catch (e) { }
-                                        try {
-                                            res.locals.errorCode = 500;
-                                        }
-                                        catch (e) { }
-                                        try {
-                                            Object.defineProperty(req, "error", {
-                                                configurable: true,
-                                                value: _err
-                                            });
-                                        }
-                                        catch (e) { }
-                                        try {
-                                            res.locals.error = _err;
-                                        }
-                                        catch (e) { }
-                                        res.status(500);
-                                        res.addBodyClassName("error-page");
-                                        res.addBodyClassName("error-500");
-                                        req.url = url.resolve("/", handler);
-                                        this.root.handle(req, res, function (err) {
-                                            if (err)
-                                                next(err);
-                                            else
-                                                builtInSendFailure(_err);
-                                        });
-                                    }
-                                    else
-                                        builtInSendStatus(_err);
-                                }
-                            });
-                        }
-                        catch (e) { }
-                    }
-                }
                 async.eachSeries(this.stack, function (entry, cb) {
                     entry(req, res, cb);
                 }, (err) => {
                     const user = req.user;
                     const userName = user ? ("`" + (user.displayName || user.email || user.id || "Logged") + "`") : "Guest";
-                    const type = pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
+                    const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
                     if (err) {
                         if (this.logging)
                             req.logger.warn(req.method, req.ip || "`Unknown IP`", userName, "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
@@ -2315,7 +1687,7 @@ class NexusFramework extends events.EventEmitter {
                             const id = user.id || user.email || user.displayName || "Logged";
                             res.set("X-User", "" + id);
                         }
-                        this.root.handle(req, res, next);
+                        this.handle0(req, res, next);
                     }
                 });
             });
@@ -2323,10 +1695,1047 @@ class NexusFramework extends events.EventEmitter {
         else
             next();
     }
-    use(middleware) {
+    /**
+     * Push middleware to the end of the stack.
+     * At this point any user calculations have concluded and a logger should be available.
+     */
+    pushMiddleware(middleware) {
         this.stack.push(middleware);
     }
-    nexusforkUpgrade(req, res) {
+    /**
+     * Unshift middleware onto the beginning of the stack.
+     * At this point none of the nexusframework extensions will be available.
+     */
+    unshiftMiddleware(middleware) {
+        this.stack.unshift(middleware);
+    }
+    useio(middleware) {
+        if (this.io)
+            this.io.use(middleware);
+        else
+            throw new Error("Attempting to add Socket.IO middleware when Socket.IO has not been initialized");
+    }
+    runMiddleware(req, res, next) {
+        async.eachSeries(this.stack, function (middleware, cb) {
+            middleware(req, res, cb);
+        }, next);
+    }
+    handle0(req, res, next) {
+        const path = req.path;
+        async.eachSeries(this.mounts, (mount, cb) => {
+            const targetPath = mount.rawPattern;
+            if (path === targetPath || (!mount.leaf && path.length >= targetPath.length + 1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
+                const curl = req.url;
+                req.mount = mount;
+                req.url = req.url.substring(targetPath.length) || "/";
+                mount.handle(req, res, function (err) {
+                    req.url = curl;
+                    cb(err);
+                });
+            }
+            else
+                cb();
+        }, (err) => {
+            if (err)
+                next(err);
+            else
+                this.default.handle(req, res, next);
+        });
+    }
+    upgrade(req, res, next) {
+        try {
+            Object.defineProperty(req, "logger", {
+                configurable: true,
+                value: this.logger.extend(req.path)
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(req, "matches", {
+                configurable: true,
+                value: []
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(req, "nexusframework", {
+                value: this
+            });
+        }
+        catch (e) { }
+        try {
+            if (req.io)
+                Object.defineProperty(req, "readBody", {
+                    configurable: true,
+                    value: function (cb) {
+                        cb(undefined, Buffer.from(JSON.stringify(req.body) || ""));
+                    }
+                });
+            else
+                Object.defineProperty(req, "readBody", {
+                    configurable: true,
+                    value: function (cb, limit = 8192) {
+                        var buffer = Buffer.from([]);
+                        var onError, onData, onEnd;
+                        req.on("error", onError = function (error) {
+                            req.removeListener("error", onError);
+                            req.removeListener("data", onData);
+                            req.removeListener("end", onEnd);
+                            return cb(error);
+                        });
+                        req.on("data", onData = function (chunk) {
+                            if (buffer.length + chunk.length >= limit) {
+                                req.removeListener("error", onError);
+                                req.removeListener("data", onData);
+                                req.removeListener("end", onEnd);
+                                return cb(new Error("Too much data, limit is " + limit + "bytes"));
+                            }
+                            buffer = Buffer.concat([buffer, chunk]);
+                        });
+                        req.on("end", onEnd = function () {
+                            req.removeListener("error", onError);
+                            req.removeListener("data", onData);
+                            req.removeListener("end", onEnd);
+                            cb(undefined, buffer);
+                        });
+                    }
+                });
+        }
+        catch (e) { }
+        try {
+            if (req.io)
+                Object.defineProperty(req, "processBody", {
+                    configurable: true,
+                    value: function (cb, ...processors) {
+                        cb();
+                    }
+                });
+            else
+                Object.defineProperty(req, "processBody", {
+                    configurable: true,
+                    value: function (cb, ...processors) {
+                        const contentType = req.get("content-type");
+                        if (!processors.length)
+                            processors = [0 /* URLEncoded */, 2 /* JSONBody */, 1 /* MultipartFormData */];
+                        req.body = {};
+                        try {
+                            processors.forEach(function (processor) {
+                                switch (processor) {
+                                    case 2 /* JSONBody */:
+                                        if (/\/(x\-)?json$/.test(contentType)) {
+                                            req.readBody(function (err, data) {
+                                                if (err)
+                                                    return cb(err);
+                                                try {
+                                                    req.body = JSON.parse(data.toString("utf8"));
+                                                    cb();
+                                                }
+                                                catch (e) {
+                                                    cb(e);
+                                                }
+                                            });
+                                            throw true;
+                                        }
+                                        break;
+                                    case 0 /* URLEncoded */:
+                                        if (/\/(((x\-)?www\-)?form\-)?urlencoded$/.test(contentType)) {
+                                            req.readBody(function (err, data) {
+                                                if (err)
+                                                    return cb(err);
+                                                try {
+                                                    req.body = querystring.parse(data.toString("utf8"));
+                                                    cb();
+                                                }
+                                                catch (e) {
+                                                    cb(e);
+                                                }
+                                            });
+                                            throw true;
+                                        }
+                                        break;
+                                    case 1 /* MultipartFormData */:
+                                        if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
+                                            multerInstance(req, res, cb);
+                                            throw true;
+                                        }
+                                        break;
+                                }
+                            });
+                            cb(new Error("Unsupported content submitted"));
+                        }
+                        catch (e) {
+                            if (e !== true)
+                                throw e;
+                        }
+                    }
+                });
+        }
+        catch (e) { }
+        const webp = req.accepts("webp");
+        try {
+            res.locals.webp = true;
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(req, "webp", {
+                value: true
+            });
+        }
+        catch (e) { }
+        var pagesys;
+        if (req.xhr || req.io) {
+            try {
+                res.locals.xhrOrIO = true;
+            }
+            catch (e) { }
+            try {
+                Object.defineProperty(req, "xhrOrIO", {
+                    value: true
+                });
+            }
+            catch (e) { }
+            if (req.accepts("json")) {
+                pagesys = true;
+                try {
+                    res.locals.pagesys = true;
+                }
+                catch (e) { }
+                try {
+                    Object.defineProperty(req, "pagesys", {
+                        configurable: true,
+                        value: true
+                    });
+                }
+                catch (e) { }
+            }
+        }
+        try {
+            res.locals.basehref = this.prefix;
+        }
+        catch (e) { }
+        const generator = "NexusFramework " + pkgjson.version;
+        if (!req.io)
+            try {
+                res.header("X-Generator", generator);
+            }
+            catch (e) { }
+        try {
+            res.locals.generator = generator;
+        }
+        catch (e) { }
+        try {
+            res.locals.frameworkVersion = pkgjson.version;
+        }
+        catch (e) { }
+        var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
+        var useLoader = pagesys || (this.loaderEnabled && !noScript);
+        const rua = req.get("user-agent");
+        var ua = uacache.get(rua);
+        var legacy, es6;
+        if (ua) {
+            legacy = ua.legacy;
+            es6 = ua.es6;
+        }
+        else {
+            ua = useragent.parse(rua);
+            _.extend(ua, useragent.is(rua));
+            ua.legacy = legacy = isUnsupportedBrowser(ua);
+            ua.es6 = es6 = !legacy && isES6Browser(ua);
+            uacache.set(rua, ua);
+        }
+        try {
+            Object.defineProperty(res, "useragent", {
+                configurable: true,
+                value: ua
+            });
+        }
+        catch (e) { }
+        try {
+            res.locals.useragent = ua;
+        }
+        catch (e) { }
+        const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
+        if (useLoader && !pagesys && legacy)
+            useLoader = false;
+        var icons = [];
+        const meta = { generator };
+        const footerRenderers = this.footer.slice(0);
+        const headerRenderers = this.header.slice(0);
+        const afterbodyRenderers = this.afterbody.slice(0);
+        const gfonts = {};
+        const scripts = [];
+        const styles = [];
+        try {
+            Object.defineProperty(res, "setRenderOptions", {
+                configurable: true,
+                value: function (options) {
+                    res.renderoptions = options;
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "applyRenderOptions", {
+                configurable: true,
+                value: function (options) {
+                    _.extend(res.renderoptions || (res.renderoptions = {}), options);
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "enableLoader", {
+                configurable: true,
+                value: function () {
+                    useLoader = true;
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addGoogleFont", {
+                configurable: true,
+                value: (family, weight, italic) => {
+                    var font = gfonts[family];
+                    if (!font)
+                        font = gfonts[family] = [];
+                    var style = "" + (weight || 400);
+                    if (italic)
+                        style += "i";
+                    if (font.indexOf(style) == -1)
+                        font.push(style);
+                }
+            });
+        }
+        catch (e) { }
+        const addScript = function (source, version, ...deps) {
+            for (var i = 0; i < scripts.length; i++) {
+                const script = scripts[i];
+                if (script.source === source) {
+                    if (deps.length) {
+                        Array.prototype.push.apply(script, deps);
+                        script.deps = _.uniq(script.deps);
+                    }
+                    script.version = version;
+                    return;
+                }
+            }
+            scripts.push({
+                name: determineName(source),
+                source,
+                version,
+                deps
+            });
+        };
+        const addSocketIOClient = () => {
+            addScript(upath.join(this.prefix, has_slim_io_js ? ":scripts/socket.io.slim.js" : ":io/socket.io.js"), sckclpkgjson.version);
+        };
+        try {
+            Object.defineProperty(res, "addSocketIOClient", {
+                configurable: true,
+                value: addSocketIOClient
+            });
+        }
+        catch (e) { }
+        const addInlineScript = function (source, ...deps) {
+            scripts.push({
+                name: "inline-" + stringHash(source),
+                source,
+                inline: true,
+                deps
+            });
+        };
+        try {
+            Object.defineProperty(res, "addInlineScript", {
+                configurable: true,
+                value: addInlineScript
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addNexusFrameworkClient", {
+                configurable: true,
+                value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
+                    const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
+                    if (includeSocketIO) {
+                        addSocketIOClient();
+                        addScript(path, pkgjson.version, "socket.io");
+                        if (autoEnabledPageSystem)
+                            addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
+                    }
+                    else
+                        addScript(path, pkgjson.version);
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addScript", {
+                configurable: true,
+                value: addScript
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addFooterRenderer", {
+                configurable: true,
+                value: function (renderer) {
+                    footerRenderers.push(renderer instanceof Function ? renderer : function (out) {
+                        out.write("" + renderer);
+                    });
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addBodyClassName", {
+                configurable: true,
+                value: function (name) {
+                    const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
+                    if (!classRegex.test(res.locals.bodyclass))
+                        res.locals.bodyclass = (res.locals.bodyclass + " " + name).trim();
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "removeBodyClassName", {
+                configurable: true,
+                value: function (name) {
+                    const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
+                    res.locals.bodyclass = res.locals.bodyclass.replace(classRegex, function (match, p1) {
+                        return /^\s.+\s$/.test(match) ? " " : "";
+                    });
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addAfterBodyRenderer", {
+                configurable: true,
+                value: function (renderer) {
+                    afterbodyRenderers.push(renderer instanceof Function ? renderer : function (out) {
+                        out.write("" + renderer);
+                    });
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addStyle", {
+                configurable: true,
+                value: function (source, version, ...deps) {
+                    for (var i = 0; i < styles.length; i++) {
+                        const style = styles[i];
+                        if (style.source === source) {
+                            style.version = version;
+                            return;
+                        }
+                    }
+                    styles.push({
+                        name: determineName(source),
+                        source,
+                        version,
+                        deps
+                    });
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addInlineStyle", {
+                configurable: true,
+                value: function (source, ...deps) {
+                    styles.push({
+                        name: "inline-" + stringHash(source),
+                        source,
+                        inline: true,
+                        deps
+                    });
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "addHeaderRenderer", {
+                configurable: true,
+                value: function (renderer) {
+                    headerRenderers.push(renderer instanceof Function ? renderer : function (out) {
+                        out.write("" + renderer);
+                    });
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "setMetaTag", {
+                configurable: true,
+                value: function (name, content) {
+                    name = name.toLowerCase();
+                    if (content)
+                        meta[name] = content;
+                    else
+                        delete meta[name];
+                }
+            });
+        }
+        catch (e) { }
+        var servedLoader;
+        var servedAfterBody;
+        try {
+            const writeafterbody = res.locals.__writeafterbody = (out) => {
+                afterbodyRenderers.forEach(function (renderer) {
+                    renderer(out);
+                });
+                if (useLoader) {
+                    const locals = res.locals;
+                    locals.progressContainerHead = locals.progressContainerHead || "<img width='128' height='128' src='/favicon.ico' />";
+                    locals.progressContainerFoot = locals.progressContainerFoot || "";
+                    locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
+                    locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
+                    overlayHtmlParts.forEach(function (step) {
+                        step(out, locals);
+                    });
+                    servedLoader = true;
+                }
+                servedAfterBody = true;
+                try {
+                    out['flush']();
+                }
+                catch (e) { }
+            };
+            Object.defineProperty(res, "writeAfterBodyHtml", {
+                value: function (out) {
+                    writeafterbody(out || res);
+                }
+            });
+        }
+        catch (e) { }
+        const getLoaderData = function () {
+            const resarray = [];
+            const gfontkeys = Object.keys(gfonts);
+            if (gfontkeys.length) {
+                var gfonturl = "https://fonts.googleapis.com/css?family=";
+                // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
+                var first = true;
+                gfontkeys.forEach(function (font) {
+                    if (first)
+                        first = false;
+                    else
+                        gfonturl += "|";
+                    const styles = gfonts[font];
+                    gfonturl += encodeURIComponent(font);
+                    if (styles.length == 1 && styles[0] == "400")
+                        return;
+                    gfonturl += ":";
+                    gfonturl += styles.join(",");
+                });
+                styles.unshift({
+                    name: "google-fonts",
+                    source: gfonturl,
+                    version: "1.0",
+                    deps: []
+                });
+            }
+            const alreadySent = req.io && (req.io['__sent_resources'] || (req.io['__sent_resources'] = []));
+            const skip = alreadySent ? function (resource) {
+                const key = resource.type + ":" + resource.name;
+                if (alreadySent.indexOf(key) > -1)
+                    return true;
+                alreadySent.push(key);
+                return false;
+            } : function () { return false; };
+            styles.forEach(function (style) {
+                style['type'] = "style";
+                if (skip(style))
+                    return;
+                resarray.push(style);
+            });
+            scripts.forEach(function (script) {
+                script['type'] = "script";
+                if (skip(script))
+                    return;
+                resarray.push(script);
+            });
+            return resarray;
+        };
+        try {
+            Object.defineProperty(res, "getLoaderData", {
+                value: getLoaderData
+            });
+        }
+        catch (e) { }
+        try {
+            const writefooter = res.locals.__writefooter = (out) => {
+                if (!servedAfterBody)
+                    afterbodyRenderers.forEach(function (renderer) {
+                        renderer(out);
+                    });
+                if (!noScript) {
+                    const user = req.user;
+                    if (user)
+                        addInlineScript("NexusFramework['currentUserID'] = " + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframework");
+                    if (useLoader) {
+                        if (!servedLoader) {
+                            const locals = res.locals;
+                            locals.progressContainerHead = locals.progressContainerHead || "";
+                            locals.progressContainerFoot = locals.progressContainerFoot || "";
+                            locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
+                            locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
+                            overlayHtmlParts.forEach(function (step) {
+                                step(out, locals);
+                            });
+                        }
+                    }
+                    else {
+                        // TODO: Sort dependencies
+                        scripts.forEach(function (script) {
+                            if (script.inline) {
+                                out.write("<script type=\"text/javascript\">");
+                                out.write(script.source);
+                                out.write("</script>");
+                            }
+                            else {
+                                out.write("<script type=\"text/javascript\" src=\"");
+                                if (script.version) {
+                                    var _url = url.parse(script.source, true);
+                                    _url.query = _url.query || {};
+                                    _url.query.v = script.version;
+                                    script.source = url.format(_url);
+                                }
+                                out.write(encodeHTML(url.format(script.source), true));
+                                out.write("\"></script>");
+                            }
+                        });
+                    }
+                }
+                footerRenderers.forEach(function (renderer) {
+                    renderer(out);
+                });
+                if (useLoader) {
+                    if (!pagesys) {
+                        out.write("<script type=\"text/javascript\">");
+                        out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
+                        out.write("</script>");
+                    }
+                    out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
+                    out.write(JSON.stringify(getLoaderData()));
+                    out.write(")</script>");
+                }
+            };
+            Object.defineProperty(res, "writeFooterHtml", {
+                value: function (out) {
+                    writefooter(out || res);
+                }
+            });
+        }
+        catch (e) { }
+        var socialTagsSet = false;
+        const setSocialTags = function (socialTags) {
+            socialTagsSet = true;
+            if (socialTags.url) {
+                const url = socialTags.url.toString();
+                meta['og:url'] = url;
+                meta['twitter:url'] = url;
+            }
+            if (socialTags.title) {
+                const title = socialTags.title;
+                meta['g+:name'] = title;
+                meta['og:title'] = title;
+                meta['twitter:title'] = title;
+            }
+            if (socialTags.twitterCard)
+                meta['twitter:card'] = socialTags.twitterCard;
+            if (socialTags.siteTitle)
+                meta['og:site_name'] = socialTags.siteTitle;
+            if (socialTags.seeAlso)
+                meta['og:see_also'] = socialTags.seeAlso;
+            if (socialTags.image) {
+                const image = socialTags.image;
+                meta['g+:image'] = image;
+                meta['og:image'] = image;
+                meta['twitter:image'] = image;
+            }
+            const description = socialTags.description;
+            meta['g+:description'] = description;
+            meta['og:description'] = description;
+            meta['twitter:description'] = description;
+        };
+        try {
+            Object.defineProperty(res, "setSocialTags", {
+                value: setSocialTags
+            });
+        }
+        catch (e) { }
+        try {
+            const writeheader = res.locals.__writeheader = (out) => {
+                if (req.method.toUpperCase() === "GET") {
+                    if (noScript) {
+                        try {
+                            res.cookie("noscript", "true", { expires: new Date(+(new Date) + 3.154e+10) });
+                        }
+                        catch (e) { }
+                        const _url = url.parse(req.originalUrl, true);
+                        _url.query = _url.query || {};
+                        out.write('<script>document.cookie=\"noscript=; Path=/; Expires=Thu, 1 Nov 1970 00:00:00 GMT\";location.href = ');
+                        delete _url.query.noscript;
+                        _url.search = "?" + querystring.stringify(_url.query);
+                        if (_url.search == "?") {
+                            _url.search = undefined;
+                            _url.path = _url.pathname;
+                        }
+                        else
+                            _url.path = _url.pathname + _url.search;
+                        delete _url.href;
+                        out.write(JSON.stringify(url.format(_url)));
+                        out.write('</script>');
+                    }
+                    else {
+                        out.write('<noscript><meta http-equiv="refresh" content="0; url=\'');
+                        const _url = url.parse(req.originalUrl, true);
+                        _url.query = _url.query || {};
+                        _url.query.noscript = "1";
+                        out.write(encodeHTML(url.format(_url), true));
+                        out.write('\'" /></noscript>');
+                    }
+                }
+                const renderoptions = (res.renderoptions || this.renderoptions);
+                const icons = renderoptions.icons;
+                if (icons) {
+                    if (_.isString(icons)) {
+                        const type = req.webp ? "webp" : "png";
+                        iconSizes.forEach(function (size) {
+                            out.write("<link rel=\"icon\" sizes=\"");
+                            out.write("" + size);
+                            out.write("\" type=\"image/");
+                            out.write(type);
+                            out.write("\" href=\"");
+                            out.write(encodeHTML(icons + size + "." + type, true));
+                            out.write("\">");
+                        });
+                    }
+                    else
+                        Object.keys(icons).forEach(function (size) {
+                            const path = icons[size].toString();
+                            out.write("<link rel=\"icon\" sizes=\"");
+                            out.write(size);
+                            out.write("\" type=\"image/");
+                            const _path = url.parse(path).pathname;
+                            if (/\.png$/i.test(_path))
+                                out.write("png");
+                            else if (/\.jpe?g$/i.test(_path))
+                                out.write("jpeg");
+                            else if (/\.webp$/i.test(_path))
+                                out.write("webp");
+                            else if (/\.gif$/i.test(_path))
+                                out.write("gif");
+                            else
+                                out.write("unknown");
+                            out.write("\" href=\"");
+                            out.write(encodeHTML(path, true));
+                            out.write("\">");
+                        });
+                }
+                const extraMeta = res.locals.meta;
+                if (_.isObject(extraMeta))
+                    _.extend(meta, extraMeta);
+                if (meta.description && !socialTagsSet)
+                    setSocialTags(meta);
+                Object.keys(meta).forEach(function (key) {
+                    out.write("<meta ");
+                    if (/^og:/.test(key))
+                        out.write("property");
+                    else if (/^g+:/.test(key)) {
+                        key = key.substring(2);
+                        out.write("itemprop");
+                    }
+                    else
+                        out.write("name");
+                    out.write("=\"");
+                    out.write(encodeHTML(key, true));
+                    out.write("\" content=\"");
+                    out.write(encodeHTML(meta[key]));
+                    out.write("\" />");
+                });
+                const links = res.locals.links;
+                if (_.isObject(links)) {
+                    try {
+                        res.links(links);
+                    }
+                    catch (e) { }
+                    Object.keys(links).forEach(function (link) {
+                        out.write("<link rel=\"");
+                        out.write(encodeHTML(link, true));
+                        out.write("\" href=\"");
+                        out.write(encodeHTML(links[link], true));
+                        out.write("\" />");
+                    });
+                }
+                if (useLoader) {
+                    if (!pagesys) {
+                        out.write("<style>");
+                        out.write(overlayCss);
+                        out.write("</style>");
+                    }
+                }
+                else {
+                    const gfontkeys = Object.keys(gfonts);
+                    if (gfontkeys.length) {
+                        out.write("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=");
+                        var first = true;
+                        gfontkeys.forEach(function (font) {
+                            if (first)
+                                first = false;
+                            else
+                                out.write("|");
+                            const styles = gfonts[font];
+                            out.write(encodeURIComponent(font));
+                            if (styles.length == 1 && styles[0] == "400")
+                                return;
+                            out.write(":");
+                            out.write(styles.join(","));
+                        });
+                        out.write("\">");
+                    }
+                    // TODO: Sort dependencies
+                    styles.forEach(function (style) {
+                        if (style.inline) {
+                            out.write("<style>");
+                            out.write(style.source);
+                            out.write("</style>");
+                        }
+                        else {
+                            out.write("<link rel=\"stylesheet\" href=\"");
+                            if (style.version) {
+                                var _url = url.parse(style.source, true);
+                                _url.query = _url.query || {};
+                                _url.query.v = style.version;
+                                style.source = url.format(_url);
+                            }
+                            out.write(encodeHTML(url.format(style.source), true));
+                            out.write("\">");
+                        }
+                    });
+                }
+                headerRenderers.forEach(function (renderer) {
+                    renderer(out);
+                });
+            };
+            Object.defineProperty(res, "writeFooterHtml", {
+                value: function (out) {
+                    writeheader(out || res);
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            res.locals.bodyclass = "";
+        }
+        catch (e) { }
+        try {
+            res.locals.title = "Title Not Set";
+        }
+        catch (e) { }
+        try {
+            const render = res.render;
+            Object.defineProperty(res, "render", {
+                value: (filename, options, callback) => {
+                    if (options instanceof Function)
+                        callback = options;
+                    if (this.app.get("view engine") == "nhp") {
+                        var vars = {};
+                        _.extend(vars, res.app.locals);
+                        _.extend(vars, res.locals);
+                        if (options)
+                            _.extend(vars, options);
+                        this.nhp.render(filename, vars, callback);
+                    }
+                    else
+                        render.call(res, filename, options, callback);
+                }
+            });
+        }
+        catch (e) { }
+        try {
+            Object.defineProperty(res, "sendRender", {
+                configurable: true,
+                value: (filename, options) => {
+                    if (req.app.get("view engine") == "nhp") {
+                        var vars = {};
+                        _.extend(vars, res.app.locals);
+                        _.extend(vars, res.locals);
+                        if (options)
+                            _.extend(vars, options);
+                        const meta = vars['meta'];
+                        if (_.isObject(meta))
+                            Object.keys(meta).forEach(function (key) {
+                                res.setMetaTag(key, meta[key]);
+                            });
+                        const icons = vars['icons'];
+                        if (_.isArray(icons))
+                            Object.keys(icons).forEach(function (key) {
+                                res.setMetaTag(key, icons[key]);
+                            });
+                        const renderoptions = res.renderoptions || this.renderoptions;
+                        if (pagesys) {
+                            var pagesysskeleton = renderoptions.pagesysskeleton;
+                            if (pagesysskeleton) {
+                                if (_.isString(pagesysskeleton))
+                                    pagesysskeleton = require(pagesysskeleton);
+                                pagesysskeleton(filename, vars, req, res, function (err, data) {
+                                    if (err)
+                                        next(err);
+                                    else if (data)
+                                        res.json(data);
+                                    else
+                                        next(new Error("Server Error: No data passed"));
+                                });
+                                return;
+                            }
+                        }
+                        const out = req.io ? res : new BufferingWritable(res);
+                        const callback = function (err) {
+                            if (err)
+                                next(err);
+                            else
+                                out.end();
+                        };
+                        var skeleton = (legacy && renderoptions.legacyskeleton) || renderoptions.skeleton;
+                        if (!res.get("content-type"))
+                            try {
+                                res.type("text/html; charset=utf-8"); // Default to utf8 html
+                            }
+                            catch (e) { }
+                        if (skeleton) {
+                            vars['page'] = filename;
+                            if (_.isString(skeleton))
+                                skeleton = this.nhp.template(skeleton);
+                            skeleton.renderToStream(vars, out, callback);
+                        }
+                        else
+                            this.nhp.renderToStream(filename, vars, out, callback);
+                    }
+                    else
+                        res.render(filename, options, function (err, html) {
+                            if (err)
+                                next(err);
+                            else {
+                                var buff = Buffer.from(html, "utf8");
+                                res.writeHead(200, {
+                                    "Content-Length": buff.length
+                                });
+                                if (req.method == "HEAD")
+                                    res.end();
+                                else
+                                    res.end(buff);
+                            }
+                        });
+                }
+            });
+        }
+        catch (e) { }
+        const builtInSendStatus = res.sendStatus.bind(req);
+        const used = {};
+        try {
+            Object.defineProperty(res, "sendStatus", {
+                configurable: true,
+                value: (code, _err) => {
+                    var st = "" + code;
+                    var handler;
+                    const errordoc = (res.renderoptions || this.renderoptions).errordoc;
+                    if ((handler = (errordoc[st] || errordoc["*"])) && used[st] != handler) {
+                        used[st] = handler;
+                        try {
+                            res.locals.errorCode = code;
+                        }
+                        catch (e) { }
+                        try {
+                            Object.defineProperty(req, "errorCode", {
+                                configurable: true,
+                                value: code
+                            });
+                        }
+                        catch (e) { }
+                        try {
+                            res.locals.error = _err;
+                        }
+                        catch (e) { }
+                        try {
+                            Object.defineProperty(req, "error", {
+                                configurable: true,
+                                value: _err
+                            });
+                        }
+                        catch (e) { }
+                        res.status(code);
+                        res.addBodyClassName("error-page");
+                        res.addBodyClassName("error-" + code);
+                        req.url = url.resolve("/", handler);
+                        this.handle0(req, res, function (err) {
+                            if (err)
+                                next(err);
+                            else
+                                builtInSendStatus(code, _err);
+                        });
+                    }
+                    else
+                        builtInSendStatus(code, _err);
+                }
+            });
+        }
+        catch (e) { }
+        const builtInSendFailure = res.sendFailure && res.sendFailure.bind(req);
+        try {
+            Object.defineProperty(res, "sendFailure", {
+                configurable: true,
+                value: (_err) => {
+                    var handler;
+                    const errordoc = (res.renderoptions || this.renderoptions).errordoc;
+                    if ((handler = (errordoc["500"] || errordoc["*"])) && used["500"] != handler) {
+                        used["500"] = handler;
+                        handler = upath.join("/", handler);
+                        try {
+                            Object.defineProperty(req, "errorCode", {
+                                configurable: true,
+                                value: 500
+                            });
+                        }
+                        catch (e) { }
+                        try {
+                            res.locals.errorCode = 500;
+                        }
+                        catch (e) { }
+                        try {
+                            Object.defineProperty(req, "error", {
+                                configurable: true,
+                                value: _err
+                            });
+                        }
+                        catch (e) { }
+                        try {
+                            res.locals.error = _err;
+                        }
+                        catch (e) { }
+                        res.status(500);
+                        res.addBodyClassName("error-page");
+                        res.addBodyClassName("error-500");
+                        req.url = url.resolve("/", handler);
+                        this.handle0(req, res, function (err) {
+                            if (err)
+                                next(err);
+                            else
+                                builtInSendFailure(_err);
+                        });
+                    }
+                    else
+                        builtInSendStatus(_err);
+                }
+            });
+        }
+        catch (e) { }
+        next();
+    }
+    static nexusforkUpgrade(req, res) {
         try {
             Object.defineProperty(req, "services", {
                 value: {
@@ -2346,61 +2755,44 @@ class NexusFramework extends events.EventEmitter {
      * Express compatible handler
      */
     __express(req, res, next) {
-        this.nexusforkUpgrade(req, res);
+        NexusFramework.nexusforkUpgrade(req, res);
         this.handle(req, res, next);
     }
-    expressUpgrade(req, res) {
-        req['res'] = res;
-        req['app'] = this.app;
-        req['is'] = express_req.is;
-        req['get'] = express_req.get;
-        req['originalUrl'] = req.url;
-        req['range'] = express_req.range;
-        req['param'] = express_req.param;
-        req['header'] = express_req.header;
-        req['accepts'] = express_req.accepts;
-        req['acceptsCharsets'] = express_req.acceptsCharsets;
-        req['acceptsEncodings'] = express_req.acceptsEncodings;
-        req['acceptsLanguages'] = express_req.acceptsLanguages;
-        Object.defineProperty(req, "ip", Object.getOwnPropertyDescriptor(express_req, "ip"));
-        Object.defineProperty(req, "ips", Object.getOwnPropertyDescriptor(express_req, "ips"));
-        Object.defineProperty(req, "host", Object.getOwnPropertyDescriptor(express_req, "host"));
-        Object.defineProperty(req, "hostname", Object.getOwnPropertyDescriptor(express_req, "hostname"));
-        Object.defineProperty(req, "subdomains", Object.getOwnPropertyDescriptor(express_req, "subdomains"));
-        res['req'] = req;
-        res['app'] = this.app;
-        res['vary'] = express_res.vary;
-        res['status'] = express_res.status;
-        res['sendStatus'] = express_res.sendStatus;
-        res['contentType'] = express_res.contentType;
-        res['clearCookie'] = express_res.clearCookie;
-        res['redirect'] = express_res.redirect;
-        res['location'] = express_res.location;
-        res['cookie'] = express_res.cookie;
-        res['format'] = express_res.format;
-        res['header'] = express_res.header;
-        res['jsonp'] = express_res.jsonp;
-        res['links'] = express_res.links;
-        res['send'] = express_res.send;
-        res['type'] = express_res.type;
-        res['append'] = express_res['append'];
-        res['set'] = express_res.set;
-        res['get'] = express_res.get;
-        res['attachment'] = notSupported;
-        res['sendfile'] = notSupported;
-        res['sendFile'] = notSupported;
-        res['download'] = notSupported;
+    static expressUpgradeRequest(req, onPrototype = false) {
+        if (!onPrototype)
+            req['originalUrl'] = req['originalUrl'] || req.url;
+        express_req_install(req);
+    }
+    static expressUpgradeResponse(res, onPrototype = false) {
+        if (!onPrototype)
+            res['locals'] = res['locals'] || {};
+        express_res_install(res);
+    }
+    static expressUpgrade(req, res, onPrototype = false) {
+        NexusFramework.expressUpgradeRequest(req, onPrototype);
+        NexusFramework.expressUpgradeResponse(res, onPrototype);
     }
     /**
      * HTTP compatible handler
      */
     __http(req, res, next) {
-        this.expressUpgrade(req, res);
+        NexusFramework.expressUpgrade(req, res);
+        res['app'] = this.app;
+        req['app'] = this.app;
+        res['req'] = req;
+        req['res'] = res;
         this.__express(req, res, next);
     }
     close(cb) {
         this.server.close(cb);
     }
+    isIOSetup() {
+        return !!this.io;
+    }
 }
 exports.NexusFramework = NexusFramework;
+NexusFramework.prototype.use = NexusFramework.prototype.pushMiddleware;
+const json = SocketIOResponse.prototype.json;
+NexusFramework.expressUpgrade(SocketIORequest.prototype, SocketIOResponse.prototype, true);
+SocketIOResponse.prototype.json = json;
 //# sourceMappingURL=nexusframework.js.map

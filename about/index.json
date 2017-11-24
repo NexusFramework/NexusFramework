@@ -1,7 +1,5 @@
 {
     "title": "About NexusFramework",
     "bodyclass": "builtin",
-    "env": {
-        "builtin": true
-    }
+    "builtin": true
 }

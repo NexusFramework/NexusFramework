@@ -29,11 +29,10 @@ it("create and configure", function (cb) {
     framework = new nexusframework_1.NexusFramework(app);
     framework.enableLoader();
     framework.enableLogging();
-    framework.mount("/", path.resolve(__dirname, "pages"));
-    framework.mount("/mutable", path.resolve(__dirname, "mutable"), false);
+    framework.mount("/", path.resolve(__dirname, "pages"), { iconfile: path.resolve(__dirname, "../icon.png") });
+    framework.mount("/mutable", path.resolve(__dirname, "mutable"), { mutable: true });
     framework.mountScripts();
     framework.mountAbout();
-    framework.dumpRoot();
     framework.use(function (req, res, next) {
         res.addNexusFrameworkClient();
         res.addGoogleFont("Lato", 400);
@@ -153,7 +152,7 @@ describe("socket.io", function () {
     });
     it("custom paths", function (cb) {
         const data = 4327123;
-        framework.setHandler("/tuna/fish/parade", function (req, res) {
+        framework.mountHandler("/tuna/fish/parade", function (req, res) {
             res.json(data);
         });
         client.emit("page", "GET", "/tuna/fish/parade", undefined, { "user-agent": "Testorola" }, function (res) {

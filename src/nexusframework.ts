@@ -13,9 +13,9 @@ import express = require("express");
 import events = require("events");
 import stream = require("stream");
 import multer = require("multer");
-import isbot = require("isbot");
 import upath = require("upath");
 import async = require("async");
+import sharp = require("sharp");
 import http = require("http");
 import path = require("path");
 import _ = require("lodash");
@@ -23,10 +23,11 @@ import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
 
+const iconSizes = [310, 196, 152, 150, 144, 128, 120, 114, 96, 76, 72, 70, 64, 60, 57, 48, 24, 16, 32];
 const socket_io_slim_js = require.resolve("socket.io-client/dist/socket.io.slim.js");
 const has_slim_io_js = fs.existsSync(socket_io_slim_js);
 
-const uacache = lrucache<string, nexusframework.UA>();
+const uacache = lrucache<string, nexusframework.UserAgentDetails>();
 const namecache = lrucache<string, string>();
 
 const padLeft = function(data: string, count = 8, using = "0") {
@@ -68,7 +69,7 @@ const determineName = function(rawname: string) {
     return name;
 }
 
-const isUnsupportedBrowser = function(browser: nexusframework.UA) {
+const isUnsupportedBrowser = function(browser: nexusframework.UserAgentDetails) {
     const major = parseInt(browser.major);
     return (browser.ie && major < 10) ||
             (browser.chrome && major < 4) ||
@@ -76,7 +77,7 @@ const isUnsupportedBrowser = function(browser: nexusframework.UA) {
             (browser.safari && major < 3 && parseInt(browser.minor) < 1) ||
             (browser.opera && major < 3 && parseInt(browser.minor) < 5);
 }
-const isES6Browser = function(browser: nexusframework.UA) {
+const isES6Browser = function(browser: nexusframework.UserAgentDetails) {
     const major = parseInt(browser.major);
     return (browser.chrome && major >= 49) ||
             (browser.firefox && major >= 45) ||
@@ -85,6 +86,7 @@ const isES6Browser = function(browser: nexusframework.UA) {
 }
 
 const multerInstance = multer().any();
+const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 const sckclpkgjson = require("socket.io/package.json");
@@ -117,6 +119,33 @@ const overlayHtmlParts: Function[] = [];
 const express_req: express.Request = express['request'];
 const express_res: express.Response = express['response'];
 
+const createInstall = function(proto: any) {
+    const names = Object.getOwnPropertyNames(proto);
+    const queue: Function[] = [];
+    names.forEach(function(key) {
+        try {
+            const descriptor = Object.getOwnPropertyDescriptor(proto, key);
+            queue.push(function(target) {
+                if (!(key in target))
+                    Object.defineProperty(target, key, descriptor);
+            });
+        } catch(e) {
+            const val = proto[key];
+            queue.push(function(target) {
+                if (!(key in target))
+                    target[key] = val;
+            });
+        }
+    });
+    return function(target: any) {
+        queue.forEach(function(copy) {
+            copy(target);
+        });
+    }
+}
+const express_req_install = createInstall(express_req);
+const express_res_install = createInstall(express_res);
+
 function encodeHTML(html: string, attr: boolean = false) {
     html = html.replace(/</g, "&lt;");
     html = html.replace(/>/g, "&gt;");
@@ -125,7 +154,7 @@ function encodeHTML(html: string, attr: boolean = false) {
     return html;
 }
 
-class SocketIORequest extends events.EventEmitter implements http.IncomingMessage{
+class SocketIORequest extends events.EventEmitter implements express.Request{
     socket: any;
     cookies: any;
     trailers: any;
@@ -136,21 +165,18 @@ class SocketIORequest extends events.EventEmitter implements http.IncomingMessag
     httpVersionMinor: number;
     httpVersionMajor: number;
     httpVersion: string;
-    subdomains: string[];
-    signedCookies: any;
     connection: any;
     secure: boolean;
     pagesys = true;
-    fresh = false;
-    stale = true;
+    fresh: boolean;
+    stale: boolean;
     body: any;
     route: any;
-    ip: string;
     url: string;
     constructor(upgradedRequest: http.IncomingMessage, method: string, path: string, body: any, headers: {[index: string]: string[]}) {
         super();
         this.method = method;
-        this.url = upath.join("/", path);
+        this.originalUrl = this.url = upath.join("/", path);
         this.connection = upgradedRequest.connection;
         this.httpVersionMinor = upgradedRequest.httpVersionMinor;
         this.httpVersionMajor = upgradedRequest.httpVersionMajor;
@@ -161,7 +187,12 @@ class SocketIORequest extends events.EventEmitter implements http.IncomingMessag
         const acceptsLanguage = this.headers['accepts-language'] || upgradedRequest.headers['accepts-language'];
         if (acceptsLanguage)
             this.headers['accepts-language'] = acceptsLanguage;
-        this.headers['accepts'] = this.headers['accepts'] || "application/json, text/json, text/html;q=0.95, application/xhtml+xml;q=0.9, application/xml;q=0.8, text/*;q=0.7";
+        if (!this.headers['accepts']) {
+            this.headers['accepts'] = "application/json,text/json,text/html;q=0.95,application/xhtml+xml,application/xml;q=0.8,text/*;q=0.7";
+            const accepts = upgradedRequest.headers['accepts'];
+            if (accepts && /\Wimage\/webp\W/.test(Array.isArray(accepts) ? accepts[0] : accepts))
+                this.headers['accepts'] += ",image/webp";
+        }
         this.body = body;
     }
     push(...args: any[]): any{throw new Error("Not supported");}
@@ -189,17 +220,35 @@ class SocketIORequest extends events.EventEmitter implements http.IncomingMessag
         });
         return rawHeaders;
     }
-    get accepted(): express.MediaType[]{
-        throw new Error("Not supported");
-    }
-    get query() {
-        return url.parse(this.url, true).query || {};
-    }
-    get path() {
-        return url.parse(this.url).path;
-    }
     _destroy() {}
     destroy() {}
+    
+    // Express
+    get: any;
+    header: any;
+    accepts: any;
+    accepted: any;
+    query: any;
+    path: string;
+    acceptsCharsets: any;
+    acceptsEncodings: any;
+    acceptsLanguages: any;
+    range: any;
+    param: any;
+    is: any;
+    protocol: string;
+    ip: string;
+    ips: string[];
+    subdomains: string[];
+    hostname: string;
+    host: string;
+    xhr: boolean;
+    params: any;
+    clearCookie: any;
+    signedCookies: any;
+    originalUrl: string;
+    baseUrl: string;
+    app: Application;
 }
 
 class BufferingWritable extends stream.Writable {
@@ -238,7 +287,7 @@ function notSupported(this: http.IncomingMessage, ...args: any[]): any{
     cb(new Error("Not supported"));
     return this;
 }
-class SocketIOResponse extends stream.Writable implements http.ServerResponse {
+class SocketIOResponse extends stream.Writable implements express.Response {
     connection: any;
     cb: (res: any) => void;
     headers: {[index: string]: string | string[]} = {};
@@ -253,7 +302,6 @@ class SocketIOResponse extends stream.Writable implements http.ServerResponse {
     charset = "utf8";
     sendDate = false;
     finished = false;
-    locals = {};
     constructor(cb: (res: any) => void) {
         super();
         this.cb = cb;
@@ -295,14 +343,9 @@ class SocketIOResponse extends stream.Writable implements http.ServerResponse {
                 this.setHeader(key, headers[key]);
             });
     }
-    json(data: any) {
-        this.response = data;
-        this.end();
-        return this;
-    }
-    assignSocket(...args: any[]): express.Response{return undefined;}
-    detachSocket(...args: any[]): express.Response{return undefined;}
-    writeContinue(...args: any[]): express.Response{return undefined;}
+    assignSocket: (...args: any[]) => this;
+    detachSocket: (...args: any[]) => this;
+    writeContinue: (...args: any[]) => this;
     setTimeout(...args: any[]): any{return this;}
     _write(data, encoding: string, cb: Function) {
         const dat = data.toString("utf8");
@@ -310,8 +353,7 @@ class SocketIOResponse extends stream.Writable implements http.ServerResponse {
             this.response += dat;
         cb();
     }
-    end(...args: any[]) {
-        super.end.apply(this, args);
+    _final(callback: Function) {
         const headers = {};
         Object.keys(this.headers).forEach((key) => {
             var val = this.headers[key];
@@ -325,7 +367,38 @@ class SocketIOResponse extends stream.Writable implements http.ServerResponse {
             data: this.response,
             headers
         });
+        callback();
     }
+    
+    // Express
+    locals = {};
+    status: any;
+    sendStatus: any;
+    links: any;
+    json(data: any): this{
+        this.response = data;
+        this.end();
+        return this;
+    }
+    send: any;
+    jsonp: any;
+    sendFile: any;
+    sendfile: any;
+    download: any;
+    contentType: any;
+    type: any;
+    format: any;
+    attachment: any;
+    set: any;
+    header: any;
+    get: any;
+    clearCookie: any;
+    cookie: any;
+    location: any;
+    redirect: any;
+    render: any;
+    vary: any;
+    app: Application;
 }
 SocketIOResponse.prototype.writeContinue = notSupported;
 SocketIOResponse.prototype.assignSocket = notSupported;
@@ -408,6 +481,7 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
                         async.eachSeries(this._children, function(handler, cb) {
                             var match = currentpath.match(handler.pattern);
                             if(match) {
+                                const cmatch = req.match;
                                 try {
                                     Object.defineProperty(req, "match", {
                                         configurable: true,
@@ -421,6 +495,15 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
                                 req.url = cutPath(req);
                                 handler.handle(req, res, function(err?: Error) {
                                     req.url = curl;
+                                    try {
+                                        req.matches.pop();
+                                    } catch(e) {}
+                                    try {
+                                        Object.defineProperty(req, "match", {
+                                            configurable: true,
+                                            value: cmatch
+                                        })
+                                    } catch(e) {}
                                     cb(err);
                                 });
                             } else
@@ -594,14 +677,16 @@ class RequestHandlerChildWithChildren extends RequestHandlerWithChildren impleme
     constructor(pattern: string) {
         super();
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
-class LeafRequestHandler implements nexusframework.RequestHandlerEntry {
+export class LeafRequestHandler implements nexusframework.RequestHandlerEntry {
+    leaf: boolean;
     handle: nexusframework.RequestHandler;
-    constructor(handler: nexusframework.RequestHandler) {
+    constructor(handler: nexusframework.RequestHandler, actuallyLeaf = true) {
         this.handle = handler;
+        this.leaf = actuallyLeaf;
     }
     children(): nexusframework.RequestHandlerChildEntry[] {
         throw new Error("Leaf has no children.");
@@ -650,29 +735,24 @@ class LeafRequestHandler implements nexusframework.RequestHandlerEntry {
 class LeafRequestChildHandler extends LeafRequestHandler implements nexusframework.RequestHandlerChildEntry {
     pattern: RegExp;
     rawPattern: string;
-    constructor(handler: nexusframework.RequestHandler, pattern: string) {
-        super(handler);
+    constructor(handler: nexusframework.RequestHandler, pattern: string, actuallyLeaf = true) {
+        super(handler, actuallyLeaf);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
-class NHPRequestHandler extends LeafRequestHandler {
-    protected skeleton: Template;
-    protected legacyskeleton: Template;
+export class NHPRequestHandler extends LeafRequestHandler {
     private impl: nexusframework.RequestHandler;
     private views: {[index: string]: string} = {};
     private exists: nexusframework.ExistsRequestHandler;
     private access: nexusframework.AccessRequestHandler;
-    constructor(impl: nexusframework.RequestHandler, skeleton: Template, pagesysskeleton: nexusframework.PageSystemSkeleton, legacyskeleton: Template, redirect = false) {
+    constructor(impl: nexusframework.RequestHandler, redirect = false) {
         super((req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) => {
-            req.skeleton = skeleton || req.nexusframework['skeleton'];
-            req.legacyskeleton = legacyskeleton || req.nexusframework['legacyskeleton'];
-            req.pagesysskeleton = pagesysskeleton || req.nexusframework['pagesysskeleton'];
             const _next = () => {
                 const _next = () => {
                     var urlpath: string;
-                    if (redirect && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
+                    if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
                         const q = urlpath.indexOf("?");
                         if(q == -1)
                             urlpath = urlpath.substring(0, urlpath.length-1);
@@ -716,7 +796,6 @@ class NHPRequestHandler extends LeafRequestHandler {
             else
                 _next();
         });
-        this.skeleton = skeleton;
         this.impl = impl;
     }
     view(type = "nhp"): string {
@@ -741,10 +820,10 @@ class NHPRequestHandler extends LeafRequestHandler {
 class NHPRequestChildHandler extends NHPRequestHandler implements nexusframework.RequestHandlerChildEntry {
     rawPattern: string;
     pattern: RegExp;
-    constructor(impl: nexusframework.RequestHandler, skeleton: Template, pagesysskeleton: nexusframework.PageSystemSkeleton, legacyskeleton: Template, pattern: string, redirect = true) {
-        super(impl, skeleton, pagesysskeleton, legacyskeleton, redirect);
+    constructor(impl: nexusframework.RequestHandler, pattern: string, redirect = true) {
+        super(impl, redirect);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
@@ -774,26 +853,33 @@ export function createExtendedRequestHandler() {
     return requestHandler;
 }
 
-function lazyLoadMapping(filename: string | Function, method: string, mapping: nexusframework.RequestHandlerMethodMapping): nexusframework.NHPRequestHandler{
-    if (filename instanceof Function)
-        return filename as any;
-    return function(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error, renderLocals?: any) => void, broken?) {
-        try {
-            const handler = require(filename);
-            if(!(handler instanceof Function))
-                throw new Error("Handler is not a Function: " + filename);
-            req.mapping = mapping;
-            handler(req, res, next, broken);
-            mapping[method] = handler;
-        } catch(e) {
-            mapping[method] = function(a, b, next) {
+function lazyLoadMapping(impl: nexusframework.FunctionOrStringOrEitherWithData, method: string, mapping: nexusframework.RequestHandlerMethodMapping): nexusframework.NHPRequestHandler{
+    if (impl instanceof Function)
+        return impl as nexusframework.NHPRequestHandler;
+    if (_.isString(impl))
+        return function(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
+            try {
+                const handler = require(impl);
+                if(!(handler instanceof Function))
+                    throw new Error("Handler is not a Function: " + impl);
+                req.mapping = mapping;
+                handler(req, res, next, negative);
+                mapping[method] = handler;
+            } catch(e) {
+                mapping[method] = function(a, b, next) {
+                    next(e);
+                };
                 next(e);
-            };
-            next(e);
-        }
+            }
+        };
+    const data = impl.data;
+    const handler = lazyLoadMapping(impl.impl, method, mapping);
+    return function(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
+        _.extend(res.locals, data);
+        (handler as Function)(req, res, next, negative);
     };
 }
-function processMapping(mapping: {[index: string]: string | Function}, mapped: nexusframework.RequestHandlerMethodMapping = {}): nexusframework.RequestHandlerMethodMapping{
+function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStringOrEitherWithData}, mapped: nexusframework.RequestHandlerMethodMapping = {}): nexusframework.RequestHandlerMethodMapping{
     const use = mapping['use'] || mapping['__use'] || mapping['all'] || mapping['__all'] || mapping['*'];
     if(use)
         mapped.use = lazyLoadMapping(use, "use", mapped);
@@ -860,17 +946,145 @@ function processMapping(mapping: {[index: string]: string | Function}, mapped: n
     return mapped;
 }
 
+const squareImagePathWebpOrPng = /^\/(\d+)\.(webp|png)$/;
+const squareImagePathWebpOrJpeg = /^\/(\d+)\.(webp|jpg)$/;
+const squareImagePathJpeg = /^\/(\d+)\.(jpg)$/;
+const squareImagePathPng = /^\/(\d+)\.(png)$/;
+const imagePathWebpOrPng = /^\/(\d+)x(\d+)\.(webp|png)$/;
+const imagePathWebpOrJpeg = /^\/(\d+)x(\d+)\.(webp|jpg)$/;
+const imagePathJpeg = /^\/(\d+)x(\d+)\.(jpg)$/;
+const imagePathPng = /^\/(\d+)x(\d+)\.(png)$/;
+type SharpImageWriter = (res: nexusframework.Response) => void;
+class SharpResizerRequestHandler extends LeafRequestHandler {
+    private square: boolean;
+    private image: sharp.SharpInstance;
+    private sizes: number[] | number[][];
+    private cache = lrucache<string, SharpImageWriter>();
+    private queue: {[index: string]: nexusframework.Response[]} = {};
+    constructor(imagefile: string, options: nexusframework.ImageResizerOptions) {
+        super(options.square ? (options.notransparency ? (req, res, next) => {
+            this.handle0square(req.webp ? squareImagePathWebpOrJpeg : squareImagePathJpeg, req, res, next);
+        } : (req, res, next) => {
+            this.handle0square(req.webp ? squareImagePathWebpOrPng : squareImagePathPng, req, res, next);
+        }) : (options.notransparency ? (req, res, next) => {
+            this.handle0(req.webp ? imagePathWebpOrJpeg : imagePathJpeg, req, res, next);
+        } : (req, res, next) => {
+            this.handle0(req.webp ? imagePathWebpOrPng : imagePathPng, req, res, next);
+        }), false);
+        this.square = options.square;
+        this.image = sharp(imagefile);
+        this.sizes = options.sizes;
+    }
+    canHandleSize(width: number, height = width) {
+        if (this.sizes && this.sizes.length) {
+            if (this.square)
+                return (this.sizes as number[]).indexOf(width) > -1;
+            const length = this.sizes.length;
+            for(var i=0; i < length; i++) {
+                const size = this.sizes[i];
+                if (size[0] === width && size[1] === height)
+                    return true;
+            }
+            return false;
+        } else
+            return true;
+    }
+    private handle0square(reg: RegExp, req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        var match = req.path.match(reg);
+        req.logger.info(reg, req.path, match);
+        if (match) {
+            const size = parseInt(match[1]);
+            if (this.canHandleSize(size))
+                this.serve(size, size, match[2], res);
+            else
+                next();
+        } else
+            next();
+    }
+    private handle0(reg: RegExp, req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        var match = req.path.match(reg);
+        if (match) {
+            const width = parseInt(match[1]);
+            const height = parseInt(match[2]);
+            if (this.canHandleSize(width, height))
+                this.serve(width, height, match[3], res);
+            else
+                next();
+        } else
+            next();
+    }
+    private serve(width: number, height: number, format: string, res: nexusframework.Response) {
+        if (res['req'] && res['req'].io) {
+            res.writeHead(200, {
+                "content-disposition": "attachment",
+                "content-type": "text/plain"
+            });
+            res.end("Cannot be served through page system.");
+            return;
+        }
+        
+        const key = width + ":" + height + ":" + format;
+        const writer = this.cache.get(key);
+        if (writer) {
+            writer(res);
+            return;
+        }
+        
+        const queue = this.queue[key] || (this.queue[key] = []);
+        queue.push(res);
+        
+        var contentType: string;
+        var image = this.image.clone().resize(width, height);
+        switch(format) {
+            case "png":
+                image = image.png({compressionLevel:9});
+                contentType = "image/png";
+                break;
+            case "jpg":
+                image = image.jpeg({quality:85});
+                contentType = "image/jpeg";
+                break;
+            case "webp":
+                image = image.webp();
+                contentType = "image/webp";
+                break;
+            default:
+                throw new Error("Unknown format: " + format);
+        }
+        image.toBuffer((err: Error, data?: Buffer) => {
+            delete this.queue[key];
+            if (err)
+                queue.forEach(function(res) {
+                    res.sendFailure(err);
+                });
+            else {
+                const writer = function(res: nexusframework.Response) {
+                    res.type(contentType);
+                    res.end(data);
+                }
+                queue.forEach(writer);
+                this.cache.set(key, writer);
+            }
+        });
+    }
+}
+class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
+    pattern: RegExp;
+    rawPattern: string;
+    constructor(imagefile: string, options: nexusframework.ImageResizerOptions, pattern: string) {
+        super(imagefile, options);
+        this.rawPattern = pattern;
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+    }
+}
+
 class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
     private fspath: string;
-    private skeleton: Template;
-    private legacyskeleton: Template;
-    private pagesysskeleton: nexusframework.PageSystemSkeleton;
-    constructor(fspath: string, logger: nulllogger.INullLogger, skeleton: Template, pagesysskeleton: nexusframework.PageSystemSkeleton, legacyskeleton: Template) {
+    private options: nexusframework.RenderOptions;
+    constructor(fspath: string, logger: nulllogger.INullLogger, options?: nexusframework.RenderOptions) {
         super();
         this.fspath = fspath;
-        this.skeleton = skeleton;
-        this.legacyskeleton = legacyskeleton;
-        this.pagesysskeleton = pagesysskeleton;
+        this.options = options;
         this.handle = (req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) => {
             this.load((err) => {
                 if(err)
@@ -893,7 +1107,7 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
             if(err)
                 next(err);
             else {
-                var mapping: {[index: string]: {[index: string]:{[index: string]: string | Function}}} = {};
+                var mapping: {[index: string]: {[index: string]:{[index: string]: nexusframework.FunctionOrStringOrEitherWithData}}} = {};
                 files.forEach((file) => {
                     const filename = path.resolve(this.fspath, file);
                     const match = file.match(/([^.]+)(\.([^.]+))?\.([^.]+)/);
@@ -914,7 +1128,7 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                         cmapping[method] = filename;
                     } else if(/^([^.]+$)/.test(file)) {
                         const pattern = decodePath(file);
-                        this.setChild(pattern, new LazyLoadingRequestChildHandler(filename, logger, this.skeleton, this.pagesysskeleton, this.legacyskeleton, pattern));
+                        this.setChild(pattern, new LazyLoadingRequestChildHandler(filename, logger, undefined, pattern));
                     } else
                         logger.warn("Ignoring", filename);
                 });
@@ -996,42 +1210,56 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                         const handler = createExtendedRequestHandler();
                         const methods = extensions['js'] || {};
                         const json = extensions['json'];
-                        if (json)
+                        if (json) {
                             Object.keys(json).forEach((method) => {
                                 try {
+                                    const jsmethod = methods[method];
                                     const data = require(json[method] as string) || {};
-                                    methods[method] = (req, res, next) => {
-                                        next(undefined, data, this.skeleton, this.pagesysskeleton, this.legacyskeleton);
-                                    };
+                                    if (jsmethod)
+                                        methods[method] = {
+                                            impl: jsmethod as any,
+                                            data
+                                        };
+                                    else
+                                        methods[method] = (req, res, next) => {
+                                            next(undefined, data);
+                                        };
                                 } catch(e) {
                                     methods[method] = function(req, res, next) {
                                         next(e);
                                     };
                                 }
                             });
+                        }
                         if (!methods)
                             throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
                         processMapping(methods, handler);
                         var leaf: NHPRequestHandler;
                         if(key === "index")
-                            this.setIndex(leaf = new NHPRequestHandler(handler, this.skeleton, this.pagesysskeleton, this.legacyskeleton));
+                            this.setIndex(leaf = new NHPRequestHandler(handler));
                         else {
                             const child = this.childAt(key);
                             if (child)
-                                child.setIndex(leaf = new NHPRequestHandler(handler, this.skeleton, this.pagesysskeleton, this.legacyskeleton));
+                                child.setIndex(leaf = new NHPRequestHandler(handler));
                             else
-                                this.setChild(key, leaf = new NHPRequestChildHandler(handler, this.skeleton, this.pagesysskeleton, this.legacyskeleton, key));
+                                this.setChild(key, leaf = new NHPRequestChildHandler(handler, key));
                         }
                         try {
                             leaf.setView(extensions['nhp']['get'] as string);
                         } catch(e) {}
                     }
                 });
-                this.handle = (req, res, next) => {
-                    req.skeleton = this.skeleton || req.nexusframework['skeleton'];
-                    super.handle(req, res, next);
-                }
                 delete this.childPaths;
+                if (this.options)
+                    this.handle = (req, res, next) => {
+                        res.renderoptions = {};
+                        _.extend(res.renderoptions, req.nexusframework['renderoptions']);
+                        _.extend(res.renderoptions, this.options);
+                        res.locals.__includeroot = res.renderoptions.root;
+                        super.handle(req, res, next);
+                    }
+                else
+                    delete this.handle;
                 next();
             }
         });
@@ -1040,10 +1268,10 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
 class LazyLoadingRequestChildHandler extends LazyLoadingRequestHandler {
     pattern: RegExp;
     rawPattern: string;
-    constructor(fspath: string, logger: nulllogger.INullLogger, skeleton: Template, pagesysskeleton: nexusframework.PageSystemSkeleton, legacyskeleton: Template, pattern: string) {
-        super(fspath, logger, skeleton, pagesysskeleton, legacyskeleton);
+    constructor(fspath: string, logger: nulllogger.INullLogger, options: nexusframework.RenderOptions, pattern: string) {
+        super(fspath, logger, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
@@ -1052,11 +1280,11 @@ class FSWatcherRequestHandler extends RequestHandlerWithChildren {
     private legacyskeleton: Template;
     private fswatcher: chokidar.FSWatcher;
     private pagesysskeleton: nexusframework.PageSystemSkeleton;
-    constructor(fspath: string, logger: nulllogger.INullLogger, skeleton: Template, pagesysskeleton: nexusframework.PageSystemSkeleton, legacyskeleton: Template) {
+    constructor(fspath: string, logger: nulllogger.INullLogger, options: nexusframework.MountOptions) {
         super();
-        this.skeleton = skeleton;
-        this.legacyskeleton = legacyskeleton;
-        this.pagesysskeleton = pagesysskeleton;
+        this.skeleton = options.skeleton as any;
+        this.legacyskeleton = options.legacyskeleton as any;
+        this.pagesysskeleton = options.pagesysskeleton as any;
         var onready: Function[] = [];
         const fswatcher = this.fswatcher = chokidar.watch(fspath, {
             ignorePermissionErrors: true
@@ -1088,10 +1316,10 @@ class FSWatcherRequestHandler extends RequestHandlerWithChildren {
 class FSWatcherRequestChildHandler extends FSWatcherRequestHandler implements nexusframework.RequestHandlerChildEntry {
     pattern: RegExp;
     rawPattern: string;
-    constructor(fspath: string, logger: nulllogger.INullLogger, skeleton: Template, pagesysskeleton: nexusframework.PageSystemSkeleton, legacyskeleton: Template, pattern: string) {
-        super(fspath, logger, skeleton, pagesysskeleton, legacyskeleton);
+    constructor(fspath: string, logger: nulllogger.INullLogger, options: nexusframework.MountOptions, pattern: string) {
+        super(fspath, logger, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
+        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
@@ -1103,48 +1331,55 @@ interface Resource {
     deps: string[];
 }
 
-export interface StaticMountOptions {
-    autoIndex?: boolean;
-    mutable?: boolean;
+class Mount {
+    baseUrl: string;
+    constructor(baseUrl: string) {
+        this.baseUrl = baseUrl;
+    }
+    handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        
+    }
 }
 
 export class NexusFramework extends events.EventEmitter {
-    public readonly nhp: nhp;
-    public readonly prefix: string;
-    public readonly app: Application;
-    public readonly server: http.Server;
-    public readonly io?: SocketIO.Server;
-    public readonly logger: nulllogger.INullLogger;
+    readonly nhp: nhp;
+    readonly prefix: string;
+    readonly app: Application;
+    readonly server: http.Server;
+    readonly io?: SocketIO.Server;
+    readonly logger: nulllogger.INullLogger;
     private cookieParser: express.RequestHandler;
     private stack: nexusframework.RequestHandler[];
-    private root: nexusframework.RequestHandlerEntry = new RequestHandlerWithChildren();
-    private pagesysskeleton: nexusframework.PageSystemSkeleton;
-    private errordoc: {[index: string]: string};
+    private default: nexusframework.RequestHandlerEntry;
+    private mounts: nexusframework.RequestHandlerChildEntry[];
+    private renderoptions: nexusframework.RenderOptions;
     private afterbody: nexusframework.Renderer[];
     private footer: nexusframework.Renderer[];
     private header: nexusframework.Renderer[];
     private loaderEnabled: boolean;
-    private legacyskeleton: Template;
-    private skeleton: Template;
     private logging: boolean;
-    public constructor(app: Application = express(), server?: http.Server, logger: nulllogger.INullLogger = new nulllogger("NexusFramework"), prefix = "/") {
+    constructor(app: Application = express(), server?: http.Server, logger: nulllogger.INullLogger = new nulllogger("NexusFramework"), prefix = "/") {
         super();
         if (!server)
             server = new http.Server(app);
+        const _nhp = new nhp();
         Object.defineProperties(this, {
             app: {
                 value: app
             },
             nhp: {
-                value: new nhp()
+                value: _nhp
             },
             stack: {
-                value: []
+                value: [this.upgrade.bind(this)]
             },
             footer: {
                 value: []
             },
             header: {
+                value: []
+            },
+            mounts: {
                 value: []
             },
             afterbody: {
@@ -1165,9 +1400,14 @@ export class NexusFramework extends events.EventEmitter {
             cookieParser: {
                 configurable: true,
                 value: cookieParser()
+            },
+            renderoptions: {
+                value: {
+                    legacyskeleton: _nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp")),
+                    errordoc: {}
+                }
             }
         });
-        this.legacyskeleton = this.nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp"));
         const Custom = nhp.Instructions.Custom;
         const genFooterInstruction = new Custom(undefined, function() {
             return "try{__writefooter(__out);}catch(e){__out.write(__error(e));};__next();";
@@ -1187,49 +1427,35 @@ export class NexusFramework extends events.EventEmitter {
         this.nhp.installProcessor("afterbody", function() {
             return genAfterBodyInstruction;
         });
-        app.set("view engine", "nhp");
-        app.engine("nhp", (filename: string, options: any, callback: (err?: Error, html?: string) => void) => {
-            const skeleton = this.skeleton;
-            if (skeleton) {
-                if (options)
-                    options.page = filename;
-                else
-                    options = {
-                        page: filename
-                    };
-                skeleton.render(options, callback);
-            } else
-                this.nhp.render(filename, options, callback);
-        });
-    }
-    public setupTemplate(root: string) {
         const Include = nhp.Instructions.Include;
         this.nhp.installProcessor("template", function(file) {
-            return new Include(file, root);
+            return new Include(file, "__includeroot");
         });
+        app.set("view engine", "nhp");
+        app.engine("nhp", this.nhp.render.bind(this.nhp));
     }
-    public enableLoader() {
+    enableLoader() {
         this.loaderEnabled = true;
     }
-    public disableLoader() {
+    disableLoader() {
         this.loaderEnabled = false;
     }
-    public enableSignedCookies(secret: any) {
+    enableSignedCookies(secret: any) {
         Object.defineProperty(this, "cookieParser", {
             configurable: true,
             value: cookieParser(secret)
         });
     }
-    public installAfterBodyRenderer(renderer: nexusframework.Renderer) {
+    installAfterBodyRenderer(renderer: nexusframework.Renderer) {
         this.afterbody.push(renderer);
     }
-    public installFooterRenderer(renderer: nexusframework.Renderer) {
+    installFooterRenderer(renderer: nexusframework.Renderer) {
         this.footer.push(renderer);
     }
-    public installHeaderRenderer(renderer: nexusframework.Renderer) {
+    installHeaderRenderer(renderer: nexusframework.Renderer) {
         this.header.push(renderer);
     }
-    public enableLogging() {
+    enableLogging() {
         this.logging = true;
     }
     /**
@@ -1242,25 +1468,25 @@ export class NexusFramework extends events.EventEmitter {
      * Safari below version 3.1 and
      * Opera below version 3.5.
      */
-    public setLegacySkeleton(val: string | Template) {
+    setLegacySkeleton(val: string | Template) {
         if (_.isString(val))
-            this.legacyskeleton = this.nhp.template(val);
+            this.renderoptions.legacyskeleton = this.nhp.template(val);
         else
-            this.legacyskeleton = val;
+            this.renderoptions.legacyskeleton = val;
     }
-    public setSkeleton(val: string | Template) {
+    setSkeleton(val: string | Template) {
         if (_.isString(val))
-            this.skeleton = this.nhp.template(val);
+            this.renderoptions.skeleton = this.nhp.template(val);
         else
-            this.skeleton = val;
+            this.renderoptions.skeleton = val;
     }
-    public setPageSystemSkeleton(val: string | nexusframework.PageSystemSkeleton) {
+    setPageSystemSkeleton(val: string | nexusframework.PageSystemSkeleton) {
         if (_.isString(val))
-            this.pagesysskeleton = require(val);
+            this.renderoptions.pagesysskeleton = require(val);
         else
-            this.pagesysskeleton = val;
+            this.renderoptions.pagesysskeleton = val;
     }
-    public setErrorDocument(code: number | "*", page?: string) {
+    setErrorDocument(code: number | "*", page?: string) {
         if (!page) {
             if (code === "*")
                 page = "errdoc";
@@ -1268,20 +1494,17 @@ export class NexusFramework extends events.EventEmitter {
                 page = "errdoc/" + code;
         } else
             page = upath.join("/", page).substring(1);
-        this.errordoc[code] = page;
+        this.renderoptions.errordoc[code] = page;
     }
-    public mountScripts(mpath=":scripts") {
+    mountScripts(mpath=":scripts") {
         this.mountStatic(mpath, path.resolve(__dirname, "../scripts/"), {
             autoIndex: true
         });
     }
-    public mountAbout(mpath=":about") {
+    mountAbout(mpath=":about") {
         this.mount(mpath, path.resolve(__dirname, "../about/"));
     }
-    public dumpRoot() {
-        this.root.childPaths(this.logger.info.bind(this.logger), true);
-    }
-    public setupIO(path = ":io") {
+    setupIO(path = ":io") {
         if (!this.server)
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
         const iopath = upath.join(this.prefix, path);
@@ -1289,11 +1512,12 @@ export class NexusFramework extends events.EventEmitter {
             serveClient: !has_slim_io_js,
             path: iopath
         });
-        Object.defineProperty(this, "io", {
-            value: io
-        });
         io.on("connection", (client) => {
             client.on("init", function(sentResources: string[]) {
+                if (!_.isArray(sentResources)) {
+                    client.emit("401", "");
+                    client.disconnect(true);
+                }
                 const sent: string[] = (client['__sent_resources'] || (client['__sent_resources'] = []));
                 sentResources.forEach(function(res) {
                     if (sent.indexOf(res) == -1)
@@ -1307,7 +1531,10 @@ export class NexusFramework extends events.EventEmitter {
                         value: client
                     });
                     const res: nexusframework.Response = new SocketIOResponse(cb) as any;
-                    this.expressUpgrade(req, res);
+                    res['app'] = this.app;
+                    req['app'] = this.app;
+                    res['req'] = req;
+                    req['res'] = res;
                     try {
                         const next = (err?) => {
                             if (err) {
@@ -1339,8 +1566,11 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         });
+        Object.defineProperty(this, "io", {
+            value: io
+        });
         if (has_slim_io_js)
-            this.setHandler("/:/socket.io.slim.js", function(req, res, next) {
+            this.mountHandler("/:scripts/socket.io.slim.js", function(req, res, next) {
                 res.sendFile(socket_io_slim_js, {
                     maxAge: 3.154e+10,
                     immutable: true
@@ -1353,50 +1583,98 @@ export class NexusFramework extends events.EventEmitter {
     }
 
     /**
-     * Mount a filesystem path onto a web path.
+     * Mount a NHP page system.
      * 
      * @param wwwpath The web path
      * @param fspath The filesystem path
-     * @param lazyAndImmutable When true, changes to the filesystem are not honoured and path scanning is done lazily, defaults to true
+     * @param options The optional mount options
      */
-    public mount(webpath: string, fspath: string, lazyAndImmutable = true, skeleton?: string | Template, pagesysskeleton?: string | nexusframework.PageSystemSkeleton, legacyskeleton?: string | Template) {
-        webpath = upath.join("/", webpath);
-        fspath = path.resolve(process.cwd(), fspath);
-        if (_.isString(skeleton))
-            skeleton = this.nhp.template(skeleton);
-        if (_.isString(pagesysskeleton))
-            pagesysskeleton = require(pagesysskeleton) as nexusframework.PageSystemSkeleton;
-        if (_.isString(legacyskeleton))
-            legacyskeleton = this.nhp.template(legacyskeleton);
-        if(webpath == "/")
-            this.setIndex(lazyAndImmutable ? new LazyLoadingRequestHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton) : new FSWatcherRequestHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton));
-        else {
-            const cpath = stripPath(webpath);
-            const last = cpath.lastIndexOf("/");
-            const end = cpath.substring(last+1);
-            this.root.setChild(webpath, lazyAndImmutable ? new LazyLoadingRequestChildHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton, end) : new FSWatcherRequestChildHandler(fspath, this.logger, skeleton, pagesysskeleton, legacyskeleton, end), true);
+    mount(webpath: string, fspath: string, options: nexusframework.MountOptions = {}): nexusframework.RequestHandlerEntry{
+        webpath = upath.join("/", stripPath(webpath));
+        options.root = options.root || process.cwd();
+        fspath = path.resolve(options.root, fspath);
+        if (options.iconfile) {
+            options.iconfile = path.resolve(options.root, options.iconfile);
+            const iconpath = upath.join(webpath, ":icon");
+            this.mountImageResizer(iconpath, options.iconfile, {
+                sizes: iconSizes,
+                square: true
+            });
+            (options as any).icons = upath.join(this.prefix, iconpath, "/");
+        }
+        fspath = path.resolve(options.root, fspath);
+        if (_.isString(options.skeleton))
+            options.skeleton = this.nhp.template(path.resolve(options.root, options.skeleton));
+        if (_.isString(options.pagesysskeleton))
+            options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton)) as nexusframework.PageSystemSkeleton;
+        if (_.isString(options.legacyskeleton))
+            options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
+        if(webpath == "/") {
+            const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingRequestHandler(fspath, this.logger, options);
+            this.setDefaultHandler(newHandler);
+            return newHandler;
+        } else {
+            const newHandler = options.mutable ? new FSWatcherRequestChildHandler(fspath, this.logger, options, webpath) : new LazyLoadingRequestChildHandler(fspath, this.logger, options, webpath);
+            for(var i=0; i<this.mounts.length; i++) {
+                const mount = this.mounts[i];
+                if (mount.rawPattern === webpath) {
+                    mount.destroy();
+                    this.mounts[i] = newHandler;
+                    return;
+                }
+            }
+            this.mounts.push(newHandler);
+            return newHandler;
         }
     }
     
-    public mountStatic(webpath: string, fspath: string, options?: StaticMountOptions) {
+    mountImageResizer(webpath: string, imagefile: string, options: nexusframework.ImageResizerOptions = {}): nexusframework.RequestHandlerEntry{
+        webpath = upath.join("/", stripPath(webpath));
+        if(webpath == "/") {
+            const newHandler = new SharpResizerRequestHandler(imagefile, options);
+            this.setDefaultHandler(newHandler);
+            return newHandler;
+        } else {
+            const newHandler = new SharpResizerRequestChildHandler(imagefile, options, webpath);
+            for(var i=0; i<this.mounts.length; i++) {
+                const mount = this.mounts[i];
+                if (mount.rawPattern === webpath) {
+                    mount.destroy();
+                    this.mounts[i] = newHandler;
+                    return;
+                }
+            }
+            this.mounts.push(newHandler);
+            return newHandler;
+        }
+    }
+    
+    /**
+     * Mount a directory.
+     * 
+     * @param webpath The web path
+     * @param fspath The filesystem path
+     * @param options The mount options
+     */
+    mountStatic(webpath: string, fspath: string, options?: nexusframework.StaticMountOptions) {
         var serveOptions = options.mutable ? {} : {
             maxAge: 3.154e+10,
             immutable: true
         };
         
-        webpath = upath.join("/", webpath);
         fspath = path.resolve(process.cwd(), fspath);
-        const startsWith = new RegExp("^" + fspath.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$");
+        const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
         const handler = function(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
             const filename = path.resolve(fspath, req.path.substring(1));
             if (startsWith.test(filename))
                 fs.stat(filename, function(err, stats) {
-                    if (err)
+                    if (err && err.code != "ENOENT")
                         next(err);
                     else if(stats) {
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
+                                req.logger.info(urlpath);
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
                                     const q = urlpath.indexOf("?");
                                     if(q == -1)
@@ -1464,19 +1742,7 @@ export class NexusFramework extends events.EventEmitter {
             else
                 res.sendStatus(403);
         };
-        if(webpath == "/")
-            this.setIndex(new LeafRequestHandler(handler));
-        else {
-            const cpath = stripPath(webpath);
-            const end = cpath.substring(cpath.lastIndexOf("/")+1);
-            this.root.setChild(webpath, new LeafRequestChildHandler(handler, end), true);
-        }
-    }
-    
-    public setIndex(handler: nexusframework.RequestHandlerEntry) {
-        if (this.root)
-            this.root.destroy();
-        this.root = handler;
+        return this.mountHandler(webpath, handler, false);
     }
     
     /**
@@ -1485,49 +1751,49 @@ export class NexusFramework extends events.EventEmitter {
      * 
      * @param path The path
      * @param handler The request handler
+     * @param leaf Whether or not this handler is a leaf, or branch
      */
-    public setHandlerEntry(path: string, handler: nexusframework.RequestHandlerChildEntry, createIfNotExists = true) {
-        this.root.setChild(path, handler, createIfNotExists);
-    }
-    
-    /**
-     * Set a request handler for the specified path.
-     * Replaces any existing request handler.
-     * 
-     * @param path The path
-     * @param handler The request handler
-     */
-    public setHandler(webpath: string, handler: nexusframework.RequestHandler, createIfNotExists = true) {
-        webpath = upath.join("/", webpath);
-        if(webpath == "/")
-            this.setIndex(new LeafRequestHandler(handler));
-        else {
-            const cpath = stripPath(webpath);
-            const last = cpath.lastIndexOf("/");
-            const end = cpath.substring(last+1);
-            this.root.setChild(webpath, new LeafRequestChildHandler(handler, end), true);
+    mountHandler(webpath: string, handler: nexusframework.RequestHandler, leaf = true): nexusframework.RequestHandlerEntry{
+        webpath = upath.join("/", stripPath(webpath));
+        if(webpath == "/") {
+            const newHandler = new LeafRequestHandler(handler, leaf);
+            this.setDefaultHandler(newHandler);
+            return newHandler;
+        } else {
+            const newHandler = new LeafRequestChildHandler(handler, webpath, leaf);
+            for(var i=0; i<this.mounts.length; i++) {
+                const mount = this.mounts[i];
+                if (mount.rawPattern === webpath) {
+                    mount.destroy();
+                    this.mounts[i] = newHandler;
+                    return;
+                }
+            }
+            this.mounts.push(newHandler);
+            return newHandler;
         }
     }
     
-    public handlerAt(path: string, createIfNotExists = false) {
-        path = upath.join("/", path);
-        if(path === "/")
-            return this.root;
-        else
-            return this.root.childAt(path, createIfNotExists);
+    /**
+     * Set the default handler, its the handler that gets used when no mounts take the request.
+     */
+    setDefaultHandler(handler: nexusframework.RequestHandlerEntry) {
+        if (this.default)
+            this.default.destroy();
+        this.default = handler;
     }
 
     /**
      * Start listening on a specific port.
      */
-    public listen(port: number, callbackOrHost?: string | Function, callback?: Function) {
+    listen(port: number, callbackOrHost?: string | Function, callback?: Function) {
         this.server.listen.apply(this.server, arguments);
     }
     
     /**
      * NexusFork compatible handler.
      */
-    public handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
         const fullpath = req.path;
         const prefix = this.prefix;
         const len = prefix.length;
@@ -1536,808 +1802,13 @@ export class NexusFramework extends events.EventEmitter {
                 if (err)
                     return next(err);
                     
-                const errordoc = this.errordoc;
-                try {
-                    Object.defineProperty(req, "logger", {
-                        configurable: true,
-                        value: this.logger.extend(req.path)
-                    });
-                } catch (e) {}
-                try {
-                    Object.defineProperty(req, "matches", {
-                        configurable: true,
-                        value: []
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(req, "nexusframework", {
-                        value: this
-                    });
-                } catch (e) {}
-                try {
-                    if(req.io)
-                        Object.defineProperty(req, "readBody", {
-                            configurable: true,
-                            value: function(cb: (err?: Error, data?: string) => void, ...processors: nexusframework.BodyProcessor[]) {
-                                cb(undefined, "");
-                            }
-                        });
-                    else
-                        Object.defineProperty(req, "readBody", {
-                            configurable: true,
-                            value: function(cb: (err: Error, data?: string) => void, limit = 8192) {
-                                var buffer = "";
-                                req.setEncoding("utf8");
-                                var onError: Function, onData: Function, onEnd: Function;
-                                req.on("error", onError = function(error) {
-                                    req.removeListener("error", onError as any);
-                                    req.removeListener("data", onData as any);
-                                    req.removeListener("end", onEnd as any);
-                                    return cb(error);
-                                });
-                                req.on("data", onData = function(chunk) {
-                                    if (buffer.length + chunk.length >= limit) {
-                                        req.removeListener("error", onError as any);
-                                        req.removeListener("data", onData as any);
-                                        req.removeListener("end", onEnd as any);
-                                        return cb(new Error("Too much data, limit is " + limit + "bytes"));
-                                    }
-                                    buffer += chunk;
-                                });
-                                req.on("end", onEnd = function() {
-                                    req.removeListener("error", onError as any)
-                                    req.removeListener("data", onData as any);
-                                    req.removeListener("end", onEnd as any);
-                                    cb(undefined, buffer);
-                                });
-                            }
-                        });
-                } catch(e) {}
-                try {
-                    if(req.io)
-                        Object.defineProperty(req, "processBody", {
-                            configurable: true,
-                            value: function(cb: (err?: Error) => void, ...processors: nexusframework.BodyProcessor[]) {
-                                cb();
-                            }
-                        });
-                    else
-                        Object.defineProperty(req, "processBody", {
-                            configurable: true,
-                            value: function(cb: (err?: Error) => void, ...processors: nexusframework.BodyProcessor[]) {
-                                const contentType = req.get("content-type");
-                                if (!processors.length)
-                                    processors = [nexusframework.BodyProcessor.URLEncoded, nexusframework.BodyProcessor.JSONBody, nexusframework.BodyProcessor.MultipartFormData];
-                                req.body = {};
-                                try {
-                                    processors.forEach(function(processor) {
-                                        switch(processor) {
-                                            case nexusframework.BodyProcessor.JSONBody:
-                                                if (/\/(x\-)?json$/.test(contentType)) {
-                                                    req.readBody(function(err, data) {
-                                                        if(err)
-                                                            return cb(err);
-                                                        try {
-                                                            req.body = JSON.parse(data);
-                                                            cb();
-                                                        } catch(e) {
-                                                            cb(e);
-                                                        }
-                                                    });
-                                                    throw true;
-                                                }
-                                                break;
-                                            case nexusframework.BodyProcessor.URLEncoded:
-                                                if (/\/(((x\-)?www\-)?form\-)?urlencoded$/.test(contentType)) {
-                                                    req.readBody(function(err, data) {
-                                                        if(err)
-                                                            return cb(err);
-                                                        try {
-                                                            req.body = querystring.parse(data);
-                                                            cb();
-                                                        } catch(e) {
-                                                            cb(e);
-                                                        }
-                                                    });
-                                                    throw true;
-                                                }
-                                                break;
-                                            case nexusframework.BodyProcessor.MultipartFormData:
-                                                if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
-                                                    multerInstance(req, res, cb);
-                                                    throw true;
-                                                }
-                                                break;
-                                        }
-                                    });
-                                    cb(new Error("Unsupported content submitted"));
-                                } catch(e) {
-                                    if(e !== true)
-                                        throw e;
-                                }
-                            }
-                        });
-                } catch(e) {}
-                var pagesys: boolean;
-                if(req.xhr || req.io) {
-                    try {
-                        res.locals.xhrOrIO = true;
-                    } catch(e) {}
-                    try {
-                        Object.defineProperty(req, "xhrOrIO", {
-                            value: true
-                        });
-                    } catch(e) {}
-                    if (req.accepts("json")) {
-                        pagesys = true;
-                        try {
-                            res.locals.pagesys = true;
-                        } catch (e) {}
-                        try {
-                            Object.defineProperty(req, "pagesys", {
-                                configurable: true,
-                                value: true
-                            });
-                        } catch (e) {}
-                    }
-                }
-                try {
-                    res.locals.basehref = this.prefix;
-                } catch (e) {}
-                const generator = "NexusFramework " + pkgjson.version;
-                if (!req.io)
-                    try {
-                        res.header("X-Generator", generator);
-                    } catch(e) {}
-                try {
-                    res.locals.generator = generator;
-                } catch(e) {}
-                try {
-                    res.locals.frameworkVersion = pkgjson.version;
-                } catch(e) {}
-                var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
-                var useLoader = pagesys || (this.loaderEnabled && !noScript);
-                const rua = req.get("user-agent");
-                var ua: nexusframework.UA = uacache.get(rua);
-                var legacy: boolean, es6: boolean;
-                if (ua) {
-                    legacy = ua.legacy;
-                    es6 = ua.es6;
-                } else {
-                    ua = useragent.parse(rua) as any;
-                    _.extend(ua, useragent.is(rua));
-                    if (isbot(rua))
-                        ua.bot = true;
-                    ua.legacy = legacy = isUnsupportedBrowser(ua);
-                    ua.es6 = es6 = !legacy && isES6Browser(ua);
-                    uacache.set(rua, ua);
-                }
                 
-                try {
-                    Object.defineProperty(res, "useragent", {
-                        configurable: true,
-                        value: ua
-                    });
-                } catch(e) {}
-                try {
-                    res.locals.useragent = ua;
-                } catch(e) {}
-                const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
-                if (useLoader && !pagesys && legacy)
-                    useLoader = false;
-                var meta: {[index: string]: string} = {generator};
-                var footerRenderers: Function[] = this.footer.slice(0);
-                var headerRenderers: Function[] = this.header.slice(0);
-                var afterbodyRenderers: Function[] = this.afterbody.slice(0);
-                var gfonts: {[index: string]: string[]} = {};
-                var scripts: Resource[] = [];
-                var styles: Resource[] = [];
-                try {
-                    Object.defineProperty(res, "enableLoader", {
-                        configurable: true,
-                        value: function() {
-                            useLoader = true;
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addGoogleFont", {
-                        configurable: true,
-                        value: (family: string, weight?: number, italic?: boolean) => {
-                            var font = gfonts[family];
-                            if (!font)
-                                font = gfonts[family] = [];
-                            var style: string = "" + (weight || 400);
-                            if(italic)
-                                style += "i";
-                            if(font.indexOf(style) == -1)
-                                font.push(style);
-                        }
-                    });
-                } catch(e) {}
-                
-                const addScript = function(source: string, version?: string, ...deps: string[]) {
-                    for(var i=0; i<scripts.length; i++) {
-                        const script = scripts[i];
-                        if (script.source === source) {
-                            if (deps.length) {
-                                Array.prototype.push.apply(script, deps);
-                                script.deps = _.uniq(script.deps);
-                            }
-                            script.version = version;
-                            return;
-                        }
-                    }
-                    scripts.push({
-                        name: determineName(source),
-                        source,
-                        version,
-                        deps
-                    });
-                }
-                const addSocketIOClient = () => {
-                    addScript(upath.join(this.prefix, has_slim_io_js ? ":/socket.io.slim.js" : ":io/socket.io.js"), sckclpkgjson.version);
-                };
-                try {
-                    Object.defineProperty(res, "addSocketIOClient", {
-                        configurable: true,
-                        value: addSocketIOClient
-                    });
-                } catch(e) {}
-                const addInlineScript = function(source: string, ...deps: string[]) {
-                    scripts.push({
-                        name: "inline-" + stringHash(source),
-                        source,
-                        inline: true,
-                        deps
-                    })
-                };
-                try {
-                    Object.defineProperty(res, "addInlineScript", {
-                        configurable: true,
-                        value: addInlineScript
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addNexusFrameworkClient", {
-                        configurable: true,
-                        value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
-                            const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
-                            if(includeSocketIO) {
-                                addSocketIOClient();
-                                addScript(path, pkgjson.version, "socket.io");
-                                if (autoEnabledPageSystem)
-                                    addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
-                            } else
-                                addScript(path, pkgjson.version);
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addScript", {
-                        configurable: true,
-                        value: addScript
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addFooterRenderer", {
-                        configurable: true,
-                        value: function(renderer) {
-                            footerRenderers.push(renderer instanceof Function ? renderer : function(out) {
-                                out.write("" + renderer);
-                            });
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addBodyClassName", {
-                        configurable: true,
-                        value: function(name: string) {
-                            const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
-                            if(!classRegex.test(res.locals.bodyclass))
-                                res.locals.bodyclass = (res.locals.bodyclass + " " + name).trim();
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "removeBodyClassName", {
-                        configurable: true,
-                        value: function(name: string) {
-                            const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
-                            res.locals.bodyclass = res.locals.bodyclass.replace(classRegex, function(match, p1) {
-                                return /^\s.+\s$/.test(match) ? " " : "";
-                            });
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addAfterBodyRenderer", {
-                        configurable: true,
-                        value: function(renderer) {
-                            afterbodyRenderers.push(renderer instanceof Function ? renderer : function(out) {
-                                out.write("" + renderer);
-                            });
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addStyle", {
-                        configurable: true,
-                        value: function(source: string, version?: string, ...deps: string[]) {
-                            for(var i=0; i<styles.length; i++) {
-                                const style = styles[i];
-                                if (style.source === source) {
-                                    style.version = version;
-                                    return;
-                                }
-                            }
-                            styles.push({
-                                name: determineName(source),
-                                source,
-                                version,
-                                deps
-                            });
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addInlineStyle", {
-                        configurable: true,
-                        value: function(source: string, ...deps: string[]) {
-                            styles.push({
-                                name: "inline-" + stringHash(source),
-                                source,
-                                inline: true,
-                                deps
-                            })
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "addHeaderRenderer", {
-                        configurable: true,
-                        value: function(renderer) {
-                            headerRenderers.push(renderer instanceof Function ? renderer : function(out) {
-                                out.write("" + renderer);
-                            });
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "setMetaTag", {
-                        configurable: true,
-                        value: function(name: string, content?: string) {
-                            name = name.toLowerCase();
-                            if (content)
-                                meta[name] = content;
-                            else
-                                delete meta[name];
-                        }
-                    });
-                } catch(e) {}
-                var servedLoader: boolean;
-                var servedAfterBody: boolean;
-                try {
-                    const writeafterbody = res.locals.__writeafterbody = (out: NodeJS.WritableStream) => {
-                        afterbodyRenderers.forEach(function(renderer) {
-                            renderer(out);
-                        });
-                        if (useLoader) {
-                            const locals = res.locals;
-                            locals.progressContainerHead = locals.progressContainerHead || "";
-                            locals.progressContainerFoot = locals.progressContainerFoot || "";
-                            locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
-                            locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
-
-                            overlayHtmlParts.forEach(function(step) {
-                                step(out, locals);
-                            });
-                            servedLoader = true;
-                        }
-                        servedAfterBody = true;
-                        try {
-                            out['flush']();
-                        } catch(e) {}
-                    };
-                    Object.defineProperty(res, "writeAfterBodyHtml", {
-                        value: function(out?) {
-                            writeafterbody(out || res);
-                        }
-                    });
-                } catch(e) {}
-                const getLoaderData = function() {
-                    const resarray: (Resource & {type: string})[] = [];
-                    const gfontkeys = Object.keys(gfonts);
-                    if(gfontkeys.length) {
-                        var gfonturl = "https://fonts.googleapis.com/css?family=";
-                        // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
-                        var first = true;
-                        gfontkeys.forEach(function(font) {
-                            if(first)
-                                first = false;
-                            else
-                                gfonturl += "|";
-                            const styles = gfonts[font];
-                            gfonturl += encodeURIComponent(font);
-
-                            if (styles.length == 1 && styles[0] == "400")
-                                return;
-
-                            gfonturl += ":";
-                            gfonturl += styles.join(",");
-                        });
-                        styles.unshift({
-                            name: "google-fonts",
-                            source: gfonturl,
-                            version: "1.0",
-                            deps: []
-                        })
-                    }
-
-                    const alreadySent: string[] = req.io && (req.io['__sent_resources'] || (req.io['__sent_resources'] = []));
-                    const skip = alreadySent ? function(resource: (Resource & {type: string})) {
-                        const key = resource.type + ":" + resource.name;
-                        if (alreadySent.indexOf(key) > -1)
-                            return true;
-                        alreadySent.push(key);
-                        return false;
-                    } : function() {return false;};
-                    styles.forEach(function(style) {
-                        style['type'] = "style";
-                        if (skip(style as any))
-                            return;
-                        resarray.push(style as any);
-                    });
-                    scripts.forEach(function(script) {
-                        script['type'] = "script";
-                        if (skip(script as any))
-                            return;
-                        resarray.push(script as any);
-                    });
-
-                    return resarray;
-                };
-                try {
-                    Object.defineProperty(res, "getLoaderData", {
-                        value: getLoaderData
-                    });
-                } catch(e) {}
-                try {
-                    const writefooter = res.locals.__writefooter = (out: NodeJS.WritableStream) => {
-                        if (!servedAfterBody)
-                            afterbodyRenderers.forEach(function(renderer) {
-                                renderer(out);
-                            });
-                        if (!noScript) {
-                            const user = req.user;
-                            if (user)
-                                addInlineScript("NexusFramework['currentUserID'] = " + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframework");
-                            if (useLoader) {
-                                if (!servedLoader) {
-                                    const locals = res.locals;
-                                    locals.progressContainerHead = locals.progressContainerHead || "";
-                                    locals.progressContainerFoot = locals.progressContainerFoot || "";
-                                    locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
-                                    locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
-
-                                    overlayHtmlParts.forEach(function(step) {
-                                        step(out, locals);
-                                    });
-                                }
-                            } else {
-                                // TODO: Sort dependencies
-                                scripts.forEach(function(script) {
-                                    if(script.inline) {
-                                        out.write("<script type=\"text/javascript\">");
-                                        out.write(script.source);
-                                        out.write("</script>");
-                                    } else {
-                                        out.write("<script type=\"text/javascript\" src=\"");
-                                        if(script.version) {
-                                            var _url = url.parse(script.source, true);
-                                            _url.query = _url.query || {};
-                                            _url.query.v = script.version;
-                                            script.source = url.format(_url);
-                                        }
-                                        out.write(encodeHTML(url.format(script.source), true));
-                                        out.write("\"></script>");
-                                    }
-                                });
-                            }
-                        }
-                        footerRenderers.forEach(function(renderer) {
-                            renderer(out);
-                        });
-                        if(useLoader) {
-                            if (!pagesys) {
-                                out.write("<script type=\"text/javascript\">");
-                                out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
-                                out.write("</script>");
-                            }
-                            out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
-                            out.write(JSON.stringify(getLoaderData()));
-                            out.write(")</script>");
-                        }
-                    };
-                    Object.defineProperty(res, "writeFooterHtml", {
-                        value: function(out?) {
-                            writefooter(out || res);
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    const writeheader = res.locals.__writeheader = (out: NodeJS.WritableStream) => {
-                        if (req.method.toUpperCase() === "GET") {
-                            if (noScript) {
-                                try {
-                                    res.cookie("noscript", "true", {expires:new Date(+(new Date) + 3.154e+10)});
-                                } catch(e) {}
-                                const _url = url.parse(req.originalUrl, true);
-                                _url.query = _url.query || {};
-                                out.write('<script>document.cookie=\"noscript=; Path=/; Expires=Thu, 1 Nov 1970 00:00:00 GMT\";location.href = ');
-                                delete _url.query.noscript;
-                                _url.search = "?" + querystring.stringify(_url.query);
-                                if (_url.search == "?") {
-                                    _url.search = undefined;
-                                    _url.path = _url.pathname;
-                                } else
-                                    _url.path = _url.pathname + _url.search;
-                                delete _url.href;
-                                out.write(JSON.stringify(url.format(_url)));
-                                out.write('</script>');
-                            } else {
-                                out.write('<noscript><meta http-equiv="refresh" content="0; url=\'');
-                                const _url = url.parse(req.originalUrl, true);
-                                _url.query = _url.query || {};
-                                _url.query.noscript = "1";
-                                out.write(encodeHTML(url.format(_url), true));
-                                out.write('\'" /></noscript>');
-                            }
-                        }
-
-                        Object.keys(meta).forEach(function(key) {
-                            out.write("<meta name=\"");
-                            out.write(encodeHTML(key, true));
-                            out.write("\" content=\"");
-                            out.write(encodeHTML(meta[key]));
-                            out.write("\" />");
-                        })
-
-                        if(useLoader) {
-                            if (!pagesys) {
-                                out.write("<style>");
-                                out.write(overlayCss);
-                                out.write("</style>");
-                            }
-                        } else {
-                            const gfontkeys = Object.keys(gfonts);
-                            if(gfontkeys.length) {
-                                out.write("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=");
-                                // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
-                                var first = true;
-                                gfontkeys.forEach(function(font) {
-                                    if(first)
-                                        first = false;
-                                    else
-                                        out.write("|");
-                                    const styles = gfonts[font];
-                                    out.write(encodeURIComponent(font));
-
-                                    if (styles.length == 1 && styles[0] == "400")
-                                        return;
-
-                                    out.write(":");
-                                    out.write(styles.join(","));
-                                })
-                                out.write("\">");
-                            }
-                            // TODO: Sort dependencies
-                            styles.forEach(function(style) {
-                                if (style.inline) {
-                                    out.write("<style>");
-                                    out.write(style.source);
-                                    out.write("</style>");
-                                } else {
-                                    out.write("<link rel=\"stylesheet\" href=\"");
-                                    if(style.version) {
-                                        var _url = url.parse(style.source, true);
-                                        _url.query = _url.query || {};
-                                        _url.query.v = style.version;
-                                        style.source = url.format(_url);
-                                    }
-                                    out.write(encodeHTML(url.format(style.source), true));
-                                    out.write("\">");
-                                }
-                            });
-                        }
-                        headerRenderers.forEach(function(renderer) {
-                            renderer(out);
-                        });
-                    };
-                    Object.defineProperty(res, "writeFooterHtml", {
-                        value: function(out?) {
-                            writeheader(out || res);
-                        }
-                    });
-                } catch(e) {}
-                try {
-                    res.locals.bodyclass = "";
-                } catch(e) {}
-                try {
-                    res.locals.title = "Title Not Set";
-                } catch(e) {}
-                try {
-                    const render = res.render;
-                    Object.defineProperty(res, "render", {
-                        value: (filename: string, options: any, callback?: (err: Error, html?: string) => void) => {
-                            if (options instanceof Function)
-                                callback = options;
-                            if (this.app.get("view engine") == "nhp") {
-                                var vars = {};
-                                _.extend(vars, res.app.locals);
-                                _.extend(vars, res.locals);
-                                if (options)
-                                    _.extend(vars, options);
-                                this.nhp.render(filename, vars, callback);
-                            } else
-                                render.call(res, filename, options, callback);
-                        }
-                    })
-                } catch(e) {}
-                try {
-                    Object.defineProperty(res, "sendRender", {
-                        configurable: true,
-                        value: (filename: string, options: any) => {
-                            if (req.app.get("view engine") == "nhp") {
-                                var vars = {};
-                                _.extend(vars, res.app.locals);
-                                _.extend(vars, res.locals);
-                                if (options)
-                                    _.extend(vars, options);
-                                if (pagesys) {
-                                    const pagesysskeleton = req.pagesysskeleton || this.pagesysskeleton;
-                                    if(pagesysskeleton) {
-                                        pagesysskeleton(filename, vars, req, res, function(err, data) {
-                                            if (err)
-                                                next(err);
-                                            else if(data)
-                                                res.json(data);
-                                            else
-                                                next(new Error("Server Error: No data passed"));
-                                        });
-                                        return;
-                                    }
-                                }
-
-                                const out = req.io ? res : new BufferingWritable(res);
-                                const callback = function (err?: Error) {
-                                    if (err)
-                                        next(err);
-                                    else
-                                        out.end();
-                                };
-                                const skeleton = (legacy && (req.legacyskeleton || this.legacyskeleton)) || req.skeleton || this.skeleton;
-                                if (!res.get("content-type"))
-                                    res.type("text/html; charset=utf-8"); // Default to utf8 html
-                                if(skeleton) {
-                                    vars['page'] = filename;
-                                    skeleton.renderToStream(vars, out, callback);
-                                } else
-                                    this.nhp.renderToStream(filename, vars, out, callback);
-                            } else
-                                res.render(filename, options, function (err?: Error, html?: string) {
-                                    if (err)
-                                        next(err);
-                                    else {
-                                        var buff = Buffer.from(html, "utf8");
-                                        res.writeHead(200, {
-                                            "Content-Length": buff.length
-                                        });
-                                        if (req.method == "HEAD")
-                                            res.end();
-                                        else
-                                            res.end(buff);
-                                    }
-                                });
-                        }
-                    });
-                } catch (e) {}
-                if (errordoc && Object.keys(errordoc).length) {
-                    const builtInSendStatus = res.sendStatus.bind(req);
-                    const used: {[index: string]: boolean} = {};
-                    try {
-                        Object.defineProperty(res, "sendStatus", {
-                            configurable: true,
-                            value: (code: number, _err?: Error) => {
-                                var st = "" + code;
-                                var handler: string;
-                                if (!used[st] && (handler = (errordoc[st] || errordoc["*"]))) {
-                                    used[st] = true;
-                                    try {
-                                        res.locals.errorCode = code;
-                                    } catch (e) {}
-                                    try {
-                                        Object.defineProperty(req, "errorCode", {
-                                            configurable: true,
-                                            value: code
-                                        });
-                                    } catch (e) {}
-                                    try {
-                                        res.locals.error = _err;
-                                    } catch (e) {}
-                                    try {
-                                        Object.defineProperty(req, "error", {
-                                            configurable: true,
-                                            value: _err
-                                        });
-                                    } catch (e) {}
-                                    res.status(code);
-                                    res.addBodyClassName("error-page");
-                                    res.addBodyClassName("error-" + code);
-                                    req.url = url.resolve("/", handler);
-                                    this.root.handle(req, res, function (err?: Error) {
-                                        if (err)
-                                            next(err);
-                                        else
-                                            builtInSendStatus(code, _err);
-                                    });
-                                } else
-                                    builtInSendStatus(code, _err);
-                            }
-                        });
-                    } catch (e) {}
-                    if ("500" in errordoc || "*" in errordoc) {
-                        const builtInSendFailure = res.sendFailure && res.sendFailure.bind(req);
-                        try {
-                            const used: {[index: string]: boolean} = {};
-                            Object.defineProperty(res, "sendFailure", {
-                                configurable: true,
-                                value: (_err?: Error) => {
-                                    var handler: string;
-                                    if (!used["500"] && (handler = (errordoc["500"] || errordoc["*"]))) {
-                                        used["500"] = true;
-                                        handler = upath.join("/", handler);
-                                        try {
-                                            Object.defineProperty(req, "errorCode", {
-                                                configurable: true,
-                                                value: 500
-                                            });
-                                        } catch (e) {}
-                                        try {
-                                            res.locals.errorCode = 500;
-                                        } catch (e) {}
-                                        try {
-                                            Object.defineProperty(req, "error", {
-                                                configurable: true,
-                                                value: _err
-                                            });
-                                        } catch (e) {}
-                                        try {
-                                            res.locals.error = _err;
-                                        } catch (e) {}
-                                        res.status(500);
-                                        res.addBodyClassName("error-page");
-                                        res.addBodyClassName("error-500");
-                                        req.url = url.resolve("/", handler);
-                                        this.root.handle(req, res, function (err?: Error) {
-                                            if (err)
-                                                next(err);
-                                            else
-                                                builtInSendFailure(_err);
-                                        });
-                                    } else
-                                        builtInSendStatus(_err);
-                                }
-                            });
-                        } catch (e) {}
-                    }
-                }
                 async.eachSeries(this.stack, function(entry, cb) {
                     entry(req, res, cb);
                 }, (err: Error) => {
                     const user = req.user;
                     const userName = user ? ("`" + (user.displayName || user.email || user.id || "Logged") + "`") : "Guest";
-                    const type = pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
+                    const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
                     if(err) {
                         if (this.logging)
                             req.logger.warn(req.method, req.ip || "`Unknown IP`", userName, "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
@@ -2349,7 +1820,7 @@ export class NexusFramework extends events.EventEmitter {
                             const id = user.id || user.email || user.displayName || "Logged";
                             res.set("X-User", "" + id);
                         }
-                        this.root.handle(req, res, next);
+                        this.handle0(req, res, next);
                     }
                 });
             });
@@ -2357,11 +1828,996 @@ export class NexusFramework extends events.EventEmitter {
             next();
     }
     
-    public use(middleware: nexusframework.RequestHandler) {
+    /**
+     * Push middleware to the end of the stack.
+     * At this point any user calculations have concluded and a logger should be available.
+     */
+    pushMiddleware(middleware: nexusframework.RequestHandler) {
         this.stack.push(middleware);
     }
+    /**
+     * Unshift middleware onto the beginning of the stack.
+     * At this point none of the nexusframework extensions will be available.
+     */
+    unshiftMiddleware(middleware: nexusframework.RequestHandler) {
+        this.stack.unshift(middleware);
+    }
+    /**
+     * Alias for pushMiddleware
+     */
+    use: (middleware: nexusframework.RequestHandler) => void;
+    
+    useio(middleware: nexusframework.IORequestHandler) {
+        if (this.io)
+            this.io.use(middleware);
+        else
+            throw new Error("Attempting to add Socket.IO middleware when Socket.IO has not been initialized");
+    }
+    
+    runMiddleware(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        async.eachSeries(this.stack, function(middleware, cb) {
+            middleware(req, res, cb);
+        }, next);
+    }
+    
+    private handle0(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        const path = req.path;
+        async.eachSeries(this.mounts, (mount, cb) => {
+            const targetPath = mount.rawPattern;
+            if (path === targetPath || (!mount.leaf && path.length >= targetPath.length+1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
+                const curl = req.url;
+                req.mount = mount;
+                req.url = req.url.substring(targetPath.length) || "/";
+                mount.handle(req, res, function(err: Error) {
+                    req.url = curl;
+                    cb(err);
+                });
+            } else
+                cb();
+        }, (err?: Error) => {
+            if (err)
+                next(err);
+            else
+                this.default.handle(req, res, next);
+        });
+    }
+    
+    upgrade(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        try {
+            Object.defineProperty(req, "logger", {
+                configurable: true,
+                value: this.logger.extend(req.path)
+            });
+        } catch (e) {}
+        try {
+            Object.defineProperty(req, "matches", {
+                configurable: true,
+                value: []
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(req, "nexusframework", {
+                value: this
+            });
+        } catch (e) {}
+        try {
+            if(req.io)
+                Object.defineProperty(req, "readBody", {
+                    configurable: true,
+                    value: function(cb: (err?: Error, data?: Buffer) => void) {
+                        cb(undefined, Buffer.from(JSON.stringify(req.body) || ""));
+                    }
+                });
+            else
+                Object.defineProperty(req, "readBody", {
+                    configurable: true,
+                    value: function(cb: (err: Error, data?: Buffer) => void, limit = 8192) {
+                        var buffer = Buffer.from([]);
+                        var onError: Function, onData: Function, onEnd: Function;
+                        req.on("error", onError = function(error) {
+                            req.removeListener("error", onError as any);
+                            req.removeListener("data", onData as any);
+                            req.removeListener("end", onEnd as any);
+                            return cb(error);
+                        });
+                        req.on("data", onData = function(chunk) {
+                            if (buffer.length + chunk.length >= limit) {
+                                req.removeListener("error", onError as any);
+                                req.removeListener("data", onData as any);
+                                req.removeListener("end", onEnd as any);
+                                return cb(new Error("Too much data, limit is " + limit + "bytes"));
+                            }
+                            buffer = Buffer.concat([buffer, chunk]);
+                        });
+                        req.on("end", onEnd = function() {
+                            req.removeListener("error", onError as any)
+                            req.removeListener("data", onData as any);
+                            req.removeListener("end", onEnd as any);
+                            cb(undefined, buffer);
+                        });
+                    }
+                });
+        } catch(e) {}
+        try {
+            if(req.io)
+                Object.defineProperty(req, "processBody", {
+                    configurable: true,
+                    value: function(cb: (err?: Error) => void, ...processors: nexusframework.BodyProcessor[]) {
+                        cb();
+                    }
+                });
+            else
+                Object.defineProperty(req, "processBody", {
+                    configurable: true,
+                    value: function(cb: (err?: Error) => void, ...processors: nexusframework.BodyProcessor[]) {
+                        const contentType = req.get("content-type");
+                        if (!processors.length)
+                            processors = [nexusframework.BodyProcessor.URLEncoded, nexusframework.BodyProcessor.JSONBody, nexusframework.BodyProcessor.MultipartFormData];
+                        req.body = {};
+                        try {
+                            processors.forEach(function(processor) {
+                                switch(processor) {
+                                    case nexusframework.BodyProcessor.JSONBody:
+                                        if (/\/(x\-)?json$/.test(contentType)) {
+                                            req.readBody(function(err, data) {
+                                                if(err)
+                                                    return cb(err);
+                                                try {
+                                                    req.body = JSON.parse(data.toString("utf8"));
+                                                    cb();
+                                                } catch(e) {
+                                                    cb(e);
+                                                }
+                                            });
+                                            throw true;
+                                        }
+                                        break;
+                                    case nexusframework.BodyProcessor.URLEncoded:
+                                        if (/\/(((x\-)?www\-)?form\-)?urlencoded$/.test(contentType)) {
+                                            req.readBody(function(err, data) {
+                                                if(err)
+                                                    return cb(err);
+                                                try {
+                                                    req.body = querystring.parse(data.toString("utf8"));
+                                                    cb();
+                                                } catch(e) {
+                                                    cb(e);
+                                                }
+                                            });
+                                            throw true;
+                                        }
+                                        break;
+                                    case nexusframework.BodyProcessor.MultipartFormData:
+                                        if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
+                                            multerInstance(req, res, cb);
+                                            throw true;
+                                        }
+                                        break;
+                                }
+                            });
+                            cb(new Error("Unsupported content submitted"));
+                        } catch(e) {
+                            if(e !== true)
+                                throw e;
+                        }
+                    }
+                });
+        } catch(e) {}
+        const webp = req.accepts("webp");
+        try {
+            res.locals.webp = true;
+        } catch(e) {}
+        try {
+            Object.defineProperty(req, "webp", {
+                value: true
+            });
+        } catch(e) {}
+        var pagesys: boolean;
+        if(req.xhr || req.io) {
+            try {
+                res.locals.xhrOrIO = true;
+            } catch(e) {}
+            try {
+                Object.defineProperty(req, "xhrOrIO", {
+                    value: true
+                });
+            } catch(e) {}
+            if (req.accepts("json")) {
+                pagesys = true;
+                try {
+                    res.locals.pagesys = true;
+                } catch (e) {}
+                try {
+                    Object.defineProperty(req, "pagesys", {
+                        configurable: true,
+                        value: true
+                    });
+                } catch (e) {}
+            }
+        }
+        try {
+            res.locals.basehref = this.prefix;
+        } catch (e) {}
+        const generator = "NexusFramework " + pkgjson.version;
+        if (!req.io)
+            try {
+                res.header("X-Generator", generator);
+            } catch(e) {}
+        try {
+            res.locals.generator = generator;
+        } catch(e) {}
+        try {
+            res.locals.frameworkVersion = pkgjson.version;
+        } catch(e) {}
+        var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
+        var useLoader = pagesys || (this.loaderEnabled && !noScript);
+        const rua = req.get("user-agent");
+        var ua: nexusframework.UserAgentDetails = uacache.get(rua);
+        var legacy: boolean, es6: boolean;
+        if (ua) {
+            legacy = ua.legacy;
+            es6 = ua.es6;
+        } else {
+            ua = useragent.parse(rua) as any;
+            _.extend(ua, useragent.is(rua));
+            ua.legacy = legacy = isUnsupportedBrowser(ua);
+            ua.es6 = es6 = !legacy && isES6Browser(ua);
+            uacache.set(rua, ua);
+        }
+
+        try {
+            Object.defineProperty(res, "useragent", {
+                configurable: true,
+                value: ua
+            });
+        } catch(e) {}
+        try {
+            res.locals.useragent = ua;
+        } catch(e) {}
+        const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
+        if (useLoader && !pagesys && legacy)
+            useLoader = false;
+        var icons: {[index: number]: string} = [];
+        const meta: {[index: string]: string} = {generator};
+        const footerRenderers: Function[] = this.footer.slice(0);
+        const headerRenderers: Function[] = this.header.slice(0);
+        const afterbodyRenderers: Function[] = this.afterbody.slice(0);
+        const gfonts: {[index: string]: string[]} = {};
+        const scripts: Resource[] = [];
+        const styles: Resource[] = [];
+        try {
+            Object.defineProperty(res, "setRenderOptions", {
+                configurable: true,
+                value: function (options: nexusframework.RenderOptions) {
+                    res.renderoptions = options;
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "applyRenderOptions", {
+                configurable: true,
+                value: function (options: nexusframework.RenderOptions) {
+                    _.extend(res.renderoptions || (res.renderoptions = {}), options);
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "enableLoader", {
+                configurable: true,
+                value: function() {
+                    useLoader = true;
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addGoogleFont", {
+                configurable: true,
+                value: (family: string, weight?: number, italic?: boolean) => {
+                    var font = gfonts[family];
+                    if (!font)
+                        font = gfonts[family] = [];
+                    var style: string = "" + (weight || 400);
+                    if(italic)
+                        style += "i";
+                    if(font.indexOf(style) == -1)
+                        font.push(style);
+                }
+            });
+        } catch(e) {}
+
+        const addScript = function(source: string, version?: string, ...deps: string[]) {
+            for(var i=0; i<scripts.length; i++) {
+                const script = scripts[i];
+                if (script.source === source) {
+                    if (deps.length) {
+                        Array.prototype.push.apply(script, deps);
+                        script.deps = _.uniq(script.deps);
+                    }
+                    script.version = version;
+                    return;
+                }
+            }
+            scripts.push({
+                name: determineName(source),
+                source,
+                version,
+                deps
+            });
+        }
+        const addSocketIOClient = () => {
+            addScript(upath.join(this.prefix, has_slim_io_js ? ":scripts/socket.io.slim.js" : ":io/socket.io.js"), sckclpkgjson.version);
+        };
+        try {
+            Object.defineProperty(res, "addSocketIOClient", {
+                configurable: true,
+                value: addSocketIOClient
+            });
+        } catch(e) {}
+        const addInlineScript = function(source: string, ...deps: string[]) {
+            scripts.push({
+                name: "inline-" + stringHash(source),
+                source,
+                inline: true,
+                deps
+            })
+        };
+        try {
+            Object.defineProperty(res, "addInlineScript", {
+                configurable: true,
+                value: addInlineScript
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addNexusFrameworkClient", {
+                configurable: true,
+                value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
+                    const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
+                    if(includeSocketIO) {
+                        addSocketIOClient();
+                        addScript(path, pkgjson.version, "socket.io");
+                        if (autoEnabledPageSystem)
+                            addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
+                    } else
+                        addScript(path, pkgjson.version);
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addScript", {
+                configurable: true,
+                value: addScript
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addFooterRenderer", {
+                configurable: true,
+                value: function(renderer) {
+                    footerRenderers.push(renderer instanceof Function ? renderer : function(out) {
+                        out.write("" + renderer);
+                    });
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addBodyClassName", {
+                configurable: true,
+                value: function(name: string) {
+                    const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
+                    if(!classRegex.test(res.locals.bodyclass))
+                        res.locals.bodyclass = (res.locals.bodyclass + " " + name).trim();
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "removeBodyClassName", {
+                configurable: true,
+                value: function(name: string) {
+                    const classRegex = new RegExp("(^|\\s+)" + name.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(\\s+|$)", "g");
+                    res.locals.bodyclass = res.locals.bodyclass.replace(classRegex, function(match, p1) {
+                        return /^\s.+\s$/.test(match) ? " " : "";
+                    });
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addAfterBodyRenderer", {
+                configurable: true,
+                value: function(renderer) {
+                    afterbodyRenderers.push(renderer instanceof Function ? renderer : function(out) {
+                        out.write("" + renderer);
+                    });
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addStyle", {
+                configurable: true,
+                value: function(source: string, version?: string, ...deps: string[]) {
+                    for(var i=0; i<styles.length; i++) {
+                        const style = styles[i];
+                        if (style.source === source) {
+                            style.version = version;
+                            return;
+                        }
+                    }
+                    styles.push({
+                        name: determineName(source),
+                        source,
+                        version,
+                        deps
+                    });
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addInlineStyle", {
+                configurable: true,
+                value: function(source: string, ...deps: string[]) {
+                    styles.push({
+                        name: "inline-" + stringHash(source),
+                        source,
+                        inline: true,
+                        deps
+                    })
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "addHeaderRenderer", {
+                configurable: true,
+                value: function(renderer) {
+                    headerRenderers.push(renderer instanceof Function ? renderer : function(out) {
+                        out.write("" + renderer);
+                    });
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "setMetaTag", {
+                configurable: true,
+                value: function(name: string, content?: string) {
+                    name = name.toLowerCase();
+                    if (content)
+                        meta[name] = content;
+                    else
+                        delete meta[name];
+                }
+            });
+        } catch(e) {}
+        var servedLoader: boolean;
+        var servedAfterBody: boolean;
+        try {
+            const writeafterbody = res.locals.__writeafterbody = (out: NodeJS.WritableStream) => {
+                afterbodyRenderers.forEach(function(renderer) {
+                    renderer(out);
+                });
+                if (useLoader) {
+                    const locals = res.locals;
+                    locals.progressContainerHead = locals.progressContainerHead || "<img width='128' height='128' src='/favicon.ico' />";
+                    locals.progressContainerFoot = locals.progressContainerFoot || "";
+                    locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
+                    locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
+
+                    overlayHtmlParts.forEach(function(step) {
+                        step(out, locals);
+                    });
+                    servedLoader = true;
+                }
+                servedAfterBody = true;
+                try {
+                    out['flush']();
+                } catch(e) {}
+            };
+            Object.defineProperty(res, "writeAfterBodyHtml", {
+                value: function(out?) {
+                    writeafterbody(out || res);
+                }
+            });
+        } catch(e) {}
+        const getLoaderData = function() {
+            const resarray: (Resource & {type: string})[] = [];
+            const gfontkeys = Object.keys(gfonts);
+            if(gfontkeys.length) {
+                var gfonturl = "https://fonts.googleapis.com/css?family=";
+                // Barlow|Barlow+Condensed:100i|Lato:100,900|Slabo+27px
+                var first = true;
+                gfontkeys.forEach(function(font) {
+                    if(first)
+                        first = false;
+                    else
+                        gfonturl += "|";
+                    const styles = gfonts[font];
+                    gfonturl += encodeURIComponent(font);
+
+                    if (styles.length == 1 && styles[0] == "400")
+                        return;
+
+                    gfonturl += ":";
+                    gfonturl += styles.join(",");
+                });
+                styles.unshift({
+                    name: "google-fonts",
+                    source: gfonturl,
+                    version: "1.0",
+                    deps: []
+                })
+            }
+
+            const alreadySent: string[] = req.io && (req.io['__sent_resources'] || (req.io['__sent_resources'] = []));
+            const skip = alreadySent ? function(resource: (Resource & {type: string})) {
+                const key = resource.type + ":" + resource.name;
+                if (alreadySent.indexOf(key) > -1)
+                    return true;
+                alreadySent.push(key);
+                return false;
+            } : function() {return false;};
+            styles.forEach(function(style) {
+                style['type'] = "style";
+                if (skip(style as any))
+                    return;
+                resarray.push(style as any);
+            });
+            scripts.forEach(function(script) {
+                script['type'] = "script";
+                if (skip(script as any))
+                    return;
+                resarray.push(script as any);
+            });
+
+            return resarray;
+        };
+        try {
+            Object.defineProperty(res, "getLoaderData", {
+                value: getLoaderData
+            });
+        } catch(e) {}
+        try {
+            const writefooter = res.locals.__writefooter = (out: NodeJS.WritableStream) => {
+                if (!servedAfterBody)
+                    afterbodyRenderers.forEach(function(renderer) {
+                        renderer(out);
+                    });
+                if (!noScript) {
+                    const user = req.user;
+                    if (user)
+                        addInlineScript("NexusFramework['currentUserID'] = " + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframework");
+                    if (useLoader) {
+                        if (!servedLoader) {
+                            const locals = res.locals;
+                            locals.progressContainerHead = locals.progressContainerHead || "";
+                            locals.progressContainerFoot = locals.progressContainerFoot || "";
+                            locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
+                            locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
+
+                            overlayHtmlParts.forEach(function(step) {
+                                step(out, locals);
+                            });
+                        }
+                    } else {
+                        // TODO: Sort dependencies
+                        scripts.forEach(function(script) {
+                            if(script.inline) {
+                                out.write("<script type=\"text/javascript\">");
+                                out.write(script.source);
+                                out.write("</script>");
+                            } else {
+                                out.write("<script type=\"text/javascript\" src=\"");
+                                if(script.version) {
+                                    var _url = url.parse(script.source, true);
+                                    _url.query = _url.query || {};
+                                    _url.query.v = script.version;
+                                    script.source = url.format(_url);
+                                }
+                                out.write(encodeHTML(url.format(script.source), true));
+                                out.write("\"></script>");
+                            }
+                        });
+                    }
+                }
+                footerRenderers.forEach(function(renderer) {
+                    renderer(out);
+                });
+                if(useLoader) {
+                    if (!pagesys) {
+                        out.write("<script type=\"text/javascript\">");
+                        out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
+                        out.write("</script>");
+                    }
+                    out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
+                    out.write(JSON.stringify(getLoaderData()));
+                    out.write(")</script>");
+                }
+            };
+            Object.defineProperty(res, "writeFooterHtml", {
+                value: function(out?) {
+                    writefooter(out || res);
+                }
+            });
+        } catch(e) {}
+        var socialTagsSet = false;
+        const setSocialTags = function(socialTags: nexusframework.SocialTags) {
+            socialTagsSet = true;
+            if (socialTags.url) {
+                const url = socialTags.url.toString();
+                meta['og:url'] = url;
+                meta['twitter:url'] = url;
+            }
+            if (socialTags.title) {
+                const title = socialTags.title;
+                meta['g+:name'] = title;
+                meta['og:title'] = title;
+                meta['twitter:title'] = title;
+            }
+            if (socialTags.twitterCard)
+                meta['twitter:card'] = socialTags.twitterCard;
+            if (socialTags.siteTitle)
+                meta['og:site_name'] = socialTags.siteTitle;
+            if (socialTags.seeAlso)
+                meta['og:see_also'] = socialTags.seeAlso;
+            if (socialTags.image) {
+                const image = socialTags.image;
+                meta['g+:image'] = image;
+                meta['og:image'] = image;
+                meta['twitter:image'] = image;
+            }
+            const description = socialTags.description;
+            meta['g+:description'] = description;
+            meta['og:description'] = description;
+            meta['twitter:description'] = description;
+        }
+        try {
+            Object.defineProperty(res, "setSocialTags", {
+                value: setSocialTags
+            });
+        } catch(e) {}
+        try {
+            const writeheader = res.locals.__writeheader = (out: NodeJS.WritableStream) => {
+                if (req.method.toUpperCase() === "GET") {
+                    if (noScript) {
+                        try {
+                            res.cookie("noscript", "true", {expires:new Date(+(new Date) + 3.154e+10)});
+                        } catch(e) {}
+                        const _url = url.parse(req.originalUrl, true);
+                        _url.query = _url.query || {};
+                        out.write('<script>document.cookie=\"noscript=; Path=/; Expires=Thu, 1 Nov 1970 00:00:00 GMT\";location.href = ');
+                        delete _url.query.noscript;
+                        _url.search = "?" + querystring.stringify(_url.query);
+                        if (_url.search == "?") {
+                            _url.search = undefined;
+                            _url.path = _url.pathname;
+                        } else
+                            _url.path = _url.pathname + _url.search;
+                        delete _url.href;
+                        out.write(JSON.stringify(url.format(_url)));
+                        out.write('</script>');
+                    } else {
+                        out.write('<noscript><meta http-equiv="refresh" content="0; url=\'');
+                        const _url = url.parse(req.originalUrl, true);
+                        _url.query = _url.query || {};
+                        _url.query.noscript = "1";
+                        out.write(encodeHTML(url.format(_url), true));
+                        out.write('\'" /></noscript>');
+                    }
+                }
+                
+                const renderoptions = (res.renderoptions || this.renderoptions);
+                const icons = renderoptions.icons;
+                if (icons) {
+                    if (_.isString(icons)) {
+                        const type = req.webp ? "webp" : "png";
+                        iconSizes.forEach(function(size) {
+                            out.write("<link rel=\"icon\" sizes=\"");
+                            out.write("" + size);
+                            out.write("\" type=\"image/");
+                            out.write(type);
+                            out.write("\" href=\"");
+                            out.write(encodeHTML(icons + size + "." + type, true));
+                            out.write("\">");
+                        });
+                    }else
+                        Object.keys(icons).forEach(function(size: string) {
+                            const path = icons[size].toString();
+                            out.write("<link rel=\"icon\" sizes=\"");
+                            out.write(size);
+                            out.write("\" type=\"image/");
+                            const _path = url.parse(path).pathname;
+                            if(/\.png$/i.test(_path))
+                                out.write("png");
+                            else if(/\.jpe?g$/i.test(_path))
+                                out.write("jpeg");
+                            else if(/\.webp$/i.test(_path))
+                                out.write("webp");
+                            else if(/\.gif$/i.test(_path))
+                                out.write("gif");
+                            else
+                                out.write("unknown");
+                            out.write("\" href=\"");
+                            out.write(encodeHTML(path, true));
+                            out.write("\">");
+                        });
+                }
+
+                const extraMeta = res.locals.meta;
+                if (_.isObject(extraMeta))
+                    _.extend(meta, extraMeta);
+                if (meta.description && !socialTagsSet)
+                    setSocialTags(meta as any);
+                Object.keys(meta).forEach(function(key) {
+                    out.write("<meta ");
+                    if (/^og:/.test(key))
+                        out.write("property");
+                    else if (/^g+:/.test(key)) {
+                        key = key.substring(2);
+                        out.write("itemprop");
+                    } else
+                        out.write("name");
+                    out.write("=\"");
+                    out.write(encodeHTML(key, true));
+                    out.write("\" content=\"");
+                    out.write(encodeHTML(meta[key]));
+                    out.write("\" />");
+                });
+                
+                const links = res.locals.links;
+                if (_.isObject(links)) {
+                    try {
+                        res.links(links);
+                    } catch(e) {}
+                    Object.keys(links).forEach(function(link) {
+                        out.write("<link rel=\"");
+                        out.write(encodeHTML(link, true));
+                        out.write("\" href=\"");
+                        out.write(encodeHTML(links[link], true));
+                        out.write("\" />");
+                    });
+                }
+
+                if(useLoader) {
+                    if (!pagesys) {
+                        out.write("<style>");
+                        out.write(overlayCss);
+                        out.write("</style>");
+                    }
+                } else {
+                    const gfontkeys = Object.keys(gfonts);
+                    if(gfontkeys.length) {
+                        out.write("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=");
+                        var first = true;
+                        gfontkeys.forEach(function(font) {
+                            if(first)
+                                first = false;
+                            else
+                                out.write("|");
+                            const styles = gfonts[font];
+                            out.write(encodeURIComponent(font));
+
+                            if (styles.length == 1 && styles[0] == "400")
+                                return;
+
+                            out.write(":");
+                            out.write(styles.join(","));
+                        })
+                        out.write("\">");
+                    }
+                    // TODO: Sort dependencies
+                    styles.forEach(function(style) {
+                        if (style.inline) {
+                            out.write("<style>");
+                            out.write(style.source);
+                            out.write("</style>");
+                        } else {
+                            out.write("<link rel=\"stylesheet\" href=\"");
+                            if(style.version) {
+                                var _url = url.parse(style.source, true);
+                                _url.query = _url.query || {};
+                                _url.query.v = style.version;
+                                style.source = url.format(_url);
+                            }
+                            out.write(encodeHTML(url.format(style.source), true));
+                            out.write("\">");
+                        }
+                    });
+                }
+                headerRenderers.forEach(function(renderer) {
+                    renderer(out);
+                });
+            };
+            Object.defineProperty(res, "writeFooterHtml", {
+                value: function(out?) {
+                    writeheader(out || res);
+                }
+            });
+        } catch(e) {}
+        try {
+            res.locals.bodyclass = "";
+        } catch(e) {}
+        try {
+            res.locals.title = "Title Not Set";
+        } catch(e) {}
+        try {
+            const render = res.render;
+            Object.defineProperty(res, "render", {
+                value: (filename: string, options: any, callback?: (err: Error, html?: string) => void) => {
+                    if (options instanceof Function)
+                        callback = options;
+                    if (this.app.get("view engine") == "nhp") {
+                        var vars = {};
+                        _.extend(vars, res.app.locals);
+                        _.extend(vars, res.locals);
+                        if (options)
+                            _.extend(vars, options);
+                        this.nhp.render(filename, vars, callback);
+                    } else
+                        render.call(res, filename, options, callback);
+                }
+            })
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "sendRender", {
+                configurable: true,
+                value: (filename: string, options: any) => {
+                    if (req.app.get("view engine") == "nhp") {
+                        var vars = {};
+                        _.extend(vars, res.app.locals);
+                        _.extend(vars, res.locals);
+                        if (options)
+                            _.extend(vars, options);
+                        const meta = vars['meta'];
+                        if (_.isObject(meta))
+                            Object.keys(meta).forEach(function(key) {
+                                res.setMetaTag(key, meta[key]);
+                            });
+                        const icons = vars['icons'];
+                        if (_.isArray(icons))
+                            Object.keys(icons).forEach(function(key) {
+                                res.setMetaTag(key, icons[key]);
+                            });
+                        const renderoptions = res.renderoptions || this.renderoptions;
+                        if (pagesys) {
+                            var pagesysskeleton = renderoptions.pagesysskeleton;
+                            if(pagesysskeleton) {
+                                if (_.isString(pagesysskeleton))
+                                    pagesysskeleton = require(pagesysskeleton) as nexusframework.PageSystemSkeleton;
+                                (pagesysskeleton as any as nexusframework.PageSystemSkeleton)(filename, vars, req, res, function(err, data) {
+                                    if (err)
+                                        next(err);
+                                    else if(data)
+                                        res.json(data);
+                                    else
+                                        next(new Error("Server Error: No data passed"));
+                                });
+                                return;
+                            }
+                        }
+
+                        const out = req.io ? res : new BufferingWritable(res);
+                        const callback = function (err?: Error) {
+                            if (err)
+                                next(err);
+                            else
+                                out.end();
+                        };
+                        var skeleton = (legacy && renderoptions.legacyskeleton) || renderoptions.skeleton;
+                        if (!res.get("content-type"))
+                            try {
+                                res.type("text/html; charset=utf-8"); // Default to utf8 html
+                            } catch(e) {}
+                        if(skeleton) {
+                            vars['page'] = filename;
+                            if (_.isString(skeleton))
+                                skeleton = this.nhp.template(skeleton);
+                            skeleton.renderToStream(vars, out, callback);
+                        } else
+                            this.nhp.renderToStream(filename, vars, out, callback);
+                    } else
+                        res.render(filename, options, function (err?: Error, html?: string) {
+                            if (err)
+                                next(err);
+                            else {
+                                var buff = Buffer.from(html, "utf8");
+                                res.writeHead(200, {
+                                    "Content-Length": buff.length
+                                });
+                                if (req.method == "HEAD")
+                                    res.end();
+                                else
+                                    res.end(buff);
+                            }
+                        });
+                }
+            });
+        } catch (e) {}
+        const builtInSendStatus = res.sendStatus.bind(req);
+        const used: {[index: string]: string} = {};
+        try {
+            Object.defineProperty(res, "sendStatus", {
+                configurable: true,
+                value: (code: number, _err?: Error) => {
+                    var st = "" + code;
+                    var handler: string;
+                    const errordoc = (res.renderoptions || this.renderoptions).errordoc;
+                    if ((handler = (errordoc[st] || errordoc["*"])) && used[st] != handler) {
+                        used[st] = handler;
+                        try {
+                            res.locals.errorCode = code;
+                        } catch (e) {}
+                        try {
+                            Object.defineProperty(req, "errorCode", {
+                                configurable: true,
+                                value: code
+                            });
+                        } catch (e) {}
+                        try {
+                            res.locals.error = _err;
+                        } catch (e) {}
+                        try {
+                            Object.defineProperty(req, "error", {
+                                configurable: true,
+                                value: _err
+                            });
+                        } catch (e) {}
+                        res.status(code);
+                        res.addBodyClassName("error-page");
+                        res.addBodyClassName("error-" + code);
+                        req.url = url.resolve("/", handler);
+                        this.handle0(req, res, function (err?: Error) {
+                            if (err)
+                                next(err);
+                            else
+                                builtInSendStatus(code, _err);
+                        });
+                    } else
+                        builtInSendStatus(code, _err);
+                }
+            });
+        } catch (e) {}
+        const builtInSendFailure = res.sendFailure && res.sendFailure.bind(req);
+        try {
+            Object.defineProperty(res, "sendFailure", {
+                configurable: true,
+                value: (_err?: Error) => {
+                    var handler: string;
+                    const errordoc = (res.renderoptions || this.renderoptions).errordoc;
+                    if ((handler = (errordoc["500"] || errordoc["*"])) && used["500"] != handler) {
+                        used["500"] = handler;
+                        handler = upath.join("/", handler);
+                        try {
+                            Object.defineProperty(req, "errorCode", {
+                                configurable: true,
+                                value: 500
+                            });
+                        } catch (e) {}
+                        try {
+                            res.locals.errorCode = 500;
+                        } catch (e) {}
+                        try {
+                            Object.defineProperty(req, "error", {
+                                configurable: true,
+                                value: _err
+                            });
+                        } catch (e) {}
+                        try {
+                            res.locals.error = _err;
+                        } catch (e) {}
+                        res.status(500);
+                        res.addBodyClassName("error-page");
+                        res.addBodyClassName("error-500");
+                        req.url = url.resolve("/", handler);
+                        this.handle0(req, res, function (err?: Error) {
+                            if (err)
+                                next(err);
+                            else
+                                builtInSendFailure(_err);
+                        });
+                    } else
+                        builtInSendStatus(_err);
+                }
+            });
+        } catch (e) {}
+        next();
+    }
    
-    private nexusforkUpgrade(req: express.Request, res: express.Response) {
+    static nexusforkUpgrade(req: express.Request, res: express.Response) {
         try {
             Object.defineProperty(req, "services", {
                 value: {
@@ -2379,61 +2835,46 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * Express compatible handler
      */
-    public __express(req: express.Request, res: express.Response, next: express.NextFunction) {
-        this.nexusforkUpgrade(req, res);
+    __express(req: express.Request, res: express.Response, next: express.NextFunction) {
+        NexusFramework.nexusforkUpgrade(req, res);
         this.handle(req as any, res as any, next);
     }
-    private expressUpgrade(req: http.IncomingMessage, res: http.ServerResponse) {
-        req['res'] = res;
-        req['app'] = this.app;
-        req['is'] = express_req.is;
-        req['get'] = express_req.get;
-        req['originalUrl'] = req.url;
-        req['range'] = express_req.range;
-        req['param'] = express_req.param;
-        req['header'] = express_req.header;
-        req['accepts'] = express_req.accepts;
-        req['acceptsCharsets'] = express_req.acceptsCharsets;
-        req['acceptsEncodings'] = express_req.acceptsEncodings;
-        req['acceptsLanguages'] = express_req.acceptsLanguages;
-        Object.defineProperty(req, "ip", Object.getOwnPropertyDescriptor(express_req, "ip"));
-        Object.defineProperty(req, "ips", Object.getOwnPropertyDescriptor(express_req, "ips"));
-        Object.defineProperty(req, "host", Object.getOwnPropertyDescriptor(express_req, "host"));
-        Object.defineProperty(req, "hostname", Object.getOwnPropertyDescriptor(express_req, "hostname"));
-        Object.defineProperty(req, "subdomains", Object.getOwnPropertyDescriptor(express_req, "subdomains"));
-        res['req'] = req;
-        res['app'] = this.app;
-        res['vary'] = express_res.vary;
-        res['status'] = express_res.status;
-        res['sendStatus'] = express_res.sendStatus;
-        res['contentType'] = express_res.contentType;
-        res['clearCookie'] = express_res.clearCookie;
-        res['redirect'] = express_res.redirect;
-        res['location'] = express_res.location;
-        res['cookie'] = express_res.cookie;
-        res['format'] = express_res.format;
-        res['header'] = express_res.header;
-        res['jsonp'] = express_res.jsonp;
-        res['links'] = express_res.links;
-        res['send'] = express_res.send;
-        res['type'] = express_res.type;
-        res['append'] = express_res['append'];
-        res['set'] = express_res.set;
-        res['get'] = express_res.get;
-        res['attachment'] = notSupported;
-        res['sendfile'] = notSupported;
-        res['sendFile'] = notSupported;
-        res['download'] = notSupported;
+    static expressUpgradeRequest(req: http.IncomingMessage, onPrototype = false) {
+        if (!onPrototype)
+            req['originalUrl'] = req['originalUrl'] || req.url;
+        express_req_install(req);
+    }
+    static expressUpgradeResponse(res: http.ServerResponse, onPrototype = false) {
+        if (!onPrototype)
+            res['locals'] = res['locals'] || {};
+        express_res_install(res);
+    }
+    static expressUpgrade(req: http.IncomingMessage, res: http.ServerResponse, onPrototype = false) {
+        NexusFramework.expressUpgradeRequest(req, onPrototype);
+        NexusFramework.expressUpgradeResponse(res, onPrototype);
     }
     /**
      * HTTP compatible handler
      */
-    public __http(req: http.IncomingMessage, res: http.ServerResponse, next: express.NextFunction) {
-        this.expressUpgrade(req, res);
+    __http(req: http.IncomingMessage, res: http.ServerResponse, next: express.NextFunction) {
+        NexusFramework.expressUpgrade(req, res);
+        res['app'] = this.app;
+        req['app'] = this.app;
+        res['req'] = req;
+        req['res'] = res;
         this.__express(req as any, res as any, next);
     }
     
-    public close(cb?: Function) {
+    close(cb?: Function) {
         this.server.close(cb);
     }
+    
+    isIOSetup() {
+        return !!this.io;
+    }
 }
+NexusFramework.prototype.use = NexusFramework.prototype.pushMiddleware;
+
+const json = SocketIOResponse.prototype.json;
+NexusFramework.expressUpgrade(SocketIORequest.prototype, SocketIOResponse.prototype, true);
+SocketIOResponse.prototype.json = json;

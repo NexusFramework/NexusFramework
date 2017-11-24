@@ -12,41 +12,103 @@ declare module nexusframework {
         JSONBody
     }
     export interface User {
+        isGuest?: boolean;
         isAdmin?: boolean;
         isEditor?: boolean;
         isModerator?: boolean;
+        isDeveloper?: boolean;
+        isOwner?: boolean;
+        level?: number;
         
         id?: string | number;
         displayName?: string;
         email?: string;
         
-        resolveAvatar?(size: number, cb: (err: Error, avatarUrl?: string) => void): void;
+        /**
+         * Return an avatar at or above the requested size.
+         */
+        avatar?(size: number, cb: (err: Error, avatarUrl?: string) => void): void;
+        /**
+         * Check for a specific permission.
+         */
+        permission?(perm: string, cb: (err: Error, hasPermission?: boolean) => void): void;
+        /**
+         * Write meta data.
+         */
+        writeMeta?(key: string, value: any, cb: (err: Error) => void): void;
+        /**
+         * Read meta data.
+         */
+        readMeta?(key: string, cb: (err: Error, data?: any) => void): void;
         
         [key: string]: any;
     }
+    export interface StaticMountOptions {
+        autoIndex?: boolean;
+        mutable?: boolean;
+    }
+    export interface RenderOptions {
+        /**
+         * The root path.
+         */
+        root?: string;
+        
+        /**
+         * The NHP skeleton to use for this mount, relative to the root path (if set).
+         */
+        skeleton?: string | Template;
+        /**
+         * The page system skeleton to use for this mount, relative to the root path (if set).
+         */
+        pagesysskeleton?: string | nexusframework.PageSystemSkeleton;
+        /**
+         * The legacy NHP skeleton to use for this mount, relative to the root path (if set).
+         */
+        legacyskeleton?: string | Template;
+        
+        /**
+         * Paths to error documents, relative to the pages of this mount.
+         */
+        errordoc?: {[index: string]: string};
+        
+        /**
+         * Paths to icons.
+         */
+        icons?: {[index: string]: string | URL};
+    }
+    export interface ImageResizerOptions {
+        square?: boolean;
+        notransparency?: boolean;
+        sizes?: number[] | number[][];
+        diskcache?: string;
+    }
+    export interface MountOptions extends RenderOptions {
+        /**
+         * The path to icon to use in all required sizes, relative to the root path (if set).
+         */
+        iconfile?: string;
+        
+        /**
+         * If true, the path will be mounted with filesystem changes applied as they're detected.
+         */
+        mutable?: boolean;
+    }
+    export type FunctionOrString = string | Function;
+    export type FunctionOrStringOrEitherWithData = FunctionOrString | {impl: FunctionOrString, data: any};
     export interface PageSystemSkeleton {
         (template: string, options: any, req: Request, res: Response, next: (err: Error, data?: any) => void): void;
     }
-    export type UA = Agent & Details & {bot?: boolean, es6?: boolean, legacy?: boolean};
+    export type UserAgentDetails = Agent & Details & {es6?: boolean, legacy?: boolean};
     export interface Request extends nexusfork.WebRequest {
         /**
          * The user, if any;
          */
-         user?: User;
+        user?: User;
         /**
          * Information about the seragent of the request.
          * Provided by seragent.
          */
-        useragent?: UA;
-        /**
-         * The current NHP skeleton.
-         */
-        skeleton?: Template;
-        /**
-         * The current legacy NHP skeleton.
-         */
-        legacyskeleton?: Template;
-        pagesysskeleton?: PageSystemSkeleton;
+        useragent?: UserAgentDetails;
         /**
          * The NexusFramework instance.
          */
@@ -64,13 +126,21 @@ declare module nexusframework {
          */
         match?: RegExpMatchArray;
         /**
+         * The current mount.
+         */
+        mount?: RequestHandlerEntry;
+        /**
          * True when requested through the Page System API.
          */
         pagesys?: boolean;
         /**
-         * The associated Socket.IO Socket, if requested through the page API.
+         * The associated Socket.IO Socket, if requested through the page API and using Socket.IO.
          */
         io?: SocketIO.Socket;
+        /**
+         * Whether or not the client accepts webp.
+         */
+        webp?: boolean;
         /**
          * True if this request is either .xhr or .io.
          */
@@ -78,14 +148,53 @@ declare module nexusframework {
         /**
          * Process the request body.
          * By default all processors are usable, and the processor chosen is determined by the request content-type header.
+         * 
+         * @param cb The callback
+         * @param processors The processors, all by default
          */
         processBody(cb: (err?: Error) => void, ...processors: BodyProcessor[]): Request;
-        readBody(cb: (err: Error, data?: string) => void, limit?: number): void;
+        /**
+         * Read the request body to a Buffer.
+         */
+        readBody(cb: (err: Error, data?: Buffer) => void, limit?: number): void;
     }
     export interface Renderer {
         (out: {write: (data: string) => void},flush?:() => void): void
     }
+    export interface SocialTags {
+        /**
+         * The url of the page, will use the request to build this as a fallback when available
+         */
+        url?: string | URL;
+        /**
+         * The title of the page, will use res.locals.title as a fallback when available
+         */
+        title?: string;
+        /**
+         * The title of the site.
+         */
+        siteTitle?: string;
+        /**
+         * The url to an image to display for this page.
+         */
+        image?: string | URL;
+        /**
+         * The url to a relevant page.
+         */
+        seeAlso?: string | URL;
+        /**
+         * The description of this page.
+         */
+        description: string;
+        /**
+         * The type of twitter card, will use summary by default
+         */
+        twitterCard?: string;
+        
+    }
     export interface Response extends nexusfork.WebResponse {
+        renderoptions?: RenderOptions;
+        
         /**
          * Render a page using a template engine and serve it.
          * This method will use the skeleton if available, `render` will not.
@@ -93,7 +202,16 @@ declare module nexusframework {
          * @param filename The absolute path to a file to render, or template source
          * @param options The variables to use for rendering
          */
-        sendRender(filename: string, options?: any): Response;
+        sendRender(filename: string, locals?: any): Response;
+        
+        /**
+         * Replace the render options for this response.
+         */
+        setRenderOptions(options: RenderOptions): void;
+        /**
+         * Oerride the render options for this response.
+         */
+        applyRenderOptions(options: RenderOptions): void;
         
         /**
          * Enable the NexusFramework Loader to the script queue, and defer all scripts and styles,
@@ -105,6 +223,8 @@ declare module nexusframework {
          * Set a meta tag in the header html.
          */
         setMetaTag(name: string, content?: string): void;
+        setSocialTags(info: SocialTags): void;
+        
         /**
          * Add a style to the style queue.
          */
@@ -181,6 +301,9 @@ declare module nexusframework {
     export interface RequestHandler {
         (req: Request, res: Response, next: (err?: Error) => void): void;
     }
+    export interface IORequestHandler {
+        (io: SocketIO.Socket, next: (err?: Error) => void): void;
+    }
     export interface NHPRequestHandler {
         (req: Request, res: Response, next: (err?: Error, renderLocals?: any) => void): void;
     }
@@ -216,6 +339,7 @@ declare module nexusframework {
         [index: number]: RecursivePath | string;
     }
     interface RequestHandlerEntry {
+        readonly leaf?: boolean;
         handle: RequestHandler;
         
         /**
@@ -302,7 +426,7 @@ declare module nexusframework {
         readonly pattern: RegExp;
         readonly rawPattern: string;
     }
-    export interface Mount {
+    export interface Mount extends MountOptions {
         /**
          * The filesystem path.
          */
@@ -311,25 +435,8 @@ declare module nexusframework {
          * The web path.
          */
         webpath: string;
-        /**
-         * The skeleton path, if set will override the global skeleton.
-         */
-        skeleton?: string;
-        /**
-         * The legacy skeleton path, if set will override the global skeleton.
-         */
-        legacyskeleton?: string;
-        /**
-         * Whether or not the fspath should be watched for changes.
-         */
-        mutable?: boolean;
     }
-    export interface Config {
-        /**
-         * The root path.
-         * Must be set to create a mount in the legacy way.
-         */
-        root?: string;
+    export interface Config extends MountOptions {
         /**
          * The pages path, relative to the root path.
          * Default "pages"
@@ -340,24 +447,6 @@ declare module nexusframework {
          * Default "/"
          */
         prefix?: string;
-        /**
-         * The path to the skeleton file, relative to the root path.
-         * Default "theme/skeleton.nhp"
-         */
-        skeleton?: string;
-        /**
-         * The path to the page system skeleton script, relative to the root path.
-         */
-        pagesysskeleton?: string;
-        /**
-         * The path to the legacy skeleton file, relative to the root path.
-         * Default to a Browser Not Supported message.
-         */
-        legacyskeleton?: string;
-        /**
-         * Paths to error documents, relative to the pages path
-         */
-        errordoc?: {[index: string]: string};
         /**
          * When true, the loader will not be enabled for compatible browsers.
          * The loader is required for the dynamic page system.
