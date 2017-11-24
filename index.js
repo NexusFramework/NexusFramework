@@ -14,10 +14,8 @@ const _export = function (config, logger, server, app) {
     const instance = new nexusframework_1.NexusFramework(app, server, logger, config.prefix);
     if (!config.nologging)
         instance.enableLogging();
-    if (config.root) {
-        instance.setupTemplate(config.root);
-        instance.mount("/", config);
-    }
+    if (config.root)
+        instance.mount("/", config.pages || "pages", config);
     if (config.skeleton)
         instance.setSkeleton(config.skeleton);
     if (config.legacyskeleton)

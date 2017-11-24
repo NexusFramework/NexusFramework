@@ -2349,9 +2349,9 @@ class NexusFramework extends events.EventEmitter {
             if (socialTags.siteTitle)
                 meta['og:site_name'] = socialTags.siteTitle;
             if (socialTags.seeAlso)
-                meta['og:see_also'] = socialTags.seeAlso;
+                meta['og:see_also'] = socialTags.seeAlso.toString();
             if (socialTags.image) {
-                const image = socialTags.image;
+                const image = socialTags.image.toString();
                 meta['g+:image'] = image;
                 meta['og:image'] = image;
                 meta['twitter:image'] = image;
