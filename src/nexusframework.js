@@ -10,7 +10,6 @@ const lrucache = require("lru-cache");
 const statuses = require("statuses");
 const chokidar = require("chokidar");
 const express = require("express");
-const crypto = require("crypto");
 const events = require("events");
 const stream = require("stream");
 const multer = require("multer");
@@ -31,30 +30,28 @@ var socket_io_slim_integrity;
 const sckclpkgjson = require("socket.io-client/package.json");
 if (has_slim_io_js) {
     socket_io_slim_path = ":scripts/socket.io.slim.js?v=" + sckclpkgjson.version;
-    try {
+    /*try {
         const hash = crypto.createHash("sha384");
         hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
         socket_io_slim_integrity = "sha384-" + hash.digest("base64");
-    }
-    catch (e) {
+    } catch(e) {
         console.warn(e);
-    }
+    }*/
 }
 else
     socket_io_slim_path = ":io/socket.io.js";
 var nexusframeworkclient_es5_integrity;
 var nexusframeworkclient_es6_integrity;
-try {
+/*try {
     let hash = crypto.createHash("sha384");
     hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es5/nexusframework.min.js"), "utf8"));
     nexusframeworkclient_es5_integrity = "sha384-" + hash.digest("base64");
     hash = crypto.createHash("sha384");
     hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es6/nexusframework.min.js"), "utf8"));
     nexusframeworkclient_es6_integrity = "sha384-" + hash.digest("base64");
-}
-catch (e) {
+} catch(e) {
     console.warn(e);
-}
+}*/
 const uacache = lrucache();
 const namecache = lrucache();
 const padLeft = function (data, count = 8, using = "0") {
@@ -1179,6 +1176,15 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                         _.extend(renderoptions, req.nexusframework['renderoptions']);
                         _.extend(renderoptions, this.options);
                         res.locals.__includeroot = renderoptions.root;
+                        if (renderoptions.locals) {
+                            const _next = next;
+                            const clocals = _.cloneDeep(res.locals);
+                            next = function (err) {
+                                res.locals = clocals;
+                                _next(err);
+                            };
+                            _.merge(res.locals, renderoptions.locals);
+                        }
                         const hasResources = renderoptions.scripts || renderoptions.styles || renderoptions.fonts;
                         if (hasResources) {
                             const _next = next;

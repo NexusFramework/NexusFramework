@@ -72,10 +72,6 @@ it("create and configure", function (cb) {
     framework.mount("/mutable", path.resolve(__dirname, "mutable"), { mutable: true });
     framework.mountScripts();
     framework.mountAbout();
-    framework.use(function (req, res, next) {
-        res.locals.progressContainerHead = '<div class="loader-progress-heading">NexusFramework Test<br /><small>Loading Please Wait</small></div>';
-        next();
-    });
     framework.setErrorDocument("*", "errdoc");
     iopath = framework.setupIO();
     app.use(function (req, res, next) {

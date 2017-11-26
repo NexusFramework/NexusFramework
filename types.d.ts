@@ -86,6 +86,8 @@ declare module nexusframework {
         scripts?: Resource[];
         styles?: Resource[];
         
+        locals?: Object;
+        
         /**
          * Paths to icons.
          */
