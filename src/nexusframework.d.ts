@@ -58,7 +58,7 @@ export declare class NexusFramework extends events.EventEmitter {
     private header;
     private loaderEnabled;
     private logging;
-    constructor(app?: Application, server?: http.Server, logger?: nulllogger.INullLogger, prefix?: string);
+    constructor(app?: Application, server?: http.Server, logger?: nulllogger.INullLogger, prefix?: string, nhpoptions?: Object);
     enableLoader(): void;
     disableLoader(): void;
     enableSignedCookies(secret: any): void;

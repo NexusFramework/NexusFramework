@@ -889,7 +889,6 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
     }
     handle0square(reg, req, res, next) {
         var match = req.path.match(reg);
-        req.logger.info(reg, req.path, match);
         if (match) {
             const size = parseInt(match[1]);
             if (this.canHandleSize(size))
@@ -1213,19 +1212,12 @@ class FSWatcherRequestChildHandler extends FSWatcherRequestHandler {
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
-class Mount {
-    constructor(baseUrl) {
-        this.baseUrl = baseUrl;
-    }
-    handle(req, res, next) {
-    }
-}
 class NexusFramework extends events.EventEmitter {
-    constructor(app = express(), server, logger = new nulllogger("NexusFramework"), prefix = "/") {
+    constructor(app = express(), server, logger = new nulllogger("NexusFramework"), prefix = "/", nhpoptions = {}) {
         super();
         if (!server)
             server = new http.Server(app);
-        const _nhp = new nhp();
+        const _nhp = new nhp({}, nhpoptions);
         Object.defineProperties(this, {
             app: {
                 value: app
@@ -1272,20 +1264,20 @@ class NexusFramework extends events.EventEmitter {
             }
         });
         const Custom = nhp.Instructions.Custom;
-        const genFooterInstruction = new Custom(undefined, function () {
-            return "try{__writefooter(__out);}catch(e){__out.write(__error(e));};__next();";
+        const genFooterInstruction = new Custom(function () {
+            return "try{__writefooter(__out)}catch(e){__out.write(__error(e))}";
         });
         this.nhp.installProcessor("footer", function () {
             return genFooterInstruction;
         });
-        const genHeaderInstruction = new Custom(undefined, function () {
-            return "try{__writeheader(__out);}catch(e){__out.write(__error(e));};__next();";
+        const genHeaderInstruction = new Custom(function () {
+            return "try{__writeheader(__out)}catch(e){__out.write(__error(e))}";
         });
         this.nhp.installProcessor("header", function () {
             return genHeaderInstruction;
         });
-        const genAfterBodyInstruction = new Custom(undefined, function () {
-            return "try{__writeafterbody(__out);}catch(e){__out.write(__error(e));};__next();";
+        const genAfterBodyInstruction = new Custom(function () {
+            return "try{__writeafterbody(__out)}catch(e){__out.write(__error(e))}";
         });
         this.nhp.installProcessor("afterbody", function () {
             return genAfterBodyInstruction;
@@ -1669,20 +1661,26 @@ class NexusFramework extends events.EventEmitter {
             this.cookieParser(req, res, (err) => {
                 if (err)
                     return next(err);
+                try {
+                    Object.defineProperty(req, "logger", {
+                        configurable: true,
+                        value: (req.logger || this.logger).extend(req.path)
+                    });
+                }
+                catch (e) { }
                 async.eachSeries(this.stack, function (entry, cb) {
                     entry(req, res, cb);
                 }, (err) => {
-                    const user = req.user;
-                    const userName = user ? ("`" + (user.displayName || user.email || user.id || "Logged") + "`") : "Guest";
                     const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
                     if (err) {
                         if (this.logging)
-                            req.logger.warn(req.method, req.ip || "`Unknown IP`", userName, "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
+                            req.logger.warn(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
                         next(err);
                     }
                     else {
                         if (this.logging)
-                            req.logger.info(req.method, req.ip || "`Unknown IP`", userName, "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                            req.logger.info(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                        const user = req.user;
                         if (user) {
                             const id = user.id || user.email || user.displayName || "Logged";
                             res.set("X-User", "" + id);
@@ -1744,12 +1742,21 @@ class NexusFramework extends events.EventEmitter {
     }
     upgrade(req, res, next) {
         try {
+            var userName;
+            const user = req.user;
+            if (user && !user.isGuest) {
+                userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.email || user.id || "Logged");
+            }
+            else
+                userName = "Guest";
             Object.defineProperty(req, "logger", {
                 configurable: true,
-                value: this.logger.extend(req.path)
+                value: (req.logger || this.logger.extend(req.path)).extend(userName)
             });
         }
-        catch (e) { }
+        catch (e) {
+            console.log(e);
+        }
         try {
             Object.defineProperty(req, "matches", {
                 configurable: true,
@@ -2189,7 +2196,9 @@ class NexusFramework extends events.EventEmitter {
                 });
                 if (useLoader) {
                     const locals = res.locals;
-                    locals.progressContainerHead = locals.progressContainerHead || "<img width='128' height='128' src='/favicon.ico' />";
+                    locals.errorContainerHead = locals.errorContainerHead || "";
+                    locals.errorContainerFoot = locals.errorContainerFoot || "";
+                    locals.progressContainerHead = locals.progressContainerHead || "";
                     locals.progressContainerFoot = locals.progressContainerFoot || "";
                     locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
                     locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";

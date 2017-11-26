@@ -216,11 +216,41 @@ Object.defineProperties(window, {
             });
         },
         get: function () {
-            var NOOP = function () { };
-            var NULL_ANALYTICS = {
-                reportError: NOOP,
-                reportEvent: NOOP,
-                reportPage: NOOP
+            var GA_ANALYTICS = {
+                reportError: function (err, fatal) {
+                    try {
+                        window.ga('send', 'exception', {
+                            'exDescription': (err.stack || "" + err).replace(/\n/g, "\n\t"),
+                            'exFatal': fatal
+                        });
+                    }
+                    catch (e) {
+                        console.warn(e);
+                    }
+                },
+                reportEvent: function (category, action, label, value) {
+                    try {
+                        window.ga('send', 'event', category, action, label, value);
+                    }
+                    catch (e) {
+                        console.warn(e);
+                    }
+                },
+                reportPage: function (title, path) {
+                    try {
+                        if (!path)
+                            path = location.href;
+                        if (!title)
+                            title = document.title;
+                        window.ga('send', 'pageview', path, {
+                            page: path,
+                            title: title
+                        });
+                    }
+                    catch (e) {
+                        console.warn(e);
+                    }
+                }
             };
             var r = document.createElement("a");
             var protocol = location.href.match(/^\w+:/)[0];
@@ -314,41 +344,7 @@ Object.defineProperties(window, {
                             value: url
                         }
                     });
-                    if (window.ga)
-                        this._analytics = {
-                            reportError: function (err, fatal) {
-                                try {
-                                    window.ga('send', 'exception', {
-                                        'exDescription': "" + err + "\n\t" + (err.stack || "Stack trace not available").replace(/\n/g, "\n\t"),
-                                        'exFatal': true
-                                    });
-                                }
-                                catch (e) {
-                                    console.warn(e);
-                                }
-                            },
-                            reportEvent: function (category, action, label, value) {
-                                try {
-                                    window.ga('send', 'event', category, action, label, value);
-                                }
-                                catch (e) {
-                                    console.warn(e);
-                                }
-                            },
-                            reportPage: function (path, title) {
-                                try {
-                                    window.ga('send', 'pageview', path, {
-                                        page: path,
-                                        title: title
-                                    });
-                                }
-                                catch (e) {
-                                    console.warn(e);
-                                }
-                            }
-                        };
-                    else
-                        this._analytics = NULL_ANALYTICS;
+                    this._analytics = GA_ANALYTICS;
                 }
                 NexusFrameworkBase.prototype.resolveUrl = function (url) {
                     if (/^\w+\:/.test(url))
@@ -476,7 +472,7 @@ Object.defineProperties(window, {
                         return this._analytics;
                     },
                     set: function (value) {
-                        this._analytics = value ? value : NULL_ANALYTICS;
+                        this._analytics = value ? value : GA_ANALYTICS;
                     },
                     enumerable: true,
                     configurable: true
@@ -659,7 +655,7 @@ Object.defineProperties(window, {
                     opts = opts || {};
                     var self = this;
                     var currentResponse;
-                    var wrapCBUserExtract = function (cb) {
+                    var wrapCB = function (cb) {
                         return function (res) {
                             var user = res.headers['x-user'];
                             if (user)
@@ -667,6 +663,10 @@ Object.defineProperties(window, {
                             else
                                 _this.currentUserID = undefined;
                             cb(res);
+                            if (res.code === 200)
+                                setTimeout(function () {
+                                    _this._analytics.reportPage();
+                                });
                         };
                     };
                     var transportPageSystem = {
@@ -690,9 +690,9 @@ Object.defineProperties(window, {
                                 });
                             };
                             if (post)
-                                window.NexusFrameworkTransport.post(url, post, wrapCBUserExtract(_cb), extraHeaders);
+                                window.NexusFrameworkTransport.post(url, post, wrapCB(_cb), extraHeaders);
                             else
-                                window.NexusFrameworkTransport.get(url, wrapCBUserExtract(_cb), extraHeaders);
+                                window.NexusFrameworkTransport.get(url, wrapCB(_cb), extraHeaders);
                         }
                     };
                     if (!opts.noio && this.io) {
@@ -729,7 +729,7 @@ Object.defineProperties(window, {
                                                 self.enableAll();
                                             });
                                         };
-                                        wrapCBUserExtract(_cb)(convertResponse(res, self.resolveUrl(path)));
+                                        wrapCB(_cb)(convertResponse(res, self.resolveUrl(path)));
                                     });
                                 }
                                 else

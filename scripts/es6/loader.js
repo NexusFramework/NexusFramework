@@ -196,7 +196,7 @@
                             callCallbacks();
                         };
                         scriptel.onerror = function () {
-                            callCallbacks(new Error("Failed to load " + source));
+                            callCallbacks(new Error("Failed to load resource: " + source));
                         };
                         scriptel.src = url;
                         d.body.appendChild(scriptel);
@@ -212,7 +212,7 @@
                             callCallbacks();
                         };
                         linkel.onerror = function () {
-                            callCallbacks(new Error("Failed to load " + source));
+                            callCallbacks(new Error("Failed to load resource: " + source));
                         };
                         linkel.href = url;
                         d.body.appendChild(linkel);
@@ -285,15 +285,15 @@
                             cb(err);
                         });
                         (loadCallbacks[key] = []).push = function (...items) {
-                            items.forEach(function (cb) {
+                            Array.prototype.forEach.call(items, function (cb) {
                                 cb(err);
                             });
                             return 0;
                         };
                     };
-                    if (!name.indexOf("/"))
-                        return callCallbacks(new Error("`" + name + "` is required but was not included before this script."));
                     callbacks = loadCallbacks[key] = [onLoad];
+                    if (inlineOrVersion !== true && source.indexOf("/") == -1)
+                        return callCallbacks(new Error(type[0].toUpperCase() + type.substring(1) + " `" + name + "` is required, but not included."));
                     if (deps.length) {
                         var toLoad = deps.length;
                         deps.forEach(function (dep) {

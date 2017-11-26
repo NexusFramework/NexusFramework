@@ -146,14 +146,6 @@ const createInstall = function(proto: any) {
 const express_req_install = createInstall(express_req);
 const express_res_install = createInstall(express_res);
 
-function encodeHTML(html: string, attr: boolean = false) {
-    html = html.replace(/</g, "&lt;");
-    html = html.replace(/>/g, "&gt;");
-    if (attr)
-        return html.replace(/"/g, "&quot;");
-    return html;
-}
-
 class SocketIORequest extends events.EventEmitter implements express.Request{
     socket: any;
     cookies: any;
@@ -991,7 +983,6 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
     }
     private handle0square(reg: RegExp, req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
         var match = req.path.match(reg);
-        req.logger.info(reg, req.path, match);
         if (match) {
             const size = parseInt(match[1]);
             if (this.canHandleSize(size))
@@ -1331,16 +1322,6 @@ interface Resource {
     deps: string[];
 }
 
-class Mount {
-    baseUrl: string;
-    constructor(baseUrl: string) {
-        this.baseUrl = baseUrl;
-    }
-    handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
-        
-    }
-}
-
 export class NexusFramework extends events.EventEmitter {
     readonly nhp: nhp;
     readonly prefix: string;
@@ -1358,11 +1339,11 @@ export class NexusFramework extends events.EventEmitter {
     private header: nexusframework.Renderer[];
     private loaderEnabled: boolean;
     private logging: boolean;
-    constructor(app: Application = express(), server?: http.Server, logger: nulllogger.INullLogger = new nulllogger("NexusFramework"), prefix = "/") {
+    constructor(app: Application = express(), server?: http.Server, logger: nulllogger.INullLogger = new nulllogger("NexusFramework"), prefix = "/", nhpoptions: Object = {}) {
         super();
         if (!server)
             server = new http.Server(app);
-        const _nhp = new nhp();
+        const _nhp = new nhp({}, nhpoptions);
         Object.defineProperties(this, {
             app: {
                 value: app
@@ -1409,20 +1390,20 @@ export class NexusFramework extends events.EventEmitter {
             }
         });
         const Custom = nhp.Instructions.Custom;
-        const genFooterInstruction = new Custom(undefined, function() {
-            return "try{__writefooter(__out);}catch(e){__out.write(__error(e));};__next();";
+        const genFooterInstruction = new Custom(function() {
+            return "try{__writefooter(__out)}catch(e){__out.write(__error(e))}";
         });
         this.nhp.installProcessor("footer", function() {
             return genFooterInstruction;
         });
-        const genHeaderInstruction = new Custom(undefined, function() {
-            return "try{__writeheader(__out);}catch(e){__out.write(__error(e));};__next();";
+        const genHeaderInstruction = new Custom(function() {
+            return "try{__writeheader(__out)}catch(e){__out.write(__error(e))}";
         });
         this.nhp.installProcessor("header", function() {
             return genHeaderInstruction;
         });
-        const genAfterBodyInstruction = new Custom(undefined, function() {
-            return "try{__writeafterbody(__out);}catch(e){__out.write(__error(e));};__next();";
+        const genAfterBodyInstruction = new Custom(function() {
+            return "try{__writeafterbody(__out)}catch(e){__out.write(__error(e))}";
         });
         this.nhp.installProcessor("afterbody", function() {
             return genAfterBodyInstruction;
@@ -1802,20 +1783,25 @@ export class NexusFramework extends events.EventEmitter {
                 if (err)
                     return next(err);
                     
+                try {
+                    Object.defineProperty(req, "logger", {
+                        configurable: true,
+                        value: (req.logger || this.logger).extend(req.path)
+                    });
+                } catch(e) {}
                 
                 async.eachSeries(this.stack, function(entry, cb) {
                     entry(req, res, cb);
                 }, (err: Error) => {
-                    const user = req.user;
-                    const userName = user ? ("`" + (user.displayName || user.email || user.id || "Logged") + "`") : "Guest";
                     const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
                     if(err) {
                         if (this.logging)
-                            req.logger.warn(req.method, req.ip || "`Unknown IP`", userName, "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
+                            req.logger.warn(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
                         next(err);
                     } else {
                         if (this.logging) 
-                            req.logger.info(req.method, req.ip || "`Unknown IP`", userName, "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                            req.logger.info(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                        const user = req.user;
                         if (user) {
                             const id = user.id || user.email || user.displayName || "Logged";
                             res.set("X-User", "" + id);
@@ -1884,11 +1870,19 @@ export class NexusFramework extends events.EventEmitter {
     
     upgrade(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
         try {
+            var userName: string;
+            const user = req.user;
+            if (user && !user.isGuest) {
+                userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.email || user.id || "Logged");
+            } else
+                userName = "Guest";
             Object.defineProperty(req, "logger", {
                 configurable: true,
-                value: this.logger.extend(req.path)
+                value: (req.logger || this.logger.extend(req.path)).extend(userName)
             });
-        } catch (e) {}
+        } catch (e) {
+            console.log(e);
+        }
         try {
             Object.defineProperty(req, "matches", {
                 configurable: true,
@@ -2293,7 +2287,9 @@ export class NexusFramework extends events.EventEmitter {
                 });
                 if (useLoader) {
                     const locals = res.locals;
-                    locals.progressContainerHead = locals.progressContainerHead || "<img width='128' height='128' src='/favicon.ico' />";
+                    locals.errorContainerHead = locals.errorContainerHead || "";
+                    locals.errorContainerFoot = locals.errorContainerFoot || "";
+                    locals.progressContainerHead = locals.progressContainerHead || "";
                     locals.progressContainerFoot = locals.progressContainerFoot || "";
                     locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
                     locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
@@ -2408,7 +2404,7 @@ export class NexusFramework extends events.EventEmitter {
                                     _url.query.v = script.version;
                                     script.source = url.format(_url);
                                 }
-                                out.write(encodeHTML(url.format(script.source), true));
+                                out.write(Template.encodeHTML(url.format(script.source), true));
                                 out.write("\"></script>");
                             }
                         });
@@ -2495,7 +2491,7 @@ export class NexusFramework extends events.EventEmitter {
                         const _url = url.parse(req.originalUrl, true);
                         _url.query = _url.query || {};
                         _url.query.noscript = "1";
-                        out.write(encodeHTML(url.format(_url), true));
+                        out.write(Template.encodeHTML(url.format(_url), true));
                         out.write('\'" /></noscript>');
                     }
                 }
@@ -2511,7 +2507,7 @@ export class NexusFramework extends events.EventEmitter {
                             out.write("\" type=\"image/");
                             out.write(type);
                             out.write("\" href=\"");
-                            out.write(encodeHTML(icons + size + "." + type, true));
+                            out.write(Template.encodeHTML(icons + size + "." + type, true));
                             out.write("\">");
                         });
                     }else
@@ -2532,7 +2528,7 @@ export class NexusFramework extends events.EventEmitter {
                             else
                                 out.write("unknown");
                             out.write("\" href=\"");
-                            out.write(encodeHTML(path, true));
+                            out.write(Template.encodeHTML(path, true));
                             out.write("\">");
                         });
                 }
@@ -2552,9 +2548,9 @@ export class NexusFramework extends events.EventEmitter {
                     } else
                         out.write("name");
                     out.write("=\"");
-                    out.write(encodeHTML(key, true));
+                    out.write(Template.encodeHTML(key, true));
                     out.write("\" content=\"");
-                    out.write(encodeHTML(meta[key]));
+                    out.write(Template.encodeHTML(meta[key]));
                     out.write("\" />");
                 });
                 
@@ -2565,9 +2561,9 @@ export class NexusFramework extends events.EventEmitter {
                     } catch(e) {}
                     Object.keys(links).forEach(function(link) {
                         out.write("<link rel=\"");
-                        out.write(encodeHTML(link, true));
+                        out.write(Template.encodeHTML(link, true));
                         out.write("\" href=\"");
-                        out.write(encodeHTML(links[link], true));
+                        out.write(Template.encodeHTML(links[link], true));
                         out.write("\" />");
                     });
                 }
@@ -2613,7 +2609,7 @@ export class NexusFramework extends events.EventEmitter {
                                 _url.query.v = style.version;
                                 style.source = url.format(_url);
                             }
-                            out.write(encodeHTML(url.format(style.source), true));
+                            out.write(Template.encodeHTML(url.format(style.source), true));
                             out.write("\">");
                         }
                     });
