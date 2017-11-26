@@ -159,6 +159,18 @@ declare module nexusframework {
          */
         webp?: boolean;
         /**
+         * Either "webp" or "png" depending on the request.
+         */
+        webpOrPng: string;
+        /**
+         * Either "webp" or "jpg" depending on the request.
+         */
+        webpOrJpg: string;
+        /**
+         * Either "webp" or "gif" depending on the request.
+         */
+        webpOrGif: string;
+        /**
          * True if this request is either .xhr or .io.
          */
         xhrOrIO?: boolean;

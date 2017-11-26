@@ -41,12 +41,6 @@
         background: #550000;
         color: white;
     }
-    &.loader-javascript-required {
-        &.loader-javascript-required-visible {
-            pointer-events: auto;
-            opacity: 1;
-        }
-    }
     .loader-progress-heading,
     .loader-progress-bar-container {
         left: 50%;

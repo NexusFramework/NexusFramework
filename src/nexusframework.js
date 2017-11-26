@@ -977,7 +977,8 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
                 const writer = function (res) {
                     res.writeHead(200, {
                         "Content-Type": contentType,
-                        "Cache-Control": "public, max-age=30672000"
+                        "Cache-Control": "public, max-age=30672000",
+                        "Expires": new Date(+new Date + 30672000000).toUTCString()
                     });
                     res.end(data);
                 };
@@ -1972,7 +1973,8 @@ class NexusFramework extends events.EventEmitter {
                 });
         }
         catch (e) { }
-        const webp = req.accepts("webp");
+        const accept = req.get('accept') || "";
+        const webp = /(^|\W)image\/webp(\W|$)/.test(accept);
         if (webp) {
             try {
                 res.locals.webp = true;
@@ -1981,6 +1983,44 @@ class NexusFramework extends events.EventEmitter {
             try {
                 Object.defineProperty(req, "webp", {
                     value: true
+                });
+            }
+            catch (e) { }
+            try {
+                Object.defineProperty(req, "webpOrPng", {
+                    value: "webp"
+                });
+            }
+            catch (e) { }
+            try {
+                Object.defineProperty(req, "webpOrJpg", {
+                    value: "webp"
+                });
+            }
+            catch (e) { }
+            try {
+                Object.defineProperty(req, "webpOrGif", {
+                    value: "webp"
+                });
+            }
+            catch (e) { }
+        }
+        else {
+            try {
+                Object.defineProperty(req, "webpOrPng", {
+                    value: "png"
+                });
+            }
+            catch (e) { }
+            try {
+                Object.defineProperty(req, "webpOrJpg", {
+                    value: "jpg"
+                });
+            }
+            catch (e) { }
+            try {
+                Object.defineProperty(req, "webpOrGif", {
+                    value: "gif"
                 });
             }
             catch (e) { }
@@ -2335,13 +2375,40 @@ class NexusFramework extends events.EventEmitter {
                     renderer(out);
                 });
                 if (useLoader) {
-                    const locals = res.locals;
+                    const locals = {
+                        errorContainerHead: res.locals.errorContainerHead || "",
+                        errorContainerFoot: res.locals.errorContainerFoot || "",
+                        progressContainerHead: res.locals.progressContainerHead,
+                        progressContainerFoot: res.locals.progressContainerFoot || ""
+                    };
                     locals.errorContainerHead = locals.errorContainerHead || "";
                     locals.errorContainerFoot = locals.errorContainerFoot || "";
-                    locals.progressContainerHead = locals.progressContainerHead || "";
+                    if (!locals.progressContainerHead) {
+                        const icons = (res.renderoptions || this.renderoptions).icons;
+                        if (icons) {
+                            if (_.isString(icons))
+                                locals.progressContainerHead = "<div class=\"loader-progress-heading\"><img src=\"" + icons + "152." + req.webpOrPng + "\" /></div>";
+                            else {
+                                var icon;
+                                var distance = Number.MAX_VALUE;
+                                Object.keys(icons).forEach(function (rsize) {
+                                    const size = parseInt(rsize);
+                                    var dist = size - 152;
+                                    if (dist >= 0 && dist < distance) {
+                                        icon = icons[rsize].toString();
+                                        distance = dist;
+                                    }
+                                });
+                                if (icon)
+                                    locals.progressContainerHead = "<div class=\"loader-progress-heading\"><img width=\"152\" src=\"" + Template_1.Template.encodeHTML(icon, true) + "\" /></div>";
+                                else
+                                    locals.progressContainerHead = "";
+                            }
+                        }
+                        else
+                            locals.progressContainerHead = "";
+                    }
                     locals.progressContainerFoot = locals.progressContainerFoot || "";
-                    locals.loaderJSRequiredTitle = locals.loaderJSRequiredTitle || "JavaScript Required";
-                    locals.loaderJSRequiredMessage = locals.loaderJSRequiredMessage || "Sorry but, this website requires scripts!";
                     overlayHtmlParts.forEach(function (step) {
                         step(out, locals);
                     });
