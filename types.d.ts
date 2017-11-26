@@ -47,6 +47,17 @@ declare module nexusframework {
         autoIndex?: boolean;
         mutable?: boolean;
     }
+    export interface Resource {
+        source: string | URL;
+        inline?: boolean;
+        integrity?: string;
+        dependencies?: string[];
+    }
+    export interface Font {
+        name: string;
+        weight?: number;
+        italic?: boolean;
+    }
     export interface RenderOptions {
         /**
          * The root path.
@@ -70,6 +81,10 @@ declare module nexusframework {
          * Paths to error documents, relative to the pages of this mount.
          */
         errordoc?: {[index: string]: string};
+        
+        fonts?: (Font|string)[];
+        scripts?: Resource[];
+        styles?: Resource[];
         
         /**
          * Paths to icons.
@@ -231,9 +246,31 @@ declare module nexusframework {
         addStyle(url: string, version?: string, ...deps: string[]): void;
         addInlineStyle(source: string, ...deps: string[]): void;
         /**
+         * Add a font from Google's library, with the specified weight.
+         * 
+         * @param family The font family
+         * @param weight The font weight, default 400
+         * @param italic Italic, default false
+         */
+        addFont(family: string, weight?: number, italic?: boolean): void;
+        /**
          * Add a renderer to the header.
          */
         addHeaderRenderer(renderer: Renderer | string): void;
+        /**
+         * Push the script and style queue.
+         * Stores it for popping later.
+         * 
+         * @param andClear And clear the queue
+         */
+        pushResourceQueues(andClear?: boolean): void;
+        /**
+         * Pops a script and style queue.
+         */
+        popResourceQueues(): void;
+        clearScripts(): void;
+        clearStyles(): void;
+        clearFonts(): void;
         
         /**
          * Add a name to the body's classes.
@@ -248,14 +285,6 @@ declare module nexusframework {
          */
         addAfterBodyRenderer(renderer: Renderer | string): void;
         
-        /**
-         * Add a google font, with the specified weight.
-         * 
-         * @param family The font family.
-         * @param weight The font weight.
-         * @param italic Italic
-         */
-        addGoogleFont(family: string, weight?: number, italic?: boolean): void;
         /**
          * Add a renderer to the footer.
          */

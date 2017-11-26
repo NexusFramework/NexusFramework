@@ -29,20 +29,50 @@ it("create and configure", function (cb) {
     framework = new nexusframework_1.NexusFramework(app);
     framework.enableLoader();
     framework.enableLogging();
-    framework.mount("/", path.resolve(__dirname, "pages"), { iconfile: path.resolve(__dirname, "../icon.png") });
+    framework.mount("/", path.resolve(__dirname, "pages"), {
+        iconfile: path.resolve(__dirname, "../icon.png"),
+        styles: [
+            {
+                source: "https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta.2/css/bootstrap.min.css"
+            },
+            {
+                inline: true,
+                source: "body{font-family:\"Lato\"}"
+            }
+        ],
+        scripts: [
+            {
+                source: "nexusframeworkclient"
+            },
+            {
+                source: "https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"
+            },
+            {
+                source: "https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js",
+                dependencies: ["jquery"]
+            },
+            {
+                source: "https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta/js/bootstrap.min.js",
+                dependencies: ["popper"]
+            },
+            {
+                inline: true,
+                source: "$(\".modal\").modal();NexusFramework.initPageSystem();",
+                dependencies: ["bootstrap"]
+            }
+        ],
+        fonts: [
+            "Lato",
+            {
+                name: "Lato",
+                weight: 700
+            }
+        ]
+    });
     framework.mount("/mutable", path.resolve(__dirname, "mutable"), { mutable: true });
     framework.mountScripts();
     framework.mountAbout();
     framework.use(function (req, res, next) {
-        res.addNexusFrameworkClient();
-        res.addGoogleFont("Lato", 400);
-        res.addGoogleFont("Lato", 700);
-        res.addScript("https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js", "3.2.1");
-        res.addScript("https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js", "1.12.9", "jquery");
-        res.addStyle("https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta.2/css/bootstrap.min.css", "4.0.0-beta.2");
-        res.addScript("https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta/js/bootstrap.min.js", "4.0.0-beta.2", "jquery", "popper");
-        res.addInlineStyle("body{font-family:\"Lato\"}");
-        res.addInlineScript("$(\".modal\").modal();NexusFramework.initPageSystem();", "bootstrap");
         res.locals.progressContainerHead = '<div class="loader-progress-heading">NexusFramework Test<br /><small>Loading Please Wait</small></div>';
         next();
     });

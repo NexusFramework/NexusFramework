@@ -6,8 +6,8 @@ interface NexusFrameworkResource {
     type: string;
     source: string;
     inline?: boolean;
-    version?: string;
-    deps: string[];
+    integrity?: string;
+    dependencies: string[];
 }
 declare interface NexusFrameworkLoader {
     load(data: any, cb: (err?: Error) => void): void;
@@ -23,7 +23,7 @@ declare interface NexusFrameworkLoader {
      * @param deps The dependencies
      * @param inlineOrVersion True or String, inline or version.
      */
-    loadResource(type: string, script: string, cb?: (err?: Error) => void, deps?: string[], inlineOrVersion?: boolean | string, name?: string): void;
+    loadResource(type: string, script: string, cb?: (err?: Error) => void, deps?: string[], inlineOrIntegrity?: boolean | string, name?: string): void;
     /**
      * Queries the list of requested resources.
      * Each resource is listed as `type:name`.

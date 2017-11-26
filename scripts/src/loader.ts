@@ -171,7 +171,7 @@
                                 showError(err);
                             else
                                 incrementProgress(oncomplete);
-                        }, resource.deps, resource.inline || resource.version, resource.name);
+                        }, resource.dependencies, resource.inline || resource.integrity, resource.name);
                     });
                 } else if(oncomplete)
                     oncomplete();
@@ -183,7 +183,7 @@
             requestedResources() {
                 return Object.keys(loadCallbacks);
             },
-            loadResource(type: string, source: string, cb: (err?: Error) => void, deps: string[] = [], inlineOrVersion?: boolean | string, name?: string) {
+            loadResource(type: string, source: string, cb: (err?: Error) => void, deps: string[] = [], inlineOrIntegrity?: boolean | string, name?: string) {
                 var processResource: (data: string) => void, callCallbacks: (err?: Error) => void;
                 var contentType: string;
                 if(type == "script") {
@@ -191,6 +191,8 @@
                     processResource = function(url) {
                         const scriptel = d.createElement('script');
                         scriptel.type = "text/javascript";
+                        if (inlineOrIntegrity && inlineOrIntegrity !== true)
+                            scriptel.integrity = inlineOrIntegrity;
                         scriptel.async = true;
                         scriptel.onload = function() {
                             callCallbacks();
@@ -207,6 +209,8 @@
                         const linkel = d.createElement('link');
                         linkel.type = "text/css";
                         linkel.rel = "stylesheet";
+                        if (inlineOrIntegrity && inlineOrIntegrity !== true)
+                            linkel.integrity = inlineOrIntegrity;
                         linkel.onload = function() {
                             callCallbacks();
                         };
@@ -231,27 +235,11 @@
                             cb();
                     };
                     var url: string;
-                    if (name) {
-                        if (inlineOrVersion !== true) {
-                            url = source = resolveUrl(source);
-                            const q = url.indexOf("?");
-                            if (q == -1)
-                                url += "?";
-                            else
-                                url += "&";
-                            url += "v=" + inlineOrVersion;
-                        }
-                    } else {
-                        if(inlineOrVersion === true) {
+                    if (!name) {
+                        if(inlineOrIntegrity === true) {
                             name = "inline-" + stringHash(source);
                         } else {
                             url = source = resolveUrl(source);
-                            const q = url.indexOf("?");
-                            if (q == -1)
-                                url += "?";
-                            else
-                                url += "&";
-                            url += "v=" + inlineOrVersion;
                             var name = source;
                             var index = name.lastIndexOf("/");
                             if(index > -1)
@@ -291,7 +279,7 @@
                     }
 
                     callbacks = loadCallbacks[key] = [onLoad];
-                    if(inlineOrVersion !== true && source.indexOf("/") == -1) 
+                    if(inlineOrIntegrity !== true && source.indexOf("/") == -1) 
                         return callCallbacks(new Error(type[0].toUpperCase() + type.substring(1) + " `" + name + "` is required, but not included."));
                     
                     if (deps.length) {
@@ -301,14 +289,14 @@
                                 if(err)
                                     callCallbacks(err);
                                 else if(!--toLoad) {
-                                    if(inlineOrVersion === true)
+                                    if(inlineOrIntegrity === true)
                                         processResource('data:'+contentType+';base64,' + base64(source));
                                     else
                                         processResource(source);
                                 }
                             });
                         });
-                    } else if(inlineOrVersion === true)
+                    } else if(inlineOrIntegrity === true)
                         processResource('data:'+contentType+';base64,' + base64(source));
                     else
                         processResource(source);

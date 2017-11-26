@@ -10,6 +10,7 @@ import statuses = require('statuses');
 import chokidar = require("chokidar");
 import {Application} from "express";
 import express = require("express");
+import crypto = require('crypto');
 import events = require("events");
 import stream = require("stream");
 import multer = require("multer");
@@ -26,6 +27,33 @@ import fs = require("fs");
 const iconSizes = [310, 196, 152, 150, 144, 128, 120, 114, 96, 76, 72, 70, 64, 60, 57, 48, 24, 16, 32];
 const socket_io_slim_js = require.resolve("socket.io-client/dist/socket.io.slim.js");
 const has_slim_io_js = fs.existsSync(socket_io_slim_js);
+
+var socket_io_slim_path: string;
+var socket_io_slim_integrity: string;
+const sckclpkgjson = require("socket.io-client/package.json");
+if (has_slim_io_js) {
+    socket_io_slim_path = ":scripts/socket.io.slim.js?v=" + sckclpkgjson.version;
+    try {
+        const hash = crypto.createHash("sha384");
+        hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
+        socket_io_slim_integrity = "sha384-" + hash.digest("base64");
+    } catch(e) {
+        console.warn(e);
+    }
+} else
+    socket_io_slim_path = ":io/socket.io.js";
+var nexusframeworkclient_es5_integrity: string;
+var nexusframeworkclient_es6_integrity: string;
+try {
+    let hash = crypto.createHash("sha384");
+    hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es5/nexusframework.min.js"), "utf8"));
+    nexusframeworkclient_es5_integrity = "sha384-" + hash.digest("base64");
+    hash = crypto.createHash("sha384");
+    hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es6/nexusframework.min.js"), "utf8"));
+    nexusframeworkclient_es6_integrity = "sha384-" + hash.digest("base64");
+} catch(e) {
+    console.warn(e);
+}
 
 const uacache = lrucache<string, nexusframework.UserAgentDetails>();
 const namecache = lrucache<string, string>();
@@ -89,7 +117,6 @@ const multerInstance = multer().any();
 const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
-const sckclpkgjson = require("socket.io/package.json");
 
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
 const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
@@ -1241,15 +1268,72 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                     }
                 });
                 delete this.childPaths;
-                if (this.options)
+                console.log(this.fspath, !!this.options);
+                if (this.options) {
                     this.handle = (req, res, next) => {
-                        res.renderoptions = {};
-                        _.extend(res.renderoptions, req.nexusframework['renderoptions']);
-                        _.extend(res.renderoptions, this.options);
-                        res.locals.__includeroot = res.renderoptions.root;
+                        const renderoptions: nexusframework.RenderOptions = res.renderoptions = {};
+                        _.extend(renderoptions, req.nexusframework['renderoptions']);
+                        _.extend(renderoptions, this.options);
+                        res.locals.__includeroot = renderoptions.root;
+                        const hasResources = renderoptions.scripts || renderoptions.styles || renderoptions.fonts;
+                        if (hasResources) {
+                            const _next = next;
+                            next = function(err?: Error) {
+                                res.popResourceQueues();
+                                _next(err);
+                            }
+                            res.pushResourceQueues();
+                            if (renderoptions.fonts)
+                                renderoptions.fonts.forEach(function(font) {
+                                    if (_.isString(font))
+                                        res.addFont(font);
+                                    else
+                                        res.addFont(font.name, font.weight || 400, font.italic);
+                                });
+                            if (renderoptions.scripts)
+                                renderoptions.scripts.forEach(function(script) {
+                                    if (script.inline) {
+                                        const args = [script.source];
+                                        if (script.dependencies)
+                                            script.dependencies.forEach(function(dep) {
+                                                args.push(dep.toString());
+                                            });
+                                        res.addInlineScript.apply(res, args);
+                                    } else {
+                                        if (script.source == "nexusframeworkclient")
+                                            res.addNexusFrameworkClient();
+                                        else {
+                                            const args = [script.source, script.integrity];
+                                            if (script.dependencies)
+                                                script.dependencies.forEach(function(dep) {
+                                                    args.push(dep.toString());
+                                                });
+                                            res.addScript.apply(res, args);
+                                        }
+                                    }
+                                });
+                            if (renderoptions.styles)
+                                renderoptions.styles.forEach(function(style) {
+                                    if (style.inline) {
+                                        const args = [style.source];
+                                        if (style.dependencies)
+                                            style.dependencies.forEach(function(dep) {
+                                                args.push(dep.toString());
+                                            });
+                                        res.addInlineStyle.apply(res, args);
+                                    } else {
+                                        const args = [style.source, style.integrity];
+                                        if (style.dependencies)
+                                            style.dependencies.forEach(function(dep) {
+                                                args.push(dep.toString());
+                                            });
+                                        res.addStyle.apply(res, args);
+                                    }
+                                });
+                        }
                         super.handle(req, res, next);
                     }
-                else
+                } else
                     delete this.handle;
                 next();
             }
@@ -1314,12 +1398,9 @@ class FSWatcherRequestChildHandler extends FSWatcherRequestHandler implements ne
     }
 }
 
-interface Resource {
+interface Resource extends nexusframework.Resource {
     name: string;
-    source: string;
-    inline?: boolean;
-    version?: string;
-    deps: string[];
+    dependencies: string[];
 }
 
 export class NexusFramework extends events.EventEmitter {
@@ -1591,6 +1672,7 @@ export class NexusFramework extends events.EventEmitter {
         if (_.isString(options.legacyskeleton))
             options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
         if(webpath == "/") {
+            _.assign(this.renderoptions, options);
             const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingRequestHandler(fspath, this.logger, options);
             this.setDefaultHandler(newHandler);
             return newHandler;
@@ -1847,25 +1929,28 @@ export class NexusFramework extends events.EventEmitter {
     }
     
     private handle0(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
-        const path = req.path;
-        async.eachSeries(this.mounts, (mount, cb) => {
-            const targetPath = mount.rawPattern;
-            if (path === targetPath || (!mount.leaf && path.length >= targetPath.length+1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
-                const curl = req.url;
-                req.mount = mount;
-                req.url = req.url.substring(targetPath.length) || "/";
-                mount.handle(req, res, function(err: Error) {
-                    req.url = curl;
-                    cb(err);
-                });
-            } else
-                cb();
-        }, (err?: Error) => {
-            if (err)
-                next(err);
-            else
-                this.default.handle(req, res, next);
-        });
+        const path = upath.normalize(req.path);
+        if (path === "/")
+            this.default.handle(req, res, next);
+        else
+            async.eachSeries(this.mounts, (mount, cb) => {
+                const targetPath = mount.rawPattern;
+                if (path === targetPath || (!mount.leaf && path.length >= targetPath.length+1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
+                    const curl = req.url;
+                    req.mount = mount;
+                    req.url = req.url.substring(targetPath.length) || "/";
+                    mount.handle(req, res, function(err: Error) {
+                        req.url = curl;
+                        cb(err);
+                    });
+                } else
+                    cb();
+            }, (err?: Error) => {
+                if (err)
+                    next(err);
+                else
+                    this.default.handle(req, res, next);
+            });
     }
     
     upgrade(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
@@ -1880,9 +1965,7 @@ export class NexusFramework extends events.EventEmitter {
                 configurable: true,
                 value: (req.logger || this.logger.extend(req.path)).extend(userName)
             });
-        } catch (e) {
-            console.log(e);
-        }
+        } catch (e) {}
         try {
             Object.defineProperty(req, "matches", {
                 configurable: true,
@@ -1998,14 +2081,16 @@ export class NexusFramework extends events.EventEmitter {
                 });
         } catch(e) {}
         const webp = req.accepts("webp");
-        try {
-            res.locals.webp = true;
-        } catch(e) {}
-        try {
-            Object.defineProperty(req, "webp", {
-                value: true
-            });
-        } catch(e) {}
+        if (webp) {
+            try {
+                res.locals.webp = true;
+            } catch(e) {}
+            try {
+                Object.defineProperty(req, "webp", {
+                    value: true
+                });
+            } catch(e) {}
+        }
         var pagesys: boolean;
         if(req.xhr || req.io) {
             try {
@@ -2071,14 +2156,13 @@ export class NexusFramework extends events.EventEmitter {
         const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
         if (useLoader && !pagesys && legacy)
             useLoader = false;
-        var icons: {[index: number]: string} = [];
         const meta: {[index: string]: string} = {generator};
         const footerRenderers: Function[] = this.footer.slice(0);
         const headerRenderers: Function[] = this.header.slice(0);
         const afterbodyRenderers: Function[] = this.afterbody.slice(0);
-        const gfonts: {[index: string]: string[]} = {};
-        const scripts: Resource[] = [];
-        const styles: Resource[] = [];
+        var gfonts: {[index: string]: string[]} = {};
+        var scripts: Resource[] = [];
+        var styles: Resource[] = [];
         try {
             Object.defineProperty(res, "setRenderOptions", {
                 configurable: true,
@@ -2104,7 +2188,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch(e) {}
         try {
-            Object.defineProperty(res, "addGoogleFont", {
+            Object.defineProperty(res, "addFont", {
                 configurable: true,
                 value: (family: string, weight?: number, italic?: boolean) => {
                     var font = gfonts[family];
@@ -2119,28 +2203,89 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch(e) {}
 
-        const addScript = function(source: string, version?: string, ...deps: string[]) {
-            for(var i=0; i<scripts.length; i++) {
-                const script = scripts[i];
-                if (script.source === source) {
-                    if (deps.length) {
-                        Array.prototype.push.apply(script, deps);
-                        script.deps = _.uniq(script.deps);
+        const addResource = function(type: string, queue: Resource[], source: string, integrity: string, inline: boolean, dependencies: string[]) {
+            const name = inline ? "inline-" + stringHash(source) : determineName(source);
+            for(var i=0; i<queue.length; i++) {
+                const resource = queue[i];
+                if (resource.name === name) {
+                    //req.logger.warn("Re-adding " + type + " " + name);
+                    if (dependencies.length) {
+                        Array.prototype.push.apply(resource.dependencies, dependencies);
+                        resource.dependencies = _.uniq(resource.dependencies);
                     }
-                    script.version = version;
+                    resource.integrity = integrity;
                     return;
                 }
             }
-            scripts.push({
-                name: determineName(source),
+            queue.push({
+                name,
+                integrity,
                 source,
-                version,
-                deps
+                dependencies,
+                inline
             });
         }
+        const resourceQueue = [];
+        const addScript = function(source: string, integrity?: string, ...deps: string[]) {
+            addResource("script", scripts, source, integrity, false, deps);
+        }
         const addSocketIOClient = () => {
-            addScript(upath.join(this.prefix, has_slim_io_js ? ":scripts/socket.io.slim.js" : ":io/socket.io.js"), sckclpkgjson.version);
+            addScript(upath.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
         };
+        try {
+            Object.defineProperty(res, "pushResourceQueues", {
+                configurable: true,
+                value: function(andClear?: boolean) {
+                    resourceQueue.push([_.clone(gfonts),scripts.slice(0),styles.slice(0)]);
+                    if (andClear) {
+                        gfonts = {};
+                        scripts = [];
+                        styles = [];
+                    }
+                }
+            });
+            Object.defineProperty(res, "popResourceQueues", {
+                configurable: true,
+                value: function() {
+                    const queue = resourceQueue.pop();
+                    gfonts = queue[0];
+                    scripts = queue[1];
+                    styles = queue[2];
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "clearFonts", {
+                configurable: true,
+                value: function() {
+                    gfonts = {};
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "clearScripts", {
+                configurable: true,
+                value: function() {
+                    scripts = [];
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "clearStyles", {
+                configurable: true,
+                value: function() {
+                    styles = [];
+                }
+            });
+        } catch(e) {}
+        try {
+            Object.defineProperty(res, "clearFonts", {
+                configurable: true,
+                value: function() {
+                    styles = [];
+                }
+            });
+        } catch(e) {}
         try {
             Object.defineProperty(res, "addSocketIOClient", {
                 configurable: true,
@@ -2148,12 +2293,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch(e) {}
         const addInlineScript = function(source: string, ...deps: string[]) {
-            scripts.push({
-                name: "inline-" + stringHash(source),
-                source,
-                inline: true,
-                deps
-            })
+            addResource("script", scripts, source, undefined, true, deps);
         };
         try {
             Object.defineProperty(res, "addInlineScript", {
@@ -2165,14 +2305,15 @@ export class NexusFramework extends events.EventEmitter {
             Object.defineProperty(res, "addNexusFrameworkClient", {
                 configurable: true,
                 value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
-                    const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js");
+                    const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
+                    const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js?v=" + pkgjson.version);
                     if(includeSocketIO) {
                         addSocketIOClient();
-                        addScript(path, pkgjson.version, "socket.io");
+                        addScript(path, integrity, "socket.io");
                         if (autoEnabledPageSystem)
                             addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
                     } else
-                        addScript(path, pkgjson.version);
+                        addScript(path, integrity);
                 }
             });
         } catch(e) {}
@@ -2226,20 +2367,8 @@ export class NexusFramework extends events.EventEmitter {
         try {
             Object.defineProperty(res, "addStyle", {
                 configurable: true,
-                value: function(source: string, version?: string, ...deps: string[]) {
-                    for(var i=0; i<styles.length; i++) {
-                        const style = styles[i];
-                        if (style.source === source) {
-                            style.version = version;
-                            return;
-                        }
-                    }
-                    styles.push({
-                        name: determineName(source),
-                        source,
-                        version,
-                        deps
-                    });
+                value: function(source: string, integrity?: string, ...deps: string[]) {
+                    addResource("style", styles, source, integrity, false, deps);
                 }
             });
         } catch(e) {}
@@ -2247,12 +2376,7 @@ export class NexusFramework extends events.EventEmitter {
             Object.defineProperty(res, "addInlineStyle", {
                 configurable: true,
                 value: function(source: string, ...deps: string[]) {
-                    styles.push({
-                        name: "inline-" + stringHash(source),
-                        source,
-                        inline: true,
-                        deps
-                    })
+                    addResource("style", styles, source, undefined, true, deps);
                 }
             });
         } catch(e) {}
@@ -2334,8 +2458,7 @@ export class NexusFramework extends events.EventEmitter {
                 styles.unshift({
                     name: "google-fonts",
                     source: gfonturl,
-                    version: "1.0",
-                    deps: []
+                    dependencies: []
                 })
             }
 
@@ -2394,16 +2517,10 @@ export class NexusFramework extends events.EventEmitter {
                         scripts.forEach(function(script) {
                             if(script.inline) {
                                 out.write("<script type=\"text/javascript\">");
-                                out.write(script.source);
+                                out.write(script.source.toString());
                                 out.write("</script>");
                             } else {
                                 out.write("<script type=\"text/javascript\" src=\"");
-                                if(script.version) {
-                                    var _url = url.parse(script.source, true);
-                                    _url.query = _url.query || {};
-                                    _url.query.v = script.version;
-                                    script.source = url.format(_url);
-                                }
                                 out.write(Template.encodeHTML(url.format(script.source), true));
                                 out.write("\"></script>");
                             }
@@ -2500,7 +2617,7 @@ export class NexusFramework extends events.EventEmitter {
                 const icons = renderoptions.icons;
                 if (icons) {
                     if (_.isString(icons)) {
-                        const type = req.webp ? "webp" : "png";
+                        const type = webp ? "webp" : "png";
                         iconSizes.forEach(function(size) {
                             out.write("<link rel=\"icon\" sizes=\"");
                             out.write("" + size);
@@ -2599,16 +2716,10 @@ export class NexusFramework extends events.EventEmitter {
                     styles.forEach(function(style) {
                         if (style.inline) {
                             out.write("<style>");
-                            out.write(style.source);
+                            out.write(style.source.toString());
                             out.write("</style>");
                         } else {
                             out.write("<link rel=\"stylesheet\" href=\"");
-                            if(style.version) {
-                                var _url = url.parse(style.source, true);
-                                _url.query = _url.query || {};
-                                _url.query.v = style.version;
-                                style.source = url.format(_url);
-                            }
                             out.write(Template.encodeHTML(url.format(style.source), true));
                             out.write("\">");
                         }
