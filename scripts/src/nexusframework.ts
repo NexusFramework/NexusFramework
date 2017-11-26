@@ -202,16 +202,12 @@ Object.defineProperties(window, {
                         console.warn(e);
                     }
                 },
-                reportPage: function(title?: string, path?: string) {
+                reportPage: function(path?: string) {
                     try {
                         if (!path)
-                            path = location.href;
-                        if (!title)
-                            title = document.title;
-                        window.ga('send', 'pageview', path, {
-                            page: path,
-                            title
-                        });
+                            path = location.pathname;
+                        window.ga('set', 'page', path);
+                        window.ga('send', 'pageview');
                     } catch(e) {
                         console.warn(e);
                     }

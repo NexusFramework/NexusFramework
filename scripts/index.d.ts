@@ -95,7 +95,7 @@ declare interface NexusFrameworkComponentFactory {
 }
 declare interface NexusFrameworkAnalyticsAdapter {
     reportError(err: Error): void;
-    reportPage(title?: string, path?: string): void;
+    reportPage(path?: string): void;
     reportEvent(category: string, action: string, label?: string, value?: number): void;
 }
 declare interface NexusFrameworkClient {
