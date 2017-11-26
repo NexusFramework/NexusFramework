@@ -237,12 +237,13 @@
                             cb();
                     };
                     var url;
+                    if (inlineOrIntegrity !== true)
+                        url = source = resolveUrl(source);
                     if (!name) {
                         if (inlineOrIntegrity === true) {
                             name = "inline-" + stringHash(source);
                         }
                         else {
-                            url = source = resolveUrl(source);
                             var name = source;
                             var index = name.lastIndexOf("/");
                             if (index > -1)

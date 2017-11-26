@@ -1077,7 +1077,10 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
                 });
             else {
                 const writer = function(res: nexusframework.Response) {
-                    res.type(contentType);
+                    res.writeHead(200, {
+                        "Content-Type" : contentType,
+                        "Cache-Control": "public, max-age=30672000"
+                    });
                     res.end(data);
                 }
                 queue.forEach(writer);
