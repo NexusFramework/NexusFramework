@@ -75,10 +75,6 @@ it("create and configure", function(cb) {
     framework.mount("/mutable", path.resolve(__dirname, "mutable"), {mutable:true});
     framework.mountScripts();
     framework.mountAbout();
-    framework.use(function(req, res, next) {
-        res.locals.progressContainerHead = '<div class="loader-progress-heading">NexusFramework Test<br /><small>Loading Please Wait</small></div>';
-        next();
-    });
     framework.setErrorDocument("*", "errdoc");
     iopath = framework.setupIO();
     app.use(function(req, res, next) {
@@ -201,8 +197,10 @@ describe("Skeleton", function() {
         request("http://localhost:35438/", function(err, res, body) {
             if(err)
                 return cb(err);
+            console.log(body);
             assert.equal(res.statusCode, 200);
             assert.ok(/This is a test page for .+NexusFramework\./.test(body));
+            assert.ok(body.indexOf("<title>Test</title>") > -1);
             cb();
         });
     });
@@ -282,7 +280,7 @@ describe("more socket.io", function() {
         });
         client.emit("page", "GET", "/", undefined, {"user-agent": "Testorola"}, function(res) {
             assert.equal(res.code, 200);
-            assert.equal(JSON.stringify(res.data), '{"title":"Title Not Set","page":"<h1>Test</h1> <p>This is a test page for <a href=\\"/:about/\\">NexusFramework</a>.<br /> <a href=\\"/:scripts/es6/loader.min.js\\">Minified loader script</a>.</p>"}');
+            assert.equal(JSON.stringify(res.data), '{"title":"Test","page":"<h1>Test</h1> <p>This is a test page for <a href=\\"/:about/\\">NexusFramework</a>.<br /> <a href=\\"/:scripts/es6/loader.min.js\\">Minified loader script</a>.</p>"}');
             framework.setPageSystemSkeleton(undefined);
             cb();
         });

@@ -541,14 +541,14 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
                         this['_index'].handle(req, res, (err, locals?) => {
                             if(err)
                                 next(err);
-                            else {
-                                locals = locals || {};
-                                const view = this['views'][res.app.get("view engine")];
+                            else if(locals) {
+                                const view = this['views']["nhp"];
                                 if(view)
                                     res.sendRender(view, locals);
                                 else
                                     next(new Error("No view to render"));
-                            }
+                            } else
+                                next();
                         });
                     } else
                         next();
@@ -784,7 +784,7 @@ export class NHPRequestHandler extends LeafRequestHandler {
                         if(err)
                             next(err);
                         else if(locals) {
-                            const view = this['views'][res.app.get("view engine")];
+                            const view = this['views']["nhp"];
                             if(view)
                                 res.sendRender(view, locals);
                             else
@@ -892,10 +892,17 @@ function lazyLoadMapping(impl: nexusframework.FunctionOrStringOrEitherWithData, 
             }
         };
     const data = impl.data;
-    const handler = lazyLoadMapping(impl.impl, method, mapping);
+    const key = "lazy" + method;
+    mapping[key] = lazyLoadMapping(impl.impl, key, mapping);
     return function(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
-        _.extend(res.locals, data);
-        (handler as Function)(req, res, next, negative);
+        const clocals = _.cloneDeep(res.locals);
+        _.merge(res.locals, data);
+        req.mapping = mapping;
+        (mapping[key] as Function)(req, res, function(err?: Error, data?: any) {
+            if (!data)
+                res.locals = clocals;
+            next(err, data);
+        }, negative);
     };
 }
 function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStringOrEitherWithData}, mapped: nexusframework.RequestHandlerMethodMapping = {}): nexusframework.RequestHandlerMethodMapping{
@@ -1272,7 +1279,6 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                     }
                 });
                 delete this.childPaths;
-                console.log(this.fspath, !!this.options);
                 if (this.options) {
                     this.handle = (req, res, next) => {
                         const renderoptions: nexusframework.RenderOptions = res.renderoptions = {};
@@ -2811,20 +2817,16 @@ export class NexusFramework extends events.EventEmitter {
             res.locals.bodyclass = "";
         } catch(e) {}
         try {
-            res.locals.title = "Title Not Set";
-        } catch(e) {}
-        try {
             const render = res.render;
             Object.defineProperty(res, "render", {
                 value: (filename: string, options: any, callback?: (err: Error, html?: string) => void) => {
                     if (options instanceof Function)
                         callback = options;
                     if (this.app.get("view engine") == "nhp") {
-                        var vars = {};
-                        _.extend(vars, res.app.locals);
-                        _.extend(vars, res.locals);
+                        var vars = _.cloneDeep(res.app.locals);
+                        _.merge(vars, res.locals);
                         if (options)
-                            _.extend(vars, options);
+                            _.merge(vars, options);
                         this.nhp.render(filename, vars, callback);
                     } else
                         render.call(res, filename, options, callback);
@@ -2836,11 +2838,10 @@ export class NexusFramework extends events.EventEmitter {
                 configurable: true,
                 value: (filename: string, options: any) => {
                     if (req.app.get("view engine") == "nhp") {
-                        var vars = {};
-                        _.extend(vars, res.app.locals);
-                        _.extend(vars, res.locals);
+                        var vars = _.clone(res.app.locals) || {};
+                        _.merge(vars, res.locals);
                         if (options)
-                            _.extend(vars, options);
+                            _.merge(vars, options);
                         const meta = vars['meta'];
                         if (_.isObject(meta))
                             Object.keys(meta).forEach(function(key) {
