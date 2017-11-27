@@ -8,7 +8,7 @@
         }
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.28",
+    "version": "0.3.0-beta.29",
     "license": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [
@@ -55,7 +55,7 @@
         "lodash": "^4.17.4",
         "lru-cache": "^4.1.1",
         "multer": "^1.3.0",
-        "nhp": "^0.9.0-beta.4",
+        "nhp": "^0.9.0-beta.5",
         "sharp": "^0.18.4",
         "socket.io": "^2.0.4",
         "statuses": "^1.4.0",

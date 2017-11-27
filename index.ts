@@ -5,6 +5,7 @@ import { nexusfork } from "nexusfork/types";
 import { nexusframework } from "./types";
 import { Application } from "express";
 import { Server } from "http";
+import path = require("path");
 import _ = require("lodash");
 
 const _export: {
@@ -53,13 +54,18 @@ const _export: {
         });
     }
     if (config.modules) {
+        const resolveModule = function(_path: string) {
+            if (/^\.\//.test(_path))
+                return path.resolve(path.dirname(require.main.filename), _path);
+            return _path;
+        }
         if (!Array.isArray(config.modules))
             config.modules = [config.modules];
         config.modules.forEach(function(modConfig: string | {module: string, [key: string]: any}) {
             if (_.isString(modConfig))
-                require(modConfig)(instance);
+                require(resolveModule(modConfig))(instance);
             else
-                require(modConfig.module)(instance, modConfig);
+                require(resolveModule(modConfig.module))(instance, modConfig);
         });
     }
     return instance.handle.bind(instance);

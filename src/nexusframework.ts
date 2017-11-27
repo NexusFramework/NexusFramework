@@ -1978,6 +1978,7 @@ export class NexusFramework extends events.EventEmitter {
                 configurable: true,
                 value: (req.logger || this.logger.extend(req.path)).extend(userName)
             });
+            res.locals.user = user;
         } catch (e) {}
         try {
             Object.defineProperty(req, "matches", {

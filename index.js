@@ -1,6 +1,7 @@
 "use strict";
 /// <reference types="nulllogger" />
 const nexusframework_1 = require("./src/nexusframework");
+const path = require("path");
 const _ = require("lodash");
 const _export = function (config, logger, server, app) {
     if (config.prefix) {
@@ -46,13 +47,18 @@ const _export = function (config, logger, server, app) {
         });
     }
     if (config.modules) {
+        const resolveModule = function (_path) {
+            if (/^\.\//.test(_path))
+                return path.resolve(path.dirname(require.main.filename), _path);
+            return _path;
+        };
         if (!Array.isArray(config.modules))
             config.modules = [config.modules];
         config.modules.forEach(function (modConfig) {
             if (_.isString(modConfig))
-                require(modConfig)(instance);
+                require(resolveModule(modConfig))(instance);
             else
-                require(modConfig.module)(instance, modConfig);
+                require(resolveModule(modConfig.module))(instance, modConfig);
         });
     }
     return instance.handle.bind(instance);
