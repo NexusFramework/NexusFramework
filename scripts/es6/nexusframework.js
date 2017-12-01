@@ -183,34 +183,37 @@ Object.defineProperties(window, {
         get: function () {
             const GA_ANALYTICS = {
                 reportError: function (err, fatal) {
-                    try {
-                        window.ga('send', 'exception', {
-                            'exDescription': (err.stack || "" + err).replace(/\n/g, "\n\t"),
-                            'exFatal': fatal
-                        });
-                    }
-                    catch (e) {
-                        console.warn(e);
-                    }
+                    if (window.ga)
+                        try {
+                            window.ga('send', 'exception', {
+                                'exDescription': (err.stack || "" + err).replace(/\n/g, "\n\t"),
+                                'exFatal': fatal
+                            });
+                        }
+                        catch (e) {
+                            console.warn(e);
+                        }
                 },
                 reportEvent: function (category, action, label, value) {
-                    try {
-                        window.ga('send', 'event', category, action, label, value);
-                    }
-                    catch (e) {
-                        console.warn(e);
-                    }
+                    if (window.ga)
+                        try {
+                            window.ga('send', 'event', category, action, label, value);
+                        }
+                        catch (e) {
+                            console.warn(e);
+                        }
                 },
                 reportPage: function (path) {
-                    try {
-                        if (!path)
-                            path = location.pathname;
-                        window.ga('set', 'page', path);
-                        window.ga('send', 'pageview');
-                    }
-                    catch (e) {
-                        console.warn(e);
-                    }
+                    if (window.ga)
+                        try {
+                            if (!path)
+                                path = location.pathname;
+                            window.ga('set', 'page', path);
+                            window.ga('send', 'pageview');
+                        }
+                        catch (e) {
+                            console.warn(e);
+                        }
                 }
             };
             const r = document.createElement("a");
@@ -292,6 +295,7 @@ Object.defineProperties(window, {
                     this.progressBarContainer = document.getElementsByClassName("loader-progress-container");
                     this.progressVisible = false;
                     this.requestPage = this.defaultRequestPage;
+                    this._listeners = {};
                     url = resolveUrl(url);
                     if (!/\/$/.test(url))
                         url += "/";
@@ -363,11 +367,13 @@ Object.defineProperties(window, {
                         };
                         addAnimationEnd(el, onAnimationEnd);
                         timer = setTimeout(onAnimationEnd, 500);
-                        for (var i = 0; i < this.progressBarContainer.length; i++) {
-                            const container = this.progressBarContainer[i];
-                            if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
-                                container.className = (container.className + " loader-progress-visible").trim();
-                        }
+                        setTimeout(() => {
+                            for (var i = 0; i < this.progressBarContainer.length; i++) {
+                                const container = this.progressBarContainer[i];
+                                if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
+                                    container.className = (container.className + " loader-progress-visible").trim();
+                            }
+                        });
                     }
                     else {
                         this.progressVisible = true;
@@ -812,7 +818,6 @@ Object.defineProperties(window, {
                         else {
                             const rid = ++this.activerid;
                             const url = this.resolveUrl(path);
-                            console.log(url, replace, rid);
                             if (replace)
                                 history.replaceState(genState(currentResponse), "Loading...", url);
                             else {
@@ -847,6 +852,7 @@ Object.defineProperties(window, {
                                         headers: res.headers,
                                         data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
                                     }), document.title, url);
+                                    this.emit("page", path);
                                 }
                                 catch (e) {
                                     console.warn(e);
@@ -907,6 +913,27 @@ Object.defineProperties(window, {
                         throw new Error("Posting is not supported without an initialized page system, yet");
                     else
                         location.href = this.resolveUrl(path);
+                }
+                on(event, cb) {
+                    var listeners = this._listeners[event];
+                    if (listeners)
+                        listeners.push(cb);
+                    else
+                        this._listeners[event] = listeners = [cb];
+                }
+                off(event, cb) {
+                    var index;
+                    var listeners = this._listeners[event];
+                    if (listeners && (index = listeners.indexOf(cb)) > -1)
+                        listeners.splice(index, 1);
+                }
+                emit(event, ...args) {
+                    const self = this;
+                    const listeners = this._listeners[event];
+                    if (listeners)
+                        listeners.forEach(function (cb) {
+                            cb.apply(self, args);
+                        });
                 }
             }
             var impl;

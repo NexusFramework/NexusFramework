@@ -1003,7 +1003,7 @@ class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
-class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
+class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
     constructor(fspath, logger, options) {
         super();
         this.fspath = fspath;
@@ -1052,7 +1052,7 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                     }
                     else if (/^([^.]+$)/.test(file)) {
                         const pattern = decodePath(file);
-                        this.setChild(pattern, new LazyLoadingRequestChildHandler(filename, logger, undefined, pattern));
+                        this.setChild(pattern, new LazyLoadingNHPRequestChildHandler(filename, logger, undefined, pattern));
                     }
                     else
                         logger.warn("Ignoring", filename);
@@ -1136,48 +1136,72 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
                             }
                         });
                     else {
-                        const handler = createExtendedRequestHandler();
-                        const methods = extensions['js'] || {};
-                        const json = extensions['json'];
-                        if (json) {
-                            Object.keys(json).forEach((method) => {
-                                try {
-                                    const jsmethod = methods[method];
-                                    const data = require(json[method]) || {};
-                                    if (jsmethod)
+                        try {
+                            const handler = createExtendedRequestHandler();
+                            const methods = extensions['js'] || {};
+                            const json = extensions['json'];
+                            if (json) {
+                                var getdata;
+                                const get = json['get'];
+                                if (get && (getdata = require(get))) {
+                                    Object.keys(methods).forEach((method) => {
+                                        const jsmethod = methods[method];
+                                        var data = getdata;
+                                        if (method !== "get") {
+                                            const methoddata = json[method];
+                                            if (methoddata) {
+                                                data = _.clone(data);
+                                                _.extend(data, require(methoddata));
+                                            }
+                                        }
                                         methods[method] = {
                                             impl: jsmethod,
                                             data
                                         };
-                                    else
-                                        methods[method] = (req, res, next) => {
-                                            next(undefined, data);
+                                    });
+                                    if (!methods['get'])
+                                        methods['get'] = (req, res, next) => {
+                                            next(undefined, getdata);
                                         };
                                 }
-                                catch (e) {
-                                    methods[method] = function (req, res, next) {
-                                        next(e);
-                                    };
-                                }
-                            });
+                                else
+                                    Object.keys(json).forEach((method) => {
+                                        if (method === 'get')
+                                            return;
+                                        const jsmethod = methods[method];
+                                        const data = require(json[method]);
+                                        if (jsmethod)
+                                            methods[method] = {
+                                                impl: jsmethod,
+                                                data
+                                            };
+                                        else
+                                            methods[method] = (req, res, next) => {
+                                                next(undefined, data);
+                                            };
+                                    });
+                            }
+                            if (!Object.keys(methods))
+                                throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                            processMapping(methods, handler);
+                            var leaf;
+                            if (key === "index")
+                                this.setIndex(leaf = new NHPRequestHandler(handler));
+                            else {
+                                const child = this.childAt(key);
+                                if (child)
+                                    child.setIndex(leaf = new NHPRequestHandler(handler));
+                                else
+                                    this.setChild(key, leaf = new NHPRequestChildHandler(handler, key));
+                            }
+                            try {
+                                leaf.setView(extensions['nhp']['get']);
+                            }
+                            catch (e) { }
                         }
-                        if (!methods)
-                            throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
-                        processMapping(methods, handler);
-                        var leaf;
-                        if (key === "index")
-                            this.setIndex(leaf = new NHPRequestHandler(handler));
-                        else {
-                            const child = this.childAt(key);
-                            if (child)
-                                child.setIndex(leaf = new NHPRequestHandler(handler));
-                            else
-                                this.setChild(key, leaf = new NHPRequestChildHandler(handler, key));
+                        catch (e) {
+                            logger.error(e);
                         }
-                        try {
-                            leaf.setView(extensions['nhp']['get']);
-                        }
-                        catch (e) { }
                     }
                 });
                 delete this.childPaths;
@@ -1264,7 +1288,7 @@ class LazyLoadingRequestHandler extends RequestHandlerWithChildren {
         });
     }
 }
-class LazyLoadingRequestChildHandler extends LazyLoadingRequestHandler {
+class LazyLoadingNHPRequestChildHandler extends LazyLoadingNHPRequestHandler {
     constructor(fspath, logger, options, pattern) {
         super(fspath, logger, options);
         this.rawPattern = pattern;
@@ -1570,12 +1594,12 @@ class NexusFramework extends events.EventEmitter {
             options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
         if (webpath == "/") {
             _.assign(this.renderoptions, options);
-            const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingRequestHandler(fspath, this.logger, options);
+            const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingNHPRequestHandler(fspath, this.logger, options);
             this.setDefaultHandler(newHandler);
             return newHandler;
         }
         else {
-            const newHandler = options.mutable ? new FSWatcherRequestChildHandler(fspath, this.logger, options, webpath) : new LazyLoadingRequestChildHandler(fspath, this.logger, options, webpath);
+            const newHandler = options.mutable ? new FSWatcherRequestChildHandler(fspath, this.logger, options, webpath) : new LazyLoadingNHPRequestChildHandler(fspath, this.logger, options, webpath);
             for (var i = 0; i < this.mounts.length; i++) {
                 const mount = this.mounts[i];
                 if (mount.rawPattern === webpath) {

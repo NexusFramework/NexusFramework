@@ -9,7 +9,7 @@ Object.defineProperties(window, {
         },
         get: function () {
             var impl: NexusFrameworkTransport;
-            if("XMLHttpRequest" in window) {
+            if ("XMLHttpRequest" in window) {
                 class NexusFrameworkXMLHttpRequestResponse implements NexusFrameworkTransportResponse {
                     private _url: string;
                     private parsedJson: any;
@@ -37,15 +37,15 @@ Object.defineProperties(window, {
                     get contentAsString() {
                         return this.request.responseText;
                     }
-                    get headers(): {[index: string]: string[]}{
+                    get headers(): {[index: string]: string[]} {
                         if (!this.processedHeaders) {
                             const headers: {[index: string]: string[]} = this.processedHeaders = {};
-                            this.request.getAllResponseHeaders().split(/\r?\n/g).forEach(function(header) {
+                            this.request.getAllResponseHeaders().split(/\r?\n/g).forEach(function (header) {
                                 const index = header.indexOf(":");
                                 var key: string, val: string;
-                                if(index > 0) {
+                                if (index > 0) {
                                     key = header.substring(0, index).trim().toLowerCase();
-                                    val = header.substring(index+1).trim();
+                                    val = header.substring(index + 1).trim();
                                 } else
                                     key = header.trim().toLowerCase();
                                 var list = headers[key];
@@ -58,19 +58,19 @@ Object.defineProperties(window, {
                         return this.processedHeaders;
                     }
                 }
-                const execute = function(method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void) {
+                const execute = function (method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void) {
                     const request = new XMLHttpRequest();
                     request.open(method, url, true);
-                    Object.keys(extraHeaders).forEach(function(key) {
+                    Object.keys(extraHeaders).forEach(function (key) {
                         request.setRequestHeader(key, extraHeaders[key]);
                     });
-                    if(progcb)
-                        request.onprogress = function(ev) {
+                    if (progcb)
+                        request.onprogress = function (ev) {
                             if (ev.lengthComputable && ev.total)
                                 progcb(ev.loaded, ev.total);
                         }
-                    request.onreadystatechange = function(e) {
-                        if(request.readyState === XMLHttpRequest.DONE) {
+                    request.onreadystatechange = function (e) {
+                        if (request.readyState === XMLHttpRequest.DONE) {
                             cb(new NexusFrameworkXMLHttpRequestResponse(request, url));
                         }
                     }
@@ -96,7 +96,7 @@ Object.defineProperties(window, {
                 };
             } else {
                 impl = {
-                    get(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void{
+                    get(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void {
                         cb({
                             url,
                             code: 503,
@@ -108,7 +108,7 @@ Object.defineProperties(window, {
                             headers: {}
                         });
                     },
-                    head(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void{
+                    head(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void {
                         cb({
                             url,
                             code: 503,
@@ -120,7 +120,7 @@ Object.defineProperties(window, {
                             headers: {}
                         });
                     },
-                    put(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void{
+                    put(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void {
                         cb({
                             url,
                             code: 503,
@@ -132,7 +132,7 @@ Object.defineProperties(window, {
                             headers: {}
                         });
                     },
-                    post(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void{
+                    post(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void {
                         cb({
                             url,
                             code: 503,
@@ -144,7 +144,7 @@ Object.defineProperties(window, {
                             headers: {}
                         });
                     },
-                    execute(method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void{
+                    execute(method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void {
                         cb({
                             url,
                             code: 503,
@@ -156,7 +156,7 @@ Object.defineProperties(window, {
                             headers: {}
                         });
                     },
-                    del(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void{
+                    del(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}): void {
                         cb({
                             url,
                             code: 503,
@@ -185,37 +185,40 @@ Object.defineProperties(window, {
         },
         get: function () {
             const GA_ANALYTICS: NexusFrameworkAnalyticsAdapter = {
-                reportError: function(err: Error, fatal?: boolean) {
-                    try {
-                        window.ga('send', 'exception', {
-                            'exDescription': (err.stack || ""+err).replace(/\n/g, "\n\t"),
-                            'exFatal': fatal
-                        });
-                    } catch(e) {
-                        console.warn(e);
-                    }
+                reportError: function (err: Error, fatal?: boolean) {
+                    if (window.ga)
+                        try {
+                            window.ga('send', 'exception', {
+                                'exDescription': (err.stack || "" + err).replace(/\n/g, "\n\t"),
+                                'exFatal': fatal
+                            });
+                        } catch (e) {
+                            console.warn(e);
+                        }
                 },
-                reportEvent: function(category: string, action: string, label?: string, value?: number) {
-                    try {
-                        window.ga('send', 'event', category, action, label, value);
-                    } catch(e) {
-                        console.warn(e);
-                    }
+                reportEvent: function (category: string, action: string, label?: string, value?: number) {
+                    if (window.ga)
+                        try {
+                            window.ga('send', 'event', category, action, label, value);
+                        } catch (e) {
+                            console.warn(e);
+                        }
                 },
-                reportPage: function(path?: string) {
-                    try {
-                        if (!path)
-                            path = location.pathname;
-                        window.ga('set', 'page', path);
-                        window.ga('send', 'pageview');
-                    } catch(e) {
-                        console.warn(e);
-                    }
+                reportPage: function (path?: string) {
+                    if (window.ga)
+                        try {
+                            if (!path)
+                                path = location.pathname;
+                            window.ga('set', 'page', path);
+                            window.ga('send', 'pageview');
+                        } catch (e) {
+                            console.warn(e);
+                        }
                 }
             };
             const r = document.createElement("a");
             const protocol = location.href.match(/^\w+:/)[0];
-            const resolveUrl = function(url: string) {
+            const resolveUrl = function (url: string) {
                 r.setAttribute("href", url);
                 var href = r.href;
                 if (/^\/\//.test(href))
@@ -225,21 +228,21 @@ Object.defineProperties(window, {
             interface PageSystemImpl {
                 requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void;
             }
-            const addAnimationEnd = function(el: Element, handler: Function) {
+            const addAnimationEnd = function (el: Element, handler: Function) {
                 el.addEventListener("transitionend", handler as any);
                 el.addEventListener("transitionEnd", handler as any);
                 el.addEventListener("webkitTransitionEnd", handler as any);
                 el.addEventListener("mozTransitionEnd", handler as any);
                 el.addEventListener("oTransitionEnd", handler as any);
             }
-            const removeAnimationEnd = function(el: Element, handler: Function) {
+            const removeAnimationEnd = function (el: Element, handler: Function) {
                 el.removeEventListener("transitionend", handler as any);
                 el.removeEventListener("transitionEnd", handler as any);
                 el.removeEventListener("webkitTransitionEnd", handler as any);
                 el.removeEventListener("mozTransitionEnd", handler as any);
                 el.removeEventListener("oTransitionEnd", handler as any);
             }
-            const convertResponse = function(res: NexusFrameworkPageSystemResponse, url = location.href) {
+            const convertResponse = function (res: NexusFrameworkPageSystemResponse, url = location.href) {
                 var storage: any, arrstorage: ArrayBuffer;
                 return (typeof res.data === "string" || res.data instanceof String) ? {
                     url,
@@ -249,7 +252,7 @@ Object.defineProperties(window, {
                         if (!arrstorage) {
                             arrstorage = new ArrayBuffer(res.data.length); // 2 bytes for each char
                             var bufView = new Uint8Array(arrstorage);
-                            for (var i=0, strLen=res.data.length; i < strLen; i++) {
+                            for (var i = 0, strLen = res.data.length; i < strLen; i++) {
                                 bufView[i] = res.data.charCodeAt(i);
                             }
                         }
@@ -262,28 +265,28 @@ Object.defineProperties(window, {
                     },
                     headers: res.headers
                 } : {
-                    url,
-                    code: res.code,
-                    get contentAsString() {
-                        if (!storage)
-                            storage = JSON.stringify(res.data);
-                        return storage;
-                    },
-                    get contentAsArrayBuffer() {
-                        if (!arrstorage) {
+                        url,
+                        code: res.code,
+                        get contentAsString() {
                             if (!storage)
                                 storage = JSON.stringify(res.data);
-                            arrstorage = new ArrayBuffer(storage); // 2 bytes for each char
-                            var bufView = new Uint8Array(arrstorage);
-                            for (var i=0, strLen=storage.length; i < strLen; i++) {
-                                bufView[i] = storage.charCodeAt(i);
+                            return storage;
+                        },
+                        get contentAsArrayBuffer() {
+                            if (!arrstorage) {
+                                if (!storage)
+                                    storage = JSON.stringify(res.data);
+                                arrstorage = new ArrayBuffer(storage); // 2 bytes for each char
+                                var bufView = new Uint8Array(arrstorage);
+                                for (var i = 0, strLen = storage.length; i < strLen; i++) {
+                                    bufView[i] = storage.charCodeAt(i);
+                                }
                             }
-                        }
-                        return arrstorage;
-                    },
-                    contentFromJSON: res.data,
-                    headers: res.headers
-                };
+                            return arrstorage;
+                        },
+                        contentFromJSON: res.data,
+                        headers: res.headers
+                    };
             }
             const loaderContainerRegex = /(^|\s)loader\-(progress|error)\-container(\s|$)/;
             class NexusFrameworkBase implements NexusFrameworkClient {
@@ -315,16 +318,16 @@ Object.defineProperties(window, {
                     });
                     this._analytics = GA_ANALYTICS;
                 }
-                
+
                 resolveUrl(url: string) {
                     if (/^\w+\:/.test(url))
                         return url;
                     return resolveUrl(this.url + url);
                 }
-                
+
                 disableAll(root: HTMLElement = document.body) {
                     const focusable = root.querySelectorAll("a, input, select, textarea, iframe, button, *[focusable], *[tabindex]");
-                    for (var i=0; i<focusable.length; i++) {
+                    for (var i = 0; i < focusable.length; i++) {
                         const child = focusable[i];
                         const tabindex = child.getAttribute("tabindex");
                         if (tabindex == "-1")
@@ -335,13 +338,13 @@ Object.defineProperties(window, {
                 }
                 enableAll(root: HTMLElement = document.body) {
                     const focusable = root.querySelectorAll("*[data-tabindex]");
-                    for (var i=0; i<focusable.length; i++) {
+                    for (var i = 0; i < focusable.length; i++) {
                         const child = focusable[i];
                         child.setAttribute("tabindex", child.getAttribute("data-tabindex"));
                         child.removeAttribute("data-tabindex");
                     }
                 }
-                
+
                 fadeInProgress(cb?: () => void) {
                     if (this.progressVisible) {
                         if (cb)
@@ -353,7 +356,7 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         return;
                     }
-                    for(var i=0; i<this.progressBar.length; i++)
+                    for (var i = 0; i < this.progressBar.length; i++)
                         this.progressBar[i]['style'].width = '0%';
                     if (this.progressBarContainer.length) {
                         var timer;
@@ -362,29 +365,31 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         const el = this.progressBarContainer[0];
                         const onAnimationEnd = () => {
-                            try {clearTimeout(timer);}catch(e) {}
+                            try {clearTimeout(timer);} catch (e) {}
                             removeAnimationEnd(el, onAnimationEnd);
                             this.progressVisible = true;
                             const callbacks = this.progressFadeCallbacks;
                             delete this.progressFadeCallbacks;
-                            callbacks.forEach(function(cb) {
+                            callbacks.forEach(function (cb) {
                                 cb();
                             });
                         };
                         addAnimationEnd(el, onAnimationEnd);
                         timer = setTimeout(onAnimationEnd, 500);
-                        for(var i=0; i<this.progressBarContainer.length; i++) {
-                            const container = this.progressBarContainer[i];
-                            if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
-                                container.className = (container.className + " loader-progress-visible").trim();
-                        }
+                        setTimeout(() => {
+                            for (var i = 0; i < this.progressBarContainer.length; i++) {
+                                const container = this.progressBarContainer[i];
+                                if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
+                                    container.className = (container.className + " loader-progress-visible").trim();
+                            }
+                        })
                     } else {
                         this.progressVisible = true;
                         if (cb)
                             cb();
                     }
                 }
-                
+
                 fadeOutProgress(cb?: () => void) {
                     if (!this.progressVisible) {
                         if (cb)
@@ -396,7 +401,7 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         return;
                     }
-                    for(var i=0; i<this.progressBar.length; i++)
+                    for (var i = 0; i < this.progressBar.length; i++)
                         this.progressBar[i]['style'].width = '100%';
                     if (this.progressBarContainer.length) {
                         var timer;
@@ -405,20 +410,20 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         const el = this.progressBarContainer[0];
                         const onAnimationEnd = () => {
-                            try {clearTimeout(timer);}catch(e) {}
+                            try {clearTimeout(timer);} catch (e) {}
                             removeAnimationEnd(el, onAnimationEnd);
                             this.progressVisible = false;
                             const callbacks = this.progressFadeCallbacks;
                             delete this.progressFadeCallbacks;
-                            callbacks.forEach(function(cb) {
+                            callbacks.forEach(function (cb) {
                                 cb();
                             });
                         };
                         addAnimationEnd(el, onAnimationEnd);
                         timer = setTimeout(onAnimationEnd, 500);
-                        for(var i=0; i<this.progressBarContainer.length; i++) {
+                        for (var i = 0; i < this.progressBarContainer.length; i++) {
                             const container = this.progressBarContainer[i];
-                            container.className = container.className.replace(/(^|\s)loader\-progress\-visible(\s|$)/g, function(match) {
+                            container.className = container.className.replace(/(^|\s)loader\-progress\-visible(\s|$)/g, function (match) {
                                 return /^\s.+\s$/.test(match) ? " " : "";
                             });
                         }
@@ -428,24 +433,24 @@ Object.defineProperties(window, {
                             cb();
                     }
                 }
-                
+
                 get analytics() {
                     return this._analytics;
                 }
                 set analytics(value) {
                     this._analytics = value ? value : GA_ANALYTICS;
                 }
-                
+
                 reportError(err: Error, fatal?: boolean) {
-                    if(this.errorreporter)
+                    if (this.errorreporter)
                         this.errorreporter(err, fatal);
                 }
                 installErrorReporter(errorreporter: (err: Error, fatal?: boolean) => void) {
                     this.errorreporter = errorreporter;
                 }
-                
+
                 registerComponent(selector: string, impl: NexusFrameworkComponentFactory) {
-                    if(impl) {
+                    if (impl) {
                         this.components[selector] = impl;
                         this.createComponents(document.head);
                         this.createComponents(document.body);
@@ -459,13 +464,13 @@ Object.defineProperties(window, {
                             for (var i = 0; i < elements.length; i++) {
                                 const element = elements[i];
                                 var components = element['__nf_cmapping__'];
-                                if(!components)
+                                if (!components)
                                     components = element['__nf_cmapping__'] = {};
                                 const component: NexusFrameworkComponent = components[selector];
                                 if (component) {
                                     try {
                                         component.destroy();
-                                    } catch(e) {
+                                    } catch (e) {
                                         this.reportError(e);
                                     }
                                 }
@@ -476,76 +481,76 @@ Object.defineProperties(window, {
                     }
                 }
                 unregisterComponent(selector: string, impl: NexusFrameworkComponentFactory) {
-                    
+
                 }
                 createComponents(root: HTMLElement): void {
                     Object.keys(this.components).forEach((selector) => {
                         const elements = root.querySelectorAll(selector);
                         if (!elements.length)
                             return;
-                            
+
                         for (var i = 0; i < elements.length; i++) {
                             const element = elements[i];
                             var components = element['__nf_cmapping__'];
-                            if(!components)
+                            if (!components)
                                 components = element['__nf_cmapping__'] = {};
                             if (components[selector])
                                 continue;
                             const componentFactory = this.components[selector];
                             try {
                                 (components[selector] = new componentFactory()).create(element as HTMLElement);
-                            } catch(e) {
+                            } catch (e) {
                                 this.reportError(e);
                             }
                         }
                     });
                 }
-                destroyComponents(root: HTMLElement): void{
+                destroyComponents(root: HTMLElement): void {
                     Object.keys(this.components).forEach((selector) => {
                         const elements = root.querySelectorAll(selector);
                         if (!elements.length)
                             return;
-                            
+
                         for (var i = 0; i < elements.length; i++) {
                             const element = elements[i];
                             var components = element['__nf_cmapping__'];
-                            if(!components)
+                            if (!components)
                                 components = element['__nf_cmapping__'] = {};
                             const component: NexusFrameworkComponent = components[selector];
                             if (component) {
                                 try {
                                     component.destroy();
-                                } catch(e) {
+                                } catch (e) {
                                     this.reportError(e);
                                 }
                             }
                         }
                     });
                 }
-                restoreComponents(root: HTMLElement, state: Object): void{
+                restoreComponents(root: HTMLElement, state: Object): void {
                     Object.keys(this.components).forEach((selector) => {
                         const states: any[] = state[selector];
                         if (!states)
                             return;
-                            
+
                         const elements = root.querySelectorAll(selector);
                         if (!elements.length)
                             return;
-                            
+
                         for (var i = 0; i < elements.length; i++) {
                             const element = elements[i];
-                            if(states.length) {
+                            if (states.length) {
                                 const _state = states.shift();
-                                if(_state) {
+                                if (_state) {
                                     var components = element['__nf_cmapping__'];
-                                    if(!components)
+                                    if (!components)
                                         components = element['__nf_cmapping__'] = {};
                                     var component: NexusFrameworkComponent = components[selector];
                                     if (!component) {
                                         const componentFactory = this.components[selector];
                                         try {
                                             (component = components[selector] = new componentFactory()).create(element as HTMLElement);
-                                        } catch(e) {
+                                        } catch (e) {
                                             this.reportError(e);
                                             console.warn(e);
                                             continue;
@@ -553,7 +558,7 @@ Object.defineProperties(window, {
                                     }
                                     try {
                                         component.restore(_state);
-                                    } catch(e) {
+                                    } catch (e) {
                                         this.reportError(e);
                                         console.warn(e);
                                     }
@@ -563,25 +568,25 @@ Object.defineProperties(window, {
                         }
                     });
                 }
-                saveComponents(root: HTMLElement): Object{
+                saveComponents(root: HTMLElement): Object {
                     var state = {};
                     Object.keys(this.components).forEach((selector) => {
                         const states = state[selector] = [];
                         const elements = root.querySelectorAll(selector);
                         if (!elements.length)
                             return;
-                            
+
                         for (var i = 0; i < elements.length; i++) {
                             const element = elements[i];
                             var components = element['__nf_cmapping__'];
-                            if(!components)
+                            if (!components)
                                 components = element['__nf_cmapping__'] = {};
                             var component: NexusFrameworkComponent = components[selector];
                             if (!component) {
                                 const componentFactory = this.components[selector];
                                 try {
                                     (component = components[selector] = new componentFactory()).create(element as HTMLElement);
-                                } catch(e) {
+                                } catch (e) {
                                     states.push(undefined);
                                     this.reportError(e);
                                     console.warn(e);
@@ -590,7 +595,7 @@ Object.defineProperties(window, {
                             }
                             try {
                                 states.push(component.save());
-                            } catch(e) {
+                            } catch (e) {
                                 states.push(undefined);
                                 this.reportError(e);
                                 console.warn(e);
@@ -599,13 +604,13 @@ Object.defineProperties(window, {
                     });
                     return state;
                 }
-                
+
                 initPageSystem(opts?: NexusFrameworkPageSystemOptions) {
                     if (!window.NexusFrameworkLoader)
                         return console.warn("The NexusFramework Loader is required for the dynamic Page System to work correctly.");
                     if (!history.pushState || !history.replaceState)
                         return console.warn("This browser is missing an essential feature required for the dynamic Page System.")
-                    
+
                     opts = opts || {};
                     const self = this;
                     var currentResponse: NexusFrameworkPageSystemResponse;
@@ -624,7 +629,7 @@ Object.defineProperties(window, {
                         }
                     }
                     const transportPageSystem = {
-                        requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void{
+                        requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void {
                             if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                 self.defaultRequestPage(path, post);
                                 return;
@@ -643,17 +648,17 @@ Object.defineProperties(window, {
                                     self.enableAll();
                                 });
                             };
-                            if(post)
+                            if (post)
                                 window.NexusFrameworkTransport.post(url, post, wrapCB(_cb), extraHeaders);
                             else
                                 window.NexusFrameworkTransport.get(url, wrapCB(_cb), extraHeaders);
                         }
                     };
-                    
+
                     if (!opts.noio && this.io) {
                         const io = this.io;
                         this.pagesysimpl = {
-                            requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void{
+                            requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void {
                                 if (io.connected) {
                                     if (self.pagesysprerequest && !self.pagesysprerequest(path)) {
                                         self.defaultRequestPage(path, post);
@@ -667,19 +672,19 @@ Object.defineProperties(window, {
                                         "referrer": location.href
                                     };
                                     var val = document.cookie;
-                                    if(val)
+                                    if (val)
                                         headers['cookie'] = val;
-                                    io.emit("page", post ? "POST" : "GET", path, post, headers, function(res: NexusFrameworkPageSystemResponse) {
+                                    io.emit("page", post ? "POST" : "GET", path, post, headers, function (res: NexusFrameworkPageSystemResponse) {
                                         if (rid != self.activerid)
                                             return;
-                                        
+
                                         const cookies = res.headers['set-cookie'];
-                                        if(cookies) {
-                                            cookies.forEach(function(cookie) {
+                                        if (cookies) {
+                                            cookies.forEach(function (cookie) {
                                                 document.cookie = cookie;
                                             });
                                         }
-                                        
+
                                         const _cb = opts.noprogress ? cb : function (res) {
                                             self.fadeInProgress(() => {
                                                 cb(res);
@@ -703,7 +708,7 @@ Object.defineProperties(window, {
                             if (!/\/html(;.+)?$/.test(contentType.toLowerCase())) {
                                 throw new Error("Content type is not html");
                             }
-                        } catch(e) {}
+                        } catch (e) {}
                         const content = res.contentAsString;
                         const bodyindex = content.indexOf("<body");
                         if (bodyindex == -1)
@@ -743,7 +748,7 @@ Object.defineProperties(window, {
                         if (!loaderScript)
                             throw new Error("NexusFrameworkLoader script not found...");
                         childs = document.body.children;
-                        for (var i = childs.length-1; i >= 0; i--) {
+                        for (var i = childs.length - 1; i >= 0; i--) {
                             const child = childs[i];
                             switch (child.nodeName.toUpperCase()) {
                                 case "LINK":
@@ -755,7 +760,7 @@ Object.defineProperties(window, {
                                     document.body.removeChild(child);
                             }
                         }
-                        toAdd.forEach(function(el) {
+                        toAdd.forEach(function (el) {
                             document.body.appendChild(el);
                         });
                         window.NexusFrameworkLoader.load(loaderScript, this.fadeOutProgress.bind(this));
@@ -776,11 +781,11 @@ Object.defineProperties(window, {
                                     self.requestPage(url.substring(self.url.length));
                                     try {
                                         e.stopPropagation();
-                                    } catch(e) {}
+                                    } catch (e) {}
                                     try {
                                         e.preventDefault();
-                                    } catch(e) {}
-                                } catch(e) {
+                                    } catch (e) {}
+                                } catch (e) {
                                     console.warn(e);
                                 }
                             } else
@@ -816,7 +821,6 @@ Object.defineProperties(window, {
                         else {
                             const rid = ++this.activerid;
                             const url = this.resolveUrl(path);
-                            console.log(url, replace, rid);
                             if (replace)
                                 history.replaceState(genState(currentResponse), "Loading...", url);
                             else {
@@ -829,38 +833,39 @@ Object.defineProperties(window, {
                                 try {
                                     if (rid != this.activerid)
                                         return;
-                                    
+
                                     const location = res.headers['location'];
-                                    if(location) {
+                                    if (location) {
                                         const url = resolveUrl(location[0]);
                                         if (startsWith.test(url)) {
                                             (this.requestPage as any)(url.substring(this.url.length), undefined, true);
                                             return;
                                         }
-                                        
+
                                         console.warn("Requested redirect to url outside of website:", url);
                                         window.location.href = url;
                                         return;
                                     }
-                                    
+
                                     const contentDisposition = res.headers['content-disposition'];
                                     if (contentDisposition && contentDisposition[0].toLowerCase() == "attachment")
                                         throw new Error("Attachment disposition");
                                     if (!this.pagesyshandler(res))
                                         throw new Error("Could not handle response");
-                                    
+
                                     const contentType = res.headers['content-type'];
                                     history.replaceState(genState(currentResponse = {
                                         code: res.code,
                                         headers: res.headers,
                                         data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
                                     }), document.title, url);
-                                } catch(e) {
+                                    this.emit("page", path);
+                                } catch (e) {
                                     console.warn(e);
                                     forwardPopState = [path, post];
                                     try {
                                         history.go(-1);
-                                    } catch(e) {}
+                                    } catch (e) {}
                                 }
                             }, post, rid);
                         }
@@ -875,7 +880,7 @@ Object.defineProperties(window, {
                             forwardPopState = undefined;
                             return;
                         }
-                        
+
                         try {
                             if (!e.state)
                                 throw new Error("No state, reloading...");
@@ -888,7 +893,7 @@ Object.defineProperties(window, {
                             this.pagesyshandler(convertResponse(page));
                             this.restoreComponents(document.body, e.state.body);
                             window.scrollTo.apply(window, e.state.scroll);
-                        } catch(err) {
+                        } catch (err) {
                             console.warn(err);
                             var url = location.href;
                             if (startsWith.test(url)) {
@@ -898,7 +903,7 @@ Object.defineProperties(window, {
                                         return;
                                     }
                                     console.error("Unknown error occured, actually navigating to page...");
-                                } catch(e) {
+                                } catch (e) {
                                     console.error(e);
                                 }
                             }
@@ -914,6 +919,29 @@ Object.defineProperties(window, {
                         location.href = this.resolveUrl(path);
                 }
                 requestPage = this.defaultRequestPage;
+                private _listeners: {[index: string]: Function[]} = {};
+                on(event: string, cb: (...args: any[]) => void) {
+                    var listeners = this._listeners[event];
+                    if (listeners)
+                        listeners.push(cb);
+                    else
+                        this._listeners[event] = listeners = [cb];
+
+                }
+                off(event: string, cb: (...args: any[]) => void) {
+                    var index: number;
+                    var listeners = this._listeners[event];
+                    if (listeners && (index = listeners.indexOf(cb)) > -1)
+                        listeners.splice(index, 1);
+                }
+                emit(event: string, ...args: any[]) {
+                    const self = this;
+                    const listeners = this._listeners[event];
+                    if (listeners)
+                        listeners.forEach(function (cb) {
+                            cb.apply(self, args);
+                        })
+                }
             }
             var impl;
             if (window.io)
@@ -923,7 +951,7 @@ Object.defineProperties(window, {
                             path: "/:io"
                         }));
                         const io = this.io;
-                        io.on("connect", function() {
+                        io.on("connect", function () {
                             io.emit("init", window.NexusFrameworkLoader.requestedResources());
                         });
                     }

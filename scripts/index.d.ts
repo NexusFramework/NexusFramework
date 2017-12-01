@@ -158,6 +158,27 @@ declare interface NexusFrameworkClient {
      * @param root The root element, by default document.body
      */
     enableAll(root?: HTMLElement): void;
+    
+    /**
+     * Add an event listener for when pages are loaded via the dynamic page system.
+     */
+    on(event: "page", cb: (path: string) => void): void;
+    /**
+     * Add an event listener for a specific event.
+     */
+    on(event: string, cb: (...args: any[]) => void): void;
+    /**
+     * Remove a event listener for when pages are loaded via the dynamic page system.
+     */
+    off(event: "page", cb: (path: string) => void): void;
+    /**
+     * Remove n event listener for a specific event.
+     */
+    off(event: string, cb: (...args: any[]) => void): void;
+    /**
+     * Remove a event listener for when pages are loaded via the dynamic page system.
+     */
+    emit(event: string, ...args: any[]): void;
 }
 declare interface NexusFrameworkTransport {
     get(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;

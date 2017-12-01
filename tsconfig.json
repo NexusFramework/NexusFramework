@@ -4,6 +4,7 @@
         "target": "ES6",
         "declaration": true,
         "module": "commonjs",
+        "skipLibCheck": true,
         "sourceMap": true
     },
     "files": [

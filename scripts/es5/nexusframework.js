@@ -218,34 +218,37 @@ Object.defineProperties(window, {
         get: function () {
             var GA_ANALYTICS = {
                 reportError: function (err, fatal) {
-                    try {
-                        window.ga('send', 'exception', {
-                            'exDescription': (err.stack || "" + err).replace(/\n/g, "\n\t"),
-                            'exFatal': fatal
-                        });
-                    }
-                    catch (e) {
-                        console.warn(e);
-                    }
+                    if (window.ga)
+                        try {
+                            window.ga('send', 'exception', {
+                                'exDescription': (err.stack || "" + err).replace(/\n/g, "\n\t"),
+                                'exFatal': fatal
+                            });
+                        }
+                        catch (e) {
+                            console.warn(e);
+                        }
                 },
                 reportEvent: function (category, action, label, value) {
-                    try {
-                        window.ga('send', 'event', category, action, label, value);
-                    }
-                    catch (e) {
-                        console.warn(e);
-                    }
+                    if (window.ga)
+                        try {
+                            window.ga('send', 'event', category, action, label, value);
+                        }
+                        catch (e) {
+                            console.warn(e);
+                        }
                 },
                 reportPage: function (path) {
-                    try {
-                        if (!path)
-                            path = location.pathname;
-                        window.ga('set', 'page', path);
-                        window.ga('send', 'pageview');
-                    }
-                    catch (e) {
-                        console.warn(e);
-                    }
+                    if (window.ga)
+                        try {
+                            if (!path)
+                                path = location.pathname;
+                            window.ga('set', 'page', path);
+                            window.ga('send', 'pageview');
+                        }
+                        catch (e) {
+                            console.warn(e);
+                        }
                 }
             };
             var r = document.createElement("a");
@@ -329,6 +332,7 @@ Object.defineProperties(window, {
                     this.progressBarContainer = document.getElementsByClassName("loader-progress-container");
                     this.progressVisible = false;
                     this.requestPage = this.defaultRequestPage;
+                    this._listeners = {};
                     url = resolveUrl(url);
                     if (!/\/$/.test(url))
                         url += "/";
@@ -403,11 +407,13 @@ Object.defineProperties(window, {
                         };
                         addAnimationEnd(el_1, onAnimationEnd_1);
                         timer = setTimeout(onAnimationEnd_1, 500);
-                        for (var i = 0; i < this.progressBarContainer.length; i++) {
-                            var container = this.progressBarContainer[i];
-                            if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
-                                container.className = (container.className + " loader-progress-visible").trim();
-                        }
+                        setTimeout(function () {
+                            for (var i = 0; i < _this.progressBarContainer.length; i++) {
+                                var container = _this.progressBarContainer[i];
+                                if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
+                                    container.className = (container.className + " loader-progress-visible").trim();
+                            }
+                        });
                     }
                     else {
                         this.progressVisible = true;
@@ -866,7 +872,6 @@ Object.defineProperties(window, {
                         else {
                             var rid_1 = ++_this.activerid;
                             var url_1 = _this.resolveUrl(path);
-                            console.log(url_1, replace, rid_1);
                             if (replace)
                                 history.replaceState(genState(currentResponse), "Loading...", url_1);
                             else {
@@ -901,6 +906,7 @@ Object.defineProperties(window, {
                                         headers: res.headers,
                                         data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
                                     }), document.title, url_1);
+                                    _this.emit("page", path);
                                 }
                                 catch (e) {
                                     console.warn(e);
@@ -961,6 +967,31 @@ Object.defineProperties(window, {
                         throw new Error("Posting is not supported without an initialized page system, yet");
                     else
                         location.href = this.resolveUrl(path);
+                };
+                NexusFrameworkBase.prototype.on = function (event, cb) {
+                    var listeners = this._listeners[event];
+                    if (listeners)
+                        listeners.push(cb);
+                    else
+                        this._listeners[event] = listeners = [cb];
+                };
+                NexusFrameworkBase.prototype.off = function (event, cb) {
+                    var index;
+                    var listeners = this._listeners[event];
+                    if (listeners && (index = listeners.indexOf(cb)) > -1)
+                        listeners.splice(index, 1);
+                };
+                NexusFrameworkBase.prototype.emit = function (event) {
+                    var args = [];
+                    for (var _i = 1; _i < arguments.length; _i++) {
+                        args[_i - 1] = arguments[_i];
+                    }
+                    var self = this;
+                    var listeners = this._listeners[event];
+                    if (listeners)
+                        listeners.forEach(function (cb) {
+                            cb.apply(self, args);
+                        });
                 };
                 return NexusFrameworkBase;
             }());
