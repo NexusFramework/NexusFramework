@@ -108,7 +108,7 @@ const isES6Browser = function (browser) {
         (browser.opera && major >= 43);
 };
 const multerInstance = multer().any();
-const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
+const regexp_escape = /[\?\.\^\$\|\\]/g;
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
 const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
@@ -1727,8 +1727,10 @@ class NexusFramework extends events.EventEmitter {
                     else
                         next();
                 });
-            else
+            else {
+                console.log("!startsWith", startsWith, filename);
                 res.sendStatus(403);
+            }
         };
         return this.mountHandler(webpath, handler, false);
     }

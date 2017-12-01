@@ -113,7 +113,7 @@ const isES6Browser = function (browser: nexusframework.UserAgentDetails) {
 }
 
 const multerInstance = multer().any();
-const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
+const regexp_escape = /[\?\.\^\$\|\\]/g;
 
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 
@@ -1843,8 +1843,10 @@ export class NexusFramework extends events.EventEmitter {
                     } else
                         next();
                 });
-            else
+            else {
+                console.log("!startsWith", startsWith, filename);
                 res.sendStatus(403);
+            }
         };
         return this.mountHandler(webpath, handler, false);
     }
