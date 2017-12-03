@@ -806,10 +806,14 @@ function lazyLoadMapping(impl, method, mapping) {
         }, negative);
     };
 }
-function processMapping(mapping, mapped = {}) {
+function processMapping(mapping, mapped) {
+    var no403 = !mapped;
+    if (no403)
+        mapped = {};
     const use = mapping['use'] || mapping['__use'] || mapping['all'] || mapping['__all'] || mapping['*'];
     if (use)
         mapped.use = lazyLoadMapping(use, "use", mapped);
+    no403 = no403 || !!use;
     const get = mapping['get'] || mapping['__get'];
     if (get)
         mapped.get = lazyLoadMapping(get, "get", mapped);
@@ -826,9 +830,9 @@ function processMapping(mapping, mapped = {}) {
                 });
             };
         }
-        else if (get)
-            mapped.put = function (req, res, next) {
-                res.sendStatus.call(res, 403);
+        else if (get && !no403)
+            mapped.put = function (req, res) {
+                res.sendStatus(403);
             };
     }
     const post = mapping['post'] || mapping['__post'];
@@ -844,9 +848,9 @@ function processMapping(mapping, mapped = {}) {
                 });
             };
         }
-        else if (get)
-            mapped.post = function (req, res, next) {
-                express_res.sendStatus.call(res, 403);
+        else if (get && !no403)
+            mapped.post = function (req, res) {
+                res.sendStatus(403);
             };
     }
     const patch = mapping['patch'] || mapping['__patch'];
@@ -862,9 +866,9 @@ function processMapping(mapping, mapped = {}) {
                 });
             };
         }
-        else if (get)
-            mapped.patch = function (req, res, next) {
-                express_res.sendStatus.call(res, 403);
+        else if (get && !no403)
+            mapped.patch = function (req, res) {
+                res.sendStatus(403);
             };
     }
     const head = mapping['head'] || mapping['__head'];
@@ -873,6 +877,10 @@ function processMapping(mapping, mapped = {}) {
     const del = mapping['del'] || mapping['__del'] || mapping['delete'] || mapping['__delete'];
     if (del)
         mapped.del = lazyLoadMapping(del, "del", mapped);
+    else if (get && !no403)
+        mapped.del = function (req, res) {
+            res.sendStatus(403);
+        };
     return mapped;
 }
 const squareImagePathWebpOrPng = /^\/(\d+)\.(webp|png)$/;
@@ -1833,12 +1841,6 @@ class NexusFramework extends events.EventEmitter {
      */
     unshiftMiddleware(middleware) {
         this.stack.unshift(middleware);
-    }
-    useio(middleware) {
-        if (this.io)
-            this.io.use(middleware);
-        else
-            throw new Error("Attempting to add Socket.IO middleware when Socket.IO has not been initialized");
     }
     runMiddleware(req, res, next) {
         async.eachSeries(this.stack, function (middleware, cb) {
@@ -2865,7 +2867,7 @@ class NexusFramework extends events.EventEmitter {
             });
         }
         catch (e) { }
-        const builtInSendStatus = res.sendStatus.bind(req);
+        const builtInSendStatus = res.sendStatus.bind(res);
         const used = {};
         try {
             Object.defineProperty(res, "sendStatus", {

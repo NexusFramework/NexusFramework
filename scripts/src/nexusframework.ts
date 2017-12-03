@@ -655,7 +655,7 @@ Object.defineProperties(window, {
                         }
                     };
 
-                    if (!opts.noio && this.io) {
+                    if (!opts.noio && !opts.nopagesysio && this.io) {
                         const io = this.io;
                         this.pagesysimpl = {
                             requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void {

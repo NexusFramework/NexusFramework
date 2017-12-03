@@ -1,8 +1,8 @@
+import {RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
 import cookieParser = require("cookie-parser");
 import querystring = require("querystring");
 import {Template} from "nhp/lib/Template";
 import nulllogger = require("nulllogger");
-import {nexusframework} from "../types";
 import socket_io = require("socket.io");
 import useragent = require("useragent");
 import lrucache = require("lru-cache");
@@ -54,7 +54,7 @@ var nexusframeworkclient_es6_integrity: string;
     console.warn(e);
 }*/
 
-const uacache = lrucache<string, nexusframework.UserAgentDetails>();
+const uacache = lrucache<string, UserAgentDetails>();
 const namecache = lrucache<string, string>();
 
 const padLeft = function (data: string, count = 8, using = "0") {
@@ -96,7 +96,7 @@ const determineName = function (rawname: string) {
     return name;
 }
 
-const isUnsupportedBrowser = function (browser: nexusframework.UserAgentDetails) {
+const isUnsupportedBrowser = function (browser: UserAgentDetails) {
     const major = parseInt(browser.major);
     return (browser.ie && major < 10) ||
         (browser.chrome && major < 4) ||
@@ -104,7 +104,7 @@ const isUnsupportedBrowser = function (browser: nexusframework.UserAgentDetails)
         (browser.safari && major < 3 && parseInt(browser.minor) < 1) ||
         (browser.opera && major < 3 && parseInt(browser.minor) < 5);
 }
-const isES6Browser = function (browser: nexusframework.UserAgentDetails) {
+const isES6Browser = function (browser: UserAgentDetails) {
     const major = parseInt(browser.major);
     return (browser.chrome && major >= 49) ||
         (browser.firefox && major >= 45) ||
@@ -446,13 +446,13 @@ function cutPath(req: http.IncomingMessage) {
     return slash > -1 ? (path.substring(slash) || "/") : "/";
 }
 
-class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
+class RequestHandlerWithChildren implements RequestHandlerEntry {
     private views: {[index: string]: string};
-    private _index: nexusframework.RequestHandlerEntry;
-    private route: nexusframework.RouteRequestHandler;
-    private exists: nexusframework.ExistsRequestHandler;
-    private access: nexusframework.AccessRequestHandler;
-    private _children: nexusframework.RequestHandlerChildEntry[];
+    private _index: RequestHandlerEntry;
+    private route: RouteRequestHandler;
+    private exists: ExistsRequestHandler;
+    private access: AccessRequestHandler;
+    private _children: RequestHandlerChildEntry[];
     constructor() {
         Object.defineProperties(this, {
             _children: {
@@ -473,24 +473,24 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
     existsHandler() {
         return this.exists;
     }
-    setRouteHandler(route: nexusframework.RouteRequestHandler) {
+    setRouteHandler(route: RouteRequestHandler) {
         this.route = route;
     }
-    setAccessHandler(access: nexusframework.AccessRequestHandler) {
+    setAccessHandler(access: AccessRequestHandler) {
         this.access = access;
     }
-    setExistsHandler(exists: nexusframework.ExistsRequestHandler) {
+    setExistsHandler(exists: ExistsRequestHandler) {
         this.exists = exists;
     }
 
     index() {
         return this._index;
     }
-    setIndex(index: nexusframework.RequestHandlerEntry) {
+    setIndex(index: RequestHandlerEntry) {
         this._index = index;
     }
 
-    handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    handle(req: Request, res: Response, next: (err?: Error) => void) {
         const _next = () => {
             const _next = () => {
                 const _next = () => {
@@ -595,11 +595,11 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
         this.views[type] = filename;
     }
 
-    children(): nexusframework.RequestHandlerChildEntry[] {
+    children(): RequestHandlerChildEntry[] {
         return this._children;
     }
     childPaths(cb, recursive?: boolean): void {
-        var paths: (nexusframework.RecursivePath | string)[] = [];
+        var paths: (RecursivePath | string)[] = [];
         if (recursive)
             async.eachSeries(this._children, function (child, cb) {
                 try {
@@ -622,7 +622,7 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
             cb(paths);
         }
     }
-    childAt(path: string, createIfNotExists?: boolean): nexusframework.RequestHandlerChildEntry {
+    childAt(path: string, createIfNotExists?: boolean): RequestHandlerChildEntry {
         path = cleanPath(path);
         if (path) {
             const slash = path.indexOf("/");
@@ -635,7 +635,7 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
                 });
             } catch (child) {
                 if (slash > -1)
-                    return (child as nexusframework.RequestHandlerChildEntry).childAt(path.substring(slash + 1), createIfNotExists);
+                    return (child as RequestHandlerChildEntry).childAt(path.substring(slash + 1), createIfNotExists);
                 else
                     return child;
             }
@@ -643,7 +643,7 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
                 const child = new RequestHandlerChildWithChildren(toFind);
                 this._children.push(child);
                 if (slash > -1)
-                    return (child as nexusframework.RequestHandlerChildEntry).childAt(path.substring(slash + 1), createIfNotExists);
+                    return (child as RequestHandlerChildEntry).childAt(path.substring(slash + 1), createIfNotExists);
                 else
                     return child;
             }
@@ -651,7 +651,7 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
             throw new Error("path must be a valid path");
         return undefined;
     }
-    setChild(path: string, handler: nexusframework.RequestHandlerChildEntry, createIfNotExists?: boolean): void {
+    setChild(path: string, handler: RequestHandlerChildEntry, createIfNotExists?: boolean): void {
         path = cleanPath(path);
         if (path) {
             const slash = path.lastIndexOf("/");
@@ -689,7 +689,7 @@ class RequestHandlerWithChildren implements nexusframework.RequestHandlerEntry {
         }
     }
 }
-class RequestHandlerChildWithChildren extends RequestHandlerWithChildren implements nexusframework.RequestHandlerChildEntry {
+class RequestHandlerChildWithChildren extends RequestHandlerWithChildren implements RequestHandlerChildEntry {
     pattern: RegExp;
     rawPattern: string;
     constructor(pattern: string) {
@@ -699,23 +699,23 @@ class RequestHandlerChildWithChildren extends RequestHandlerWithChildren impleme
     }
 }
 
-export class LeafRequestHandler implements nexusframework.RequestHandlerEntry {
+export class LeafRequestHandler implements RequestHandlerEntry {
     leaf: boolean;
-    handle: nexusframework.RequestHandler;
-    constructor(handler: nexusframework.RequestHandler, actuallyLeaf = true) {
+    handle: RequestHandler;
+    constructor(handler: RequestHandler, actuallyLeaf = true) {
         this.handle = handler;
         this.leaf = actuallyLeaf;
     }
-    children(): nexusframework.RequestHandlerChildEntry[] {
+    children(): RequestHandlerChildEntry[] {
         throw new Error("Leaf has no children.");
     }
     childPaths(): any {
         throw new Error("Leaf has no children.");
     }
-    childAt(path: string, createIfNotExists?: boolean): nexusframework.RequestHandlerChildEntry {
+    childAt(path: string, createIfNotExists?: boolean): RequestHandlerChildEntry {
         throw new Error("Leaf has no children.");
     }
-    setChild(path: string, handler: nexusframework.RequestHandlerChildEntry, createIfNotExists?: boolean): void {
+    setChild(path: string, handler: RequestHandlerChildEntry, createIfNotExists?: boolean): void {
         throw new Error("Leaf has no children.");
     }
     view(type = "nhp"): string {
@@ -724,36 +724,36 @@ export class LeafRequestHandler implements nexusframework.RequestHandlerEntry {
     setView(filename: string, type = "nhp"): void {
         throw new Error("Not supported.");
     }
-    index(): nexusframework.RequestHandlerEntry {
+    index(): RequestHandlerEntry {
         return this;
     }
-    setIndex(index: nexusframework.RequestHandlerEntry): void {
+    setIndex(index: RequestHandlerEntry): void {
         throw new Error("Cannot change Leaf index.");
     }
-    routeHandler(): nexusframework.RouteRequestHandler {
+    routeHandler(): RouteRequestHandler {
         return undefined;
     }
-    accessHandler(): nexusframework.AccessRequestHandler {
+    accessHandler(): AccessRequestHandler {
         return undefined;
     }
-    existsHandler(): nexusframework.ExistsRequestHandler {
+    existsHandler(): ExistsRequestHandler {
         return undefined;
     }
-    setRouteHandler(index: nexusframework.RouteRequestHandler): void {
+    setRouteHandler(index: RouteRequestHandler): void {
         throw new Error("Cannot route Leafs.");
     }
-    setAccessHandler(index: nexusframework.AccessRequestHandler): void {
+    setAccessHandler(index: AccessRequestHandler): void {
         throw new Error("Not supported.");
     }
-    setExistsHandler(index: nexusframework.ExistsRequestHandler): void {
+    setExistsHandler(index: ExistsRequestHandler): void {
         throw new Error("Not supported.");
     }
     destroy() {}
 }
-class LeafRequestChildHandler extends LeafRequestHandler implements nexusframework.RequestHandlerChildEntry {
+class LeafRequestChildHandler extends LeafRequestHandler implements RequestHandlerChildEntry {
     pattern: RegExp;
     rawPattern: string;
-    constructor(handler: nexusframework.RequestHandler, pattern: string, actuallyLeaf = true) {
+    constructor(handler: RequestHandler, pattern: string, actuallyLeaf = true) {
         super(handler, actuallyLeaf);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
@@ -761,12 +761,12 @@ class LeafRequestChildHandler extends LeafRequestHandler implements nexusframewo
 }
 
 export class NHPRequestHandler extends LeafRequestHandler {
-    private impl: nexusframework.RequestHandler;
+    private impl: RequestHandler;
     private views: {[index: string]: string} = {};
-    private exists: nexusframework.ExistsRequestHandler;
-    private access: nexusframework.AccessRequestHandler;
-    constructor(impl: nexusframework.RequestHandler, redirect = false) {
-        super((req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) => {
+    private exists: ExistsRequestHandler;
+    private access: AccessRequestHandler;
+    constructor(impl: RequestHandler, redirect = false) {
+        super((req: Request, res: Response, next: (err?: Error) => void) => {
             const _next = () => {
                 const _next = () => {
                     var urlpath: string;
@@ -822,31 +822,31 @@ export class NHPRequestHandler extends LeafRequestHandler {
     setView(filename: string, type = "nhp"): void {
         this.views[type] = filename;
     }
-    accessHandler(): nexusframework.AccessRequestHandler {
+    accessHandler(): AccessRequestHandler {
         return this.access;
     }
-    existsHandler(): nexusframework.ExistsRequestHandler {
+    existsHandler(): ExistsRequestHandler {
         return this.exists;
     }
-    setAccessHandler(index: nexusframework.AccessRequestHandler): void {
+    setAccessHandler(index: AccessRequestHandler): void {
         this.access = index;
     }
-    setExistsHandler(index: nexusframework.ExistsRequestHandler): void {
+    setExistsHandler(index: ExistsRequestHandler): void {
         this.exists = index;
     }
 }
-class NHPRequestChildHandler extends NHPRequestHandler implements nexusframework.RequestHandlerChildEntry {
+class NHPRequestChildHandler extends NHPRequestHandler implements RequestHandlerChildEntry {
     rawPattern: string;
     pattern: RegExp;
-    constructor(impl: nexusframework.RequestHandler, pattern: string, redirect = true) {
+    constructor(impl: RequestHandler, pattern: string, redirect = true) {
         super(impl, redirect);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
-function resolveHandler(mapping: nexusframework.RequestHandlerMethodMapping, req: nexusframework.Request) {
-    var handler: nexusframework.RequestHandler;
+function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request) {
+    var handler: RequestHandler;
     const method = req.method.toLowerCase();
     const isHead = method === "head";
 
@@ -861,7 +861,7 @@ function resolveHandler(mapping: nexusframework.RequestHandlerMethodMapping, req
     return handler || mapping.use;
 }
 export function createExtendedRequestHandler() {
-    const requestHandler: nexusframework.MappedRequestHandler = function (req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    const requestHandler: MappedRequestHandler = function (req: Request, res: Response, next: (err?: Error) => void) {
         var handler = resolveHandler(requestHandler, req);
         if (handler)
             handler(req, res, next);
@@ -871,11 +871,11 @@ export function createExtendedRequestHandler() {
     return requestHandler;
 }
 
-function lazyLoadMapping(impl: nexusframework.FunctionOrStringOrEitherWithData, method: string, mapping: nexusframework.RequestHandlerMethodMapping): nexusframework.NHPRequestHandler {
+function lazyLoadMapping(impl: FunctionOrStringOrEitherWithData, method: string, mapping: RequestHandlerMethodMapping): NHPRequestHandler {
     if (impl instanceof Function)
-        return impl as nexusframework.NHPRequestHandler;
+        return impl as NHPRequestHandler;
     if (_.isString(impl))
-        return function (req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
+        return function (req: Request, res: Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
             try {
                 const handler = require(impl);
                 if (!(handler instanceof Function))
@@ -893,7 +893,7 @@ function lazyLoadMapping(impl: nexusframework.FunctionOrStringOrEitherWithData, 
     const data = impl.data;
     const key = "lazy" + method;
     mapping[key] = lazyLoadMapping(impl.impl, key, mapping);
-    return function (req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
+    return function (req: Request, res: Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
         const clocals = _.cloneDeep(res.locals);
         _.merge(res.locals, data);
         req.mapping = mapping;
@@ -904,10 +904,14 @@ function lazyLoadMapping(impl: nexusframework.FunctionOrStringOrEitherWithData, 
         }, negative);
     };
 }
-function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStringOrEitherWithData}, mapped: nexusframework.RequestHandlerMethodMapping = {}): nexusframework.RequestHandlerMethodMapping {
+function processMapping(mapping: {[index: string]: FunctionOrStringOrEitherWithData}, mapped?: RequestHandlerMethodMapping): RequestHandlerMethodMapping {
+    var no403 = !mapped;
+    if (no403)
+        mapped = {};
     const use = mapping['use'] || mapping['__use'] || mapping['all'] || mapping['__all'] || mapping['*'];
     if (use)
         mapped.use = lazyLoadMapping(use, "use", mapped);
+    no403 = no403 || !!use;
     const get = mapping['get'] || mapping['__get'];
     if (get)
         mapped.get = lazyLoadMapping(get, "get", mapped);
@@ -923,9 +927,9 @@ function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStri
                     mapped['autoput'](req, res, next);
                 });
             }
-        } else if (get)
-            mapped.put = function (req, res, next) {
-                res.sendStatus.call(res, 403);
+        } else if (get && !no403)
+            mapped.put = function (req, res) {
+                res.sendStatus(403);
             }
     }
     const post = mapping['post'] || mapping['__post'];
@@ -940,9 +944,9 @@ function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStri
                     mapped['autopost'](req, res, next);
                 });
             }
-        } else if (get)
-            mapped.post = function (req, res, next) {
-                express_res.sendStatus.call(res, 403);
+        } else if (get && !no403)
+            mapped.post = function (req, res) {
+                res.sendStatus(403);
             };
     }
     const patch = mapping['patch'] || mapping['__patch'];
@@ -957,9 +961,9 @@ function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStri
                     mapped['autopatch'](req, res, next);
                 });
             }
-        } else if (get)
-            mapped.patch = function (req, res, next) {
-                express_res.sendStatus.call(res, 403);
+        } else if (get && !no403)
+            mapped.patch = function (req, res) {
+                res.sendStatus(403);
             };
     }
     const head = mapping['head'] || mapping['__head'];
@@ -968,6 +972,10 @@ function processMapping(mapping: {[index: string]: nexusframework.FunctionOrStri
     const del = mapping['del'] || mapping['__del'] || mapping['delete'] || mapping['__delete'];
     if (del)
         mapped.del = lazyLoadMapping(del, "del", mapped);
+     else if (get && !no403)
+        mapped.del = function (req, res) {
+            res.sendStatus(403);
+        };
     return mapped;
 }
 
@@ -979,14 +987,14 @@ const imagePathWebpOrPng = /^\/(\d+)x(\d+)\.(webp|png)$/;
 const imagePathWebpOrJpeg = /^\/(\d+)x(\d+)\.(webp|jpg)$/;
 const imagePathJpeg = /^\/(\d+)x(\d+)\.(jpg)$/;
 const imagePathPng = /^\/(\d+)x(\d+)\.(png)$/;
-type SharpImageWriter = (res: nexusframework.Response) => void;
+type SharpImageWriter = (res: Response) => void;
 class SharpResizerRequestHandler extends LeafRequestHandler {
     private square: boolean;
     private image: sharp.SharpInstance;
     private sizes: number[] | number[][];
     private cache = lrucache<string, SharpImageWriter>();
-    private queue: {[index: string]: nexusframework.Response[]} = {};
-    constructor(imagefile: string, options: nexusframework.ImageResizerOptions) {
+    private queue: {[index: string]: Response[]} = {};
+    constructor(imagefile: string, options: ImageResizerOptions) {
         super(options.square ? (options.notransparency ? (req, res, next) => {
             this.handle0square(req.webp ? squareImagePathWebpOrJpeg : squareImagePathJpeg, req, res, next);
         } : (req, res, next) => {
@@ -1014,7 +1022,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
         } else
             return true;
     }
-    private handle0square(reg: RegExp, req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    private handle0square(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
         var match = req.path.match(reg);
         if (match) {
             const size = parseInt(match[1]);
@@ -1025,7 +1033,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
         } else
             next();
     }
-    private handle0(reg: RegExp, req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    private handle0(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
         var match = req.path.match(reg);
         if (match) {
             const width = parseInt(match[1]);
@@ -1037,7 +1045,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
         } else
             next();
     }
-    private serve(width: number, height: number, format: string, res: nexusframework.Response) {
+    private serve(width: number, height: number, format: string, res: Response) {
         if (res['req'] && res['req'].io) {
             res.writeHead(200, {
                 "content-disposition": "attachment",
@@ -1082,7 +1090,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
                     res.sendFailure(err);
                 });
             else {
-                const writer = function (res: nexusframework.Response) {
+                const writer = function (res: Response) {
                     res.writeHead(200, {
                         "Content-Type": contentType,
                         "Cache-Control": "public, max-age=30672000",
@@ -1099,7 +1107,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
 class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
     pattern: RegExp;
     rawPattern: string;
-    constructor(imagefile: string, options: nexusframework.ImageResizerOptions, pattern: string) {
+    constructor(imagefile: string, options: ImageResizerOptions, pattern: string) {
         super(imagefile, options);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
@@ -1108,12 +1116,12 @@ class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
 
 class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
     private fspath: string;
-    private options: nexusframework.RenderOptions;
-    constructor(fspath: string, logger: nulllogger.INullLogger, options?: nexusframework.RenderOptions) {
+    private options: RenderOptions;
+    constructor(fspath: string, logger: nulllogger.INullLogger, options?: RenderOptions) {
         super();
         this.fspath = fspath;
         this.options = options;
-        this.handle = (req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) => {
+        this.handle = (req: Request, res: Response, next: (err?: Error) => void) => {
             this.load((err) => {
                 if (err)
                     next(err);
@@ -1135,7 +1143,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
             if (err)
                 next(err);
             else {
-                var mapping: {[index: string]: {[index: string]: {[index: string]: nexusframework.FunctionOrStringOrEitherWithData}}} = {};
+                var mapping: {[index: string]: {[index: string]: {[index: string]: FunctionOrStringOrEitherWithData}}} = {};
                 files.forEach((file) => {
                     const filename = path.resolve(this.fspath, file);
                     const match = file.match(/([^.]+)(\.([^.]+))?\.([^.]+)/);
@@ -1172,7 +1180,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, next, skip) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as nexusframework.RouteRequestHandler)(req, res, next, skip);
+                                        (handler as RouteRequestHandler)(req, res, next, skip);
                                     else
                                         next();
                                 }
@@ -1196,7 +1204,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, exists, doesntExist) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as nexusframework.RouteRequestHandler)(req, res, exists, doesntExist);
+                                        (handler as RouteRequestHandler)(req, res, exists, doesntExist);
                                     else
                                         next();
                                 }
@@ -1220,7 +1228,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, allowed, denied) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as nexusframework.RouteRequestHandler)(req, res, allowed, denied);
+                                        (handler as RouteRequestHandler)(req, res, allowed, denied);
                                     else
                                         next();
                                 }
@@ -1303,7 +1311,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                 delete this.childPaths;
                 if (this.options) {
                     this.handle = (req, res, next) => {
-                        const renderoptions: nexusframework.RenderOptions = res.renderoptions = {};
+                        const renderoptions: RenderOptions = res.renderoptions = {};
                         _.extend(renderoptions, req.nexusframework['renderoptions']);
                         _.extend(renderoptions, this.options);
                         res.locals.__includeroot = renderoptions.root;
@@ -1384,7 +1392,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
 class LazyLoadingNHPRequestChildHandler extends LazyLoadingNHPRequestHandler {
     pattern: RegExp;
     rawPattern: string;
-    constructor(fspath: string, logger: nulllogger.INullLogger, options: nexusframework.RenderOptions, pattern: string) {
+    constructor(fspath: string, logger: nulllogger.INullLogger, options: RenderOptions, pattern: string) {
         super(fspath, logger, options);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
@@ -1395,8 +1403,8 @@ class FSWatcherRequestHandler extends RequestHandlerWithChildren {
     private skeleton: Template;
     private legacyskeleton: Template;
     private fswatcher: chokidar.FSWatcher;
-    private pagesysskeleton: nexusframework.PageSystemSkeleton;
-    constructor(fspath: string, logger: nulllogger.INullLogger, options: nexusframework.MountOptions) {
+    private pagesysskeleton: PageSystemSkeleton;
+    constructor(fspath: string, logger: nulllogger.INullLogger, options: MountOptions) {
         super();
         this.skeleton = options.skeleton as any;
         this.legacyskeleton = options.legacyskeleton as any;
@@ -1429,17 +1437,17 @@ class FSWatcherRequestHandler extends RequestHandlerWithChildren {
         super.destroy();
     }
 }
-class FSWatcherRequestChildHandler extends FSWatcherRequestHandler implements nexusframework.RequestHandlerChildEntry {
+class FSWatcherRequestChildHandler extends FSWatcherRequestHandler implements RequestHandlerChildEntry {
     pattern: RegExp;
     rawPattern: string;
-    constructor(fspath: string, logger: nulllogger.INullLogger, options: nexusframework.MountOptions, pattern: string) {
+    constructor(fspath: string, logger: nulllogger.INullLogger, options: MountOptions, pattern: string) {
         super(fspath, logger, options);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
     }
 }
 
-interface Resource extends nexusframework.Resource {
+interface Resource extends Resource {
     name: string;
     dependencies: string[];
 }
@@ -1452,13 +1460,13 @@ export class NexusFramework extends events.EventEmitter {
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
     private cookieParser: express.RequestHandler;
-    private stack: nexusframework.RequestHandler[];
-    private default: nexusframework.RequestHandlerEntry;
-    private mounts: nexusframework.RequestHandlerChildEntry[];
-    private renderoptions: nexusframework.RenderOptions;
-    private afterbody: nexusframework.Renderer[];
-    private footer: nexusframework.Renderer[];
-    private header: nexusframework.Renderer[];
+    private stack: RequestHandler[];
+    private default: RequestHandlerEntry;
+    private mounts: RequestHandlerChildEntry[];
+    private renderoptions: RenderOptions;
+    private afterbody: Renderer[];
+    private footer: Renderer[];
+    private header: Renderer[];
     private loaderEnabled: boolean;
     private logging: boolean;
     constructor(app: Application = express(), server?: http.Server, logger: nulllogger.INullLogger = new nulllogger("NexusFramework"), prefix = "/", nhpoptions: Object = {}) {
@@ -1549,13 +1557,13 @@ export class NexusFramework extends events.EventEmitter {
             value: cookieParser(secret)
         });
     }
-    installAfterBodyRenderer(renderer: nexusframework.Renderer) {
+    installAfterBodyRenderer(renderer: Renderer) {
         this.afterbody.push(renderer);
     }
-    installFooterRenderer(renderer: nexusframework.Renderer) {
+    installFooterRenderer(renderer: Renderer) {
         this.footer.push(renderer);
     }
-    installHeaderRenderer(renderer: nexusframework.Renderer) {
+    installHeaderRenderer(renderer: Renderer) {
         this.header.push(renderer);
     }
     enableLogging() {
@@ -1583,7 +1591,7 @@ export class NexusFramework extends events.EventEmitter {
         else
             this.renderoptions.skeleton = val;
     }
-    setPageSystemSkeleton(val: string | nexusframework.PageSystemSkeleton) {
+    setPageSystemSkeleton(val: string | PageSystemSkeleton) {
         if (_.isString(val))
             this.renderoptions.pagesysskeleton = require(val);
         else
@@ -1629,11 +1637,11 @@ export class NexusFramework extends events.EventEmitter {
             });
             client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
                 try {
-                    const req: nexusframework.Request = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers) as any;
+                    const req: Request = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers) as any;
                     Object.defineProperty(req, "io", {
                         value: client
                     });
-                    const res: nexusframework.Response = new SocketIOResponse(cb) as any;
+                    const res: Response = new SocketIOResponse(cb) as any;
                     res['app'] = this.app;
                     req['app'] = this.app;
                     res['req'] = req;
@@ -1692,7 +1700,7 @@ export class NexusFramework extends events.EventEmitter {
      * @param fspath The filesystem path
      * @param options The optional mount options
      */
-    mount(webpath: string, fspath: string, options: nexusframework.MountOptions = {}): nexusframework.RequestHandlerEntry {
+    mount(webpath: string, fspath: string, options: MountOptions = {}): RequestHandlerEntry {
         webpath = upath.join("/", stripPath(webpath));
         options.root = options.root || process.cwd();
         fspath = path.resolve(options.root, fspath);
@@ -1709,7 +1717,7 @@ export class NexusFramework extends events.EventEmitter {
         if (_.isString(options.skeleton))
             options.skeleton = this.nhp.template(path.resolve(options.root, options.skeleton));
         if (_.isString(options.pagesysskeleton))
-            options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton)) as nexusframework.PageSystemSkeleton;
+            options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton)) as PageSystemSkeleton;
         if (_.isString(options.legacyskeleton))
             options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
         if (webpath == "/") {
@@ -1732,7 +1740,7 @@ export class NexusFramework extends events.EventEmitter {
         }
     }
 
-    mountImageResizer(webpath: string, imagefile: string, options: nexusframework.ImageResizerOptions = {}): nexusframework.RequestHandlerEntry {
+    mountImageResizer(webpath: string, imagefile: string, options: ImageResizerOptions = {}): RequestHandlerEntry {
         webpath = upath.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new SharpResizerRequestHandler(imagefile, options);
@@ -1760,7 +1768,7 @@ export class NexusFramework extends events.EventEmitter {
      * @param fspath The filesystem path
      * @param options The mount options
      */
-    mountStatic(webpath: string, fspath: string, options?: nexusframework.StaticMountOptions) {
+    mountStatic(webpath: string, fspath: string, options?: StaticMountOptions) {
         var serveOptions = options.mutable ? {} : {
             maxAge: 3.154e+10,
             immutable: true
@@ -1768,7 +1776,7 @@ export class NexusFramework extends events.EventEmitter {
 
         fspath = path.resolve(process.cwd(), fspath);
         const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
-        const handler = function (req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+        const handler = function (req: Request, res: Response, next: (err?: Error) => void) {
             const filename = path.resolve(fspath, req.path.substring(1));
             if (startsWith.test(filename))
                 fs.stat(filename, function (err, stats) {
@@ -1859,7 +1867,7 @@ export class NexusFramework extends events.EventEmitter {
      * @param handler The request handler
      * @param leaf Whether or not this handler is a leaf, or branch
      */
-    mountHandler(webpath: string, handler: nexusframework.RequestHandler, leaf = true): nexusframework.RequestHandlerEntry {
+    mountHandler(webpath: string, handler: RequestHandler, leaf = true): RequestHandlerEntry {
         webpath = upath.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new LeafRequestHandler(handler, leaf);
@@ -1883,7 +1891,7 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * Set the default handler, its the handler that gets used when no mounts take the request.
      */
-    setDefaultHandler(handler: nexusframework.RequestHandlerEntry) {
+    setDefaultHandler(handler: RequestHandlerEntry) {
         if (this.default)
             this.default.destroy();
         this.default = handler;
@@ -1899,7 +1907,7 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * NexusFork compatible handler.
      */
-    handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    handle(req: Request, res: Response, next: (err?: Error) => void) {
         const fullpath = req.path;
         const prefix = this.prefix;
         const len = prefix.length;
@@ -1943,35 +1951,28 @@ export class NexusFramework extends events.EventEmitter {
      * Push middleware to the end of the stack.
      * At this point any user calculations have concluded and a logger should be available.
      */
-    pushMiddleware(middleware: nexusframework.RequestHandler) {
+    pushMiddleware(middleware: RequestHandler) {
         this.stack.push(middleware);
     }
     /**
      * Unshift middleware onto the beginning of the stack.
      * At this point none of the nexusframework extensions will be available.
      */
-    unshiftMiddleware(middleware: nexusframework.RequestHandler) {
+    unshiftMiddleware(middleware: RequestHandler) {
         this.stack.unshift(middleware);
     }
     /**
      * Alias for pushMiddleware
      */
-    use: (middleware: nexusframework.RequestHandler) => void;
+    use: (middleware: RequestHandler) => void;
 
-    useio(middleware: nexusframework.IORequestHandler) {
-        if (this.io)
-            this.io.use(middleware);
-        else
-            throw new Error("Attempting to add Socket.IO middleware when Socket.IO has not been initialized");
-    }
-
-    runMiddleware(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    runMiddleware(req: Request, res: Response, next: (err?: Error) => void) {
         async.eachSeries(this.stack, function (middleware, cb) {
             middleware(req, res, cb);
         }, next);
     }
 
-    private handle0(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    private handle0(req: Request, res: Response, next: (err?: Error) => void) {
         const path = upath.normalize(req.path);
         if (path === "/")
             this.default.handle(req, res, next);
@@ -1996,7 +1997,7 @@ export class NexusFramework extends events.EventEmitter {
             });
     }
 
-    upgrade(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void) {
+    upgrade(req: Request, res: Response, next: (err?: Error) => void) {
         try {
             var userName: string;
             const user = req.user;
@@ -2063,22 +2064,22 @@ export class NexusFramework extends events.EventEmitter {
             if (req.io)
                 Object.defineProperty(req, "processBody", {
                     configurable: true,
-                    value: function (cb: (err?: Error) => void, ...processors: nexusframework.BodyProcessor[]) {
+                    value: function (cb: (err?: Error) => void, ...processors: BodyProcessor[]) {
                         cb();
                     }
                 });
             else
                 Object.defineProperty(req, "processBody", {
                     configurable: true,
-                    value: function (cb: (err?: Error) => void, ...processors: nexusframework.BodyProcessor[]) {
+                    value: function (cb: (err?: Error) => void, ...processors: BodyProcessor[]) {
                         const contentType = req.get("content-type");
                         if (!processors.length)
-                            processors = [nexusframework.BodyProcessor.URLEncoded, nexusframework.BodyProcessor.JSONBody, nexusframework.BodyProcessor.MultipartFormData];
+                            processors = [BodyProcessor.URLEncoded, BodyProcessor.JSONBody, BodyProcessor.MultipartFormData];
                         req.body = {};
                         try {
                             processors.forEach(function (processor) {
                                 switch (processor) {
-                                    case nexusframework.BodyProcessor.JSONBody:
+                                    case BodyProcessor.JSONBody:
                                         if (/\/(x\-)?json$/.test(contentType)) {
                                             req.readBody(function (err, data) {
                                                 if (err)
@@ -2093,7 +2094,7 @@ export class NexusFramework extends events.EventEmitter {
                                             throw true;
                                         }
                                         break;
-                                    case nexusframework.BodyProcessor.URLEncoded:
+                                    case BodyProcessor.URLEncoded:
                                         if (/\/(((x\-)?www\-)?form\-)?urlencoded$/.test(contentType)) {
                                             req.readBody(function (err, data) {
                                                 if (err)
@@ -2108,7 +2109,7 @@ export class NexusFramework extends events.EventEmitter {
                                             throw true;
                                         }
                                         break;
-                                    case nexusframework.BodyProcessor.MultipartFormData:
+                                    case BodyProcessor.MultipartFormData:
                                         if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
                                             multerInstance(req, res, cb);
                                             throw true;
@@ -2207,7 +2208,7 @@ export class NexusFramework extends events.EventEmitter {
         var noScript = !pagesys && ((req.cookies && req.cookies.noscript) || (req.body && req.body.noscript) || req.query.noscript);
         var useLoader = pagesys || (this.loaderEnabled && !noScript);
         const rua = req.get("user-agent");
-        var ua: nexusframework.UserAgentDetails = uacache.get(rua);
+        var ua: UserAgentDetails = uacache.get(rua);
         var legacy: boolean, es6: boolean;
         if (ua) {
             legacy = ua.legacy;
@@ -2242,7 +2243,7 @@ export class NexusFramework extends events.EventEmitter {
         try {
             Object.defineProperty(res, "setRenderOptions", {
                 configurable: true,
-                value: function (options: nexusframework.RenderOptions) {
+                value: function (options: RenderOptions) {
                     res.renderoptions = options;
                 }
             });
@@ -2250,7 +2251,7 @@ export class NexusFramework extends events.EventEmitter {
         try {
             Object.defineProperty(res, "applyRenderOptions", {
                 configurable: true,
-                value: function (options: nexusframework.RenderOptions) {
+                value: function (options: RenderOptions) {
                     _.extend(res.renderoptions || (res.renderoptions = {}), options);
                 }
             });
@@ -2650,7 +2651,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch (e) {}
         var socialTagsSet = false;
-        const setSocialTags = function (socialTags: nexusframework.SocialTags) {
+        const setSocialTags = function (socialTags: SocialTags) {
             socialTagsSet = true;
             if (socialTags.url) {
                 const url = socialTags.url.toString();
@@ -2881,8 +2882,8 @@ export class NexusFramework extends events.EventEmitter {
                             var pagesysskeleton = renderoptions.pagesysskeleton;
                             if (pagesysskeleton) {
                                 if (_.isString(pagesysskeleton))
-                                    pagesysskeleton = require(pagesysskeleton) as nexusframework.PageSystemSkeleton;
-                                (pagesysskeleton as any as nexusframework.PageSystemSkeleton)(filename, vars, req, res, function (err, data) {
+                                    pagesysskeleton = require(pagesysskeleton) as PageSystemSkeleton;
+                                (pagesysskeleton as any as PageSystemSkeleton)(filename, vars, req, res, function (err, data) {
                                     if (err)
                                         next(err);
                                     else if (data)
@@ -2931,7 +2932,7 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         } catch (e) {}
-        const builtInSendStatus = res.sendStatus.bind(req);
+        const builtInSendStatus = res.sendStatus.bind(res);
         const used: {[index: string]: string} = {};
         try {
             Object.defineProperty(res, "sendStatus", {

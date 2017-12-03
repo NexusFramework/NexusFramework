@@ -79,6 +79,12 @@ declare interface NexusFrameworkPageSystemOptions {
      */
     noprogress?: boolean;
     /**
+     * Disables using SocketIO for the Page System.
+     * The Page System over SocketIO cannot pass some HttpOnly cookies,
+     * as such this might be required for some websites.
+     */
+    nopagesysio?: boolean;
+    /**
      * Disables using SocketIO, which would be used otherwise, when available
      */
     noio?: boolean;

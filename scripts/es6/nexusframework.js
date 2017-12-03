@@ -646,7 +646,7 @@ Object.defineProperties(window, {
                                 window.NexusFrameworkTransport.get(url, wrapCB(_cb), extraHeaders);
                         }
                     };
-                    if (!opts.noio && this.io) {
+                    if (!opts.noio && !opts.nopagesysio && this.io) {
                         const io = this.io;
                         this.pagesysimpl = {
                             requestPage(path, cb, post, rid) {

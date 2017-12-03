@@ -1,30 +1,30 @@
 /// <reference types="node" />
 /// <reference types="nulllogger" />
+import { StaticMountOptions, Renderer, PageSystemSkeleton, MountOptions, ImageResizerOptions, MappedRequestHandler, RequestHandler, RequestHandlerEntry, ExistsRequestHandler, RouteRequestHandler, AccessRequestHandler, RequestHandlerChildEntry, Request, Response } from "../types";
 import { Template } from "nhp/lib/Template";
-import { nexusframework } from "../types";
 import { Application } from "express";
 import express = require("express");
 import events = require("events");
 import http = require("http");
 import nhp = require("nhp");
-export declare class LeafRequestHandler implements nexusframework.RequestHandlerEntry {
+export declare class LeafRequestHandler implements RequestHandlerEntry {
     leaf: boolean;
-    handle: nexusframework.RequestHandler;
-    constructor(handler: nexusframework.RequestHandler, actuallyLeaf?: boolean);
-    children(): nexusframework.RequestHandlerChildEntry[];
+    handle: RequestHandler;
+    constructor(handler: RequestHandler, actuallyLeaf?: boolean);
+    children(): RequestHandlerChildEntry[];
     childPaths(): any;
-    childAt(path: string, createIfNotExists?: boolean): nexusframework.RequestHandlerChildEntry;
-    setChild(path: string, handler: nexusframework.RequestHandlerChildEntry, createIfNotExists?: boolean): void;
+    childAt(path: string, createIfNotExists?: boolean): RequestHandlerChildEntry;
+    setChild(path: string, handler: RequestHandlerChildEntry, createIfNotExists?: boolean): void;
     view(type?: string): string;
     setView(filename: string, type?: string): void;
-    index(): nexusframework.RequestHandlerEntry;
-    setIndex(index: nexusframework.RequestHandlerEntry): void;
-    routeHandler(): nexusframework.RouteRequestHandler;
-    accessHandler(): nexusframework.AccessRequestHandler;
-    existsHandler(): nexusframework.ExistsRequestHandler;
-    setRouteHandler(index: nexusframework.RouteRequestHandler): void;
-    setAccessHandler(index: nexusframework.AccessRequestHandler): void;
-    setExistsHandler(index: nexusframework.ExistsRequestHandler): void;
+    index(): RequestHandlerEntry;
+    setIndex(index: RequestHandlerEntry): void;
+    routeHandler(): RouteRequestHandler;
+    accessHandler(): AccessRequestHandler;
+    existsHandler(): ExistsRequestHandler;
+    setRouteHandler(index: RouteRequestHandler): void;
+    setAccessHandler(index: AccessRequestHandler): void;
+    setExistsHandler(index: ExistsRequestHandler): void;
     destroy(): void;
 }
 export declare class NHPRequestHandler extends LeafRequestHandler {
@@ -32,15 +32,15 @@ export declare class NHPRequestHandler extends LeafRequestHandler {
     private views;
     private exists;
     private access;
-    constructor(impl: nexusframework.RequestHandler, redirect?: boolean);
+    constructor(impl: RequestHandler, redirect?: boolean);
     view(type?: string): string;
     setView(filename: string, type?: string): void;
-    accessHandler(): nexusframework.AccessRequestHandler;
-    existsHandler(): nexusframework.ExistsRequestHandler;
-    setAccessHandler(index: nexusframework.AccessRequestHandler): void;
-    setExistsHandler(index: nexusframework.ExistsRequestHandler): void;
+    accessHandler(): AccessRequestHandler;
+    existsHandler(): ExistsRequestHandler;
+    setAccessHandler(index: AccessRequestHandler): void;
+    setExistsHandler(index: ExistsRequestHandler): void;
 }
-export declare function createExtendedRequestHandler(): nexusframework.MappedRequestHandler;
+export declare function createExtendedRequestHandler(): MappedRequestHandler;
 export declare class NexusFramework extends events.EventEmitter {
     readonly nhp: nhp;
     readonly prefix: string;
@@ -62,9 +62,9 @@ export declare class NexusFramework extends events.EventEmitter {
     enableLoader(): void;
     disableLoader(): void;
     enableSignedCookies(secret: any): void;
-    installAfterBodyRenderer(renderer: nexusframework.Renderer): void;
-    installFooterRenderer(renderer: nexusframework.Renderer): void;
-    installHeaderRenderer(renderer: nexusframework.Renderer): void;
+    installAfterBodyRenderer(renderer: Renderer): void;
+    installFooterRenderer(renderer: Renderer): void;
+    installHeaderRenderer(renderer: Renderer): void;
     enableLogging(): void;
     /**
      * Set the skeleton to use for legacy browsers.
@@ -78,7 +78,7 @@ export declare class NexusFramework extends events.EventEmitter {
      */
     setLegacySkeleton(val: string | Template): void;
     setSkeleton(val: string | Template): void;
-    setPageSystemSkeleton(val: string | nexusframework.PageSystemSkeleton): void;
+    setPageSystemSkeleton(val: string | PageSystemSkeleton): void;
     setErrorDocument(code: number | "*", page?: string): void;
     mountScripts(mpath?: string): void;
     mountAbout(mpath?: string): void;
@@ -90,8 +90,8 @@ export declare class NexusFramework extends events.EventEmitter {
      * @param fspath The filesystem path
      * @param options The optional mount options
      */
-    mount(webpath: string, fspath: string, options?: nexusframework.MountOptions): nexusframework.RequestHandlerEntry;
-    mountImageResizer(webpath: string, imagefile: string, options?: nexusframework.ImageResizerOptions): nexusframework.RequestHandlerEntry;
+    mount(webpath: string, fspath: string, options?: MountOptions): RequestHandlerEntry;
+    mountImageResizer(webpath: string, imagefile: string, options?: ImageResizerOptions): RequestHandlerEntry;
     /**
      * Mount a directory.
      *
@@ -99,7 +99,7 @@ export declare class NexusFramework extends events.EventEmitter {
      * @param fspath The filesystem path
      * @param options The mount options
      */
-    mountStatic(webpath: string, fspath: string, options?: nexusframework.StaticMountOptions): nexusframework.RequestHandlerEntry;
+    mountStatic(webpath: string, fspath: string, options?: StaticMountOptions): RequestHandlerEntry;
     /**
      * Set a request handler for the specified path.
      * Replaces any existing request handler.
@@ -108,11 +108,11 @@ export declare class NexusFramework extends events.EventEmitter {
      * @param handler The request handler
      * @param leaf Whether or not this handler is a leaf, or branch
      */
-    mountHandler(webpath: string, handler: nexusframework.RequestHandler, leaf?: boolean): nexusframework.RequestHandlerEntry;
+    mountHandler(webpath: string, handler: RequestHandler, leaf?: boolean): RequestHandlerEntry;
     /**
      * Set the default handler, its the handler that gets used when no mounts take the request.
      */
-    setDefaultHandler(handler: nexusframework.RequestHandlerEntry): void;
+    setDefaultHandler(handler: RequestHandlerEntry): void;
     /**
      * Start listening on a specific port.
      */
@@ -120,25 +120,24 @@ export declare class NexusFramework extends events.EventEmitter {
     /**
      * NexusFork compatible handler.
      */
-    handle(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void): void;
+    handle(req: Request, res: Response, next: (err?: Error) => void): void;
     /**
      * Push middleware to the end of the stack.
      * At this point any user calculations have concluded and a logger should be available.
      */
-    pushMiddleware(middleware: nexusframework.RequestHandler): void;
+    pushMiddleware(middleware: RequestHandler): void;
     /**
      * Unshift middleware onto the beginning of the stack.
      * At this point none of the nexusframework extensions will be available.
      */
-    unshiftMiddleware(middleware: nexusframework.RequestHandler): void;
+    unshiftMiddleware(middleware: RequestHandler): void;
     /**
      * Alias for pushMiddleware
      */
-    use: (middleware: nexusframework.RequestHandler) => void;
-    useio(middleware: nexusframework.IORequestHandler): void;
-    runMiddleware(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void): void;
+    use: (middleware: RequestHandler) => void;
+    runMiddleware(req: Request, res: Response, next: (err?: Error) => void): void;
     private handle0(req, res, next);
-    upgrade(req: nexusframework.Request, res: nexusframework.Response, next: (err?: Error) => void): void;
+    upgrade(req: Request, res: Response, next: (err?: Error) => void): void;
     static nexusforkUpgrade(req: express.Request, res: express.Response): void;
     /**
      * Express compatible handler
