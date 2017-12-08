@@ -23,7 +23,6 @@ Object.defineProperties(window, {
                     function NexusFrameworkXMLHttpRequestResponse(request, url) {
                         this._url = url;
                         this.request = request;
-                        request.responseType = "arraybuffer";
                     }
                     Object.defineProperty(NexusFrameworkXMLHttpRequestResponse.prototype, "url", {
                         get: function () {
@@ -91,6 +90,7 @@ Object.defineProperties(window, {
                 }());
                 var execute_1 = function (method, url, data, cb, extraHeaders, progcb) {
                     var request = new XMLHttpRequest();
+                    request.responseType = "arraybuffer";
                     request.open(method, url, true);
                     Object.keys(extraHeaders).forEach(function (key) {
                         request.setRequestHeader(key, extraHeaders[key]);

@@ -18,7 +18,6 @@ Object.defineProperties(window, {
                     constructor(request: XMLHttpRequest, url: string) {
                         this._url = url;
                         this.request = request;
-                        request.responseType = "arraybuffer"
                     }
                     get url() {
                         return this.request.responseURL || this._url;
@@ -60,6 +59,7 @@ Object.defineProperties(window, {
                 }
                 const execute = function (method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void) {
                     const request = new XMLHttpRequest();
+                    request.responseType = "arraybuffer"
                     request.open(method, url, true);
                     Object.keys(extraHeaders).forEach(function (key) {
                         request.setRequestHeader(key, extraHeaders[key]);
