@@ -47,13 +47,6 @@ Object.defineProperties(window, {
                         enumerable: true,
                         configurable: true
                     });
-                    Object.defineProperty(NexusFrameworkXMLHttpRequestResponse.prototype, "contentAsArrayBuffer", {
-                        get: function () {
-                            return this.request.response;
-                        },
-                        enumerable: true,
-                        configurable: true
-                    });
                     Object.defineProperty(NexusFrameworkXMLHttpRequestResponse.prototype, "contentAsString", {
                         get: function () {
                             return this.request.responseText;
@@ -90,7 +83,6 @@ Object.defineProperties(window, {
                 }());
                 var execute_1 = function (method, url, data, cb, extraHeaders, progcb) {
                     var request = new XMLHttpRequest();
-                    request.responseType = "arraybuffer";
                     request.open(method, url, true);
                     Object.keys(extraHeaders).forEach(function (key) {
                         request.setRequestHeader(key, extraHeaders[key]);
@@ -135,7 +127,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -147,7 +138,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -159,7 +149,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -171,7 +160,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -183,7 +171,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -195,7 +182,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -276,21 +262,11 @@ Object.defineProperties(window, {
             };
             var convertResponse = function (res, url) {
                 if (url === void 0) { url = location.href; }
-                var storage, arrstorage;
+                var storage;
                 return (typeof res.data === "string" || res.data instanceof String) ? {
                     url: url,
                     code: res.code,
                     contentAsString: res.data,
-                    get contentAsArrayBuffer() {
-                        if (!arrstorage) {
-                            arrstorage = new ArrayBuffer(res.data.length);
-                            var bufView = new Uint8Array(arrstorage);
-                            for (var i = 0, strLen = res.data.length; i < strLen; i++) {
-                                bufView[i] = res.data.charCodeAt(i);
-                            }
-                        }
-                        return arrstorage;
-                    },
                     get contentFromJSON() {
                         if (!storage)
                             storage = JSON.parse(res.data);
@@ -304,18 +280,6 @@ Object.defineProperties(window, {
                         if (!storage)
                             storage = JSON.stringify(res.data);
                         return storage;
-                    },
-                    get contentAsArrayBuffer() {
-                        if (!arrstorage) {
-                            if (!storage)
-                                storage = JSON.stringify(res.data);
-                            arrstorage = new ArrayBuffer(storage);
-                            var bufView = new Uint8Array(arrstorage);
-                            for (var i = 0, strLen = storage.length; i < strLen; i++) {
-                                bufView[i] = storage.charCodeAt(i);
-                            }
-                        }
-                        return arrstorage;
                     },
                     contentFromJSON: res.data,
                     headers: res.headers

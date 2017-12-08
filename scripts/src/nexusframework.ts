@@ -30,9 +30,6 @@ Object.defineProperties(window, {
                             this.parsedJson = JSON.parse(this.request.responseText);
                         return this.parsedJson;
                     }
-                    get contentAsArrayBuffer() {
-                        return this.request.response;
-                    }
                     get contentAsString() {
                         return this.request.responseText;
                     }
@@ -59,7 +56,6 @@ Object.defineProperties(window, {
                 }
                 const execute = function (method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void) {
                     const request = new XMLHttpRequest();
-                    request.responseType = "arraybuffer"
                     request.open(method, url, true);
                     Object.keys(extraHeaders).forEach(function (key) {
                         request.setRequestHeader(key, extraHeaders[key]);
@@ -103,7 +99,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -115,7 +110,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -127,7 +121,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -139,7 +132,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -151,7 +143,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -163,7 +154,6 @@ Object.defineProperties(window, {
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
-                            contentAsArrayBuffer: new ArrayBuffer(0),
                             contentAsString: "",
                             headers: {}
                         });
@@ -243,21 +233,11 @@ Object.defineProperties(window, {
                 el.removeEventListener("oTransitionEnd", handler as any);
             }
             const convertResponse = function (res: NexusFrameworkPageSystemResponse, url = location.href) {
-                var storage: any, arrstorage: ArrayBuffer;
+                var storage: any;
                 return (typeof res.data === "string" || res.data instanceof String) ? {
                     url,
                     code: res.code,
                     contentAsString: res.data,
-                    get contentAsArrayBuffer() {
-                        if (!arrstorage) {
-                            arrstorage = new ArrayBuffer(res.data.length); // 2 bytes for each char
-                            var bufView = new Uint8Array(arrstorage);
-                            for (var i = 0, strLen = res.data.length; i < strLen; i++) {
-                                bufView[i] = res.data.charCodeAt(i);
-                            }
-                        }
-                        return arrstorage;
-                    },
                     get contentFromJSON() {
                         if (!storage)
                             storage = JSON.parse(res.data);
@@ -271,18 +251,6 @@ Object.defineProperties(window, {
                             if (!storage)
                                 storage = JSON.stringify(res.data);
                             return storage;
-                        },
-                        get contentAsArrayBuffer() {
-                            if (!arrstorage) {
-                                if (!storage)
-                                    storage = JSON.stringify(res.data);
-                                arrstorage = new ArrayBuffer(storage); // 2 bytes for each char
-                                var bufView = new Uint8Array(arrstorage);
-                                for (var i = 0, strLen = storage.length; i < strLen; i++) {
-                                    bufView[i] = storage.charCodeAt(i);
-                                }
-                            }
-                            return arrstorage;
                         },
                         contentFromJSON: res.data,
                         headers: res.headers

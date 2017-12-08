@@ -44,10 +44,6 @@ declare interface NexusFrameworkTransportResponse {
      */
     readonly contentFromJSON: any;
     /**
-     * The content as a ArrayBuffer.
-     */
-    readonly contentAsArrayBuffer: any;
-    /**
      * The content as a String.
      */
     readonly contentAsString: string;
