@@ -647,7 +647,8 @@ Object.defineProperties(window, {
                             }
                             var url = self.resolveUrl(path);
                             var extraHeaders = {
-                                accepts: "text/json"
+                                Accept: "application/json",
+                                "X-Requested-With": "XMLHttpRequest"
                             };
                             var _cb = opts.noprogress ? cb : function (res) {
                                 self.fadeInProgress(function () {

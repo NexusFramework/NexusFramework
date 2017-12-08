@@ -600,7 +600,8 @@ Object.defineProperties(window, {
                             }
                             const url = self.resolveUrl(path);
                             const extraHeaders = {
-                                accepts: "text/json"
+                                Accept: "application/json",
+                                "X-Requested-With": "XMLHttpRequest"
                             };
                             const _cb = opts.noprogress ? cb : function (res) {
                                 self.fadeInProgress(() => {
