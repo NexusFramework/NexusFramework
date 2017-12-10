@@ -646,9 +646,7 @@ Object.defineProperties(window, {
                                 self.disableAll();
                                 self.fadeInProgress();
                             }
-                            if (!/^\//.test(path))
-                                path = "/" + path;
-                            var url = self.resolveUrl("/:pagesys" + path);
+                            var url = self.resolveUrl(":pagesys/" + path);
                             var _cb = opts.noprogress ? cb : function (res) {
                                 self.fadeInProgress(function () {
                                     cb(res);
