@@ -606,11 +606,9 @@ Object.defineProperties(window, {
                                 self.disableAll();
                                 self.fadeInProgress();
                             }
-                            const url = self.resolveUrl(path);
-                            const extraHeaders = {
-                                Accept: "application/json",
-                                "X-Requested-With": "XMLHttpRequest"
-                            };
+                            if (!/^\//.test(path))
+                                path = "/" + path;
+                            const url = self.resolveUrl("/:pagesys" + path);
                             const _cb = opts.noprogress ? cb : function (res: NexusFrameworkTransportResponse) {
                                 self.fadeInProgress(() => {
                                     cb(res);
@@ -618,9 +616,9 @@ Object.defineProperties(window, {
                                 });
                             };
                             if (post)
-                                window.NexusFrameworkTransport.post(url, post, wrapCB(_cb), extraHeaders);
+                                window.NexusFrameworkTransport.post(url, post, wrapCB(_cb));
                             else
-                                window.NexusFrameworkTransport.get(url, wrapCB(_cb), extraHeaders);
+                                window.NexusFrameworkTransport.get(url, wrapCB(_cb));
                         }
                     };
 

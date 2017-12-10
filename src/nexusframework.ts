@@ -1,4 +1,4 @@
-import {RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
+import {RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource as _Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
 import cookieParser = require("cookie-parser");
 import querystring = require("querystring");
 import {Template} from "nhp/lib/Template";
@@ -389,7 +389,9 @@ class SocketIOResponse extends stream.Writable implements express.Response {
     }
 
     // Express
-    locals = {};
+    locals = {
+        pagesys: true
+    };
     status: any;
     sendStatus: any;
     links: any;
@@ -871,9 +873,9 @@ export function createExtendedRequestHandler() {
     return requestHandler;
 }
 
-function lazyLoadMapping(impl: FunctionOrStringOrEitherWithData, method: string, mapping: RequestHandlerMethodMapping): NHPRequestHandler {
+function lazyLoadMapping(impl: FunctionOrStringOrEitherWithData, method: string, mapping: RequestHandlerMethodMapping): RequestHandler {
     if (impl instanceof Function)
-        return impl as NHPRequestHandler;
+        return impl as any;
     if (_.isString(impl))
         return function (req: Request, res: Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
             try {
@@ -1447,7 +1449,7 @@ class FSWatcherRequestChildHandler extends FSWatcherRequestHandler implements Re
     }
 }
 
-interface Resource extends Resource {
+interface Resource extends _Resource {
     name: string;
     dependencies: string[];
 }
@@ -1690,6 +1692,22 @@ export class NexusFramework extends events.EventEmitter {
                         next(err);
                 });
             });
+        const pagesyspath = /^\/\:pagesys(\/.*)$/;
+        this.unshiftMiddleware(function(req, res, next) {
+            if (!req.io) {
+                var match = req.url.match(pagesyspath);
+                if (match) {
+                    req.url = match[1];
+                    try {
+                        Object.defineProperty(req, "pagesys", {
+                            value: true
+                        });
+                    } catch(e) {}
+                    res.locals.pagesys = true;
+                }
+            }
+            next();
+        });
         return iopath;
     }
 
@@ -2168,7 +2186,7 @@ export class NexusFramework extends events.EventEmitter {
                 });
             } catch (e) {}
         }
-        var pagesys: boolean;
+        const pagesys = req.pagesys;
         if (req.xhr || req.io) {
             try {
                 res.locals.xhrOrIO = true;
@@ -2178,18 +2196,6 @@ export class NexusFramework extends events.EventEmitter {
                     value: true
                 });
             } catch (e) {}
-            if (req.accepts("json")) {
-                pagesys = true;
-                try {
-                    res.locals.pagesys = true;
-                } catch (e) {}
-                try {
-                    Object.defineProperty(req, "pagesys", {
-                        configurable: true,
-                        value: true
-                    });
-                } catch (e) {}
-            }
         }
         try {
             res.locals.basehref = this.prefix;

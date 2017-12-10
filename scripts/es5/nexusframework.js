@@ -645,11 +645,9 @@ Object.defineProperties(window, {
                                 self.disableAll();
                                 self.fadeInProgress();
                             }
-                            var url = self.resolveUrl(path);
-                            var extraHeaders = {
-                                Accept: "application/json",
-                                "X-Requested-With": "XMLHttpRequest"
-                            };
+                            if (!/^\//.test(path))
+                                path = "/" + path;
+                            var url = self.resolveUrl("/:pagesys" + path);
                             var _cb = opts.noprogress ? cb : function (res) {
                                 self.fadeInProgress(function () {
                                     cb(res);
@@ -657,9 +655,9 @@ Object.defineProperties(window, {
                                 });
                             };
                             if (post)
-                                window.NexusFrameworkTransport.post(url, post, wrapCB(_cb), extraHeaders);
+                                window.NexusFrameworkTransport.post(url, post, wrapCB(_cb));
                             else
-                                window.NexusFrameworkTransport.get(url, wrapCB(_cb), extraHeaders);
+                                window.NexusFrameworkTransport.get(url, wrapCB(_cb));
                         }
                     };
                     if (!opts.noio && !opts.nopagesysio && this.io) {

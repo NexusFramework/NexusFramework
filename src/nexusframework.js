@@ -264,7 +264,9 @@ class SocketIOResponse extends stream.Writable {
         this.sendDate = false;
         this.finished = false;
         // Express
-        this.locals = {};
+        this.locals = {
+            pagesys: true
+        };
         this.cb = cb;
     }
     flushHeaders() {
@@ -1571,6 +1573,23 @@ class NexusFramework extends events.EventEmitter {
                         next(err);
                 });
             });
+        const pagesyspath = /^\/\:pagesys(\/.*)$/;
+        this.unshiftMiddleware(function (req, res, next) {
+            if (!req.io) {
+                var match = req.url.match(pagesyspath);
+                if (match) {
+                    req.url = match[1];
+                    try {
+                        Object.defineProperty(req, "pagesys", {
+                            value: true
+                        });
+                    }
+                    catch (e) { }
+                    res.locals.pagesys = true;
+                }
+            }
+            next();
+        });
         return iopath;
     }
     /**
@@ -2061,7 +2080,7 @@ class NexusFramework extends events.EventEmitter {
             }
             catch (e) { }
         }
-        var pagesys;
+        const pagesys = req.pagesys;
         if (req.xhr || req.io) {
             try {
                 res.locals.xhrOrIO = true;
@@ -2073,20 +2092,6 @@ class NexusFramework extends events.EventEmitter {
                 });
             }
             catch (e) { }
-            if (req.accepts("json")) {
-                pagesys = true;
-                try {
-                    res.locals.pagesys = true;
-                }
-                catch (e) { }
-                try {
-                    Object.defineProperty(req, "pagesys", {
-                        configurable: true,
-                        value: true
-                    });
-                }
-                catch (e) { }
-            }
         }
         try {
             res.locals.basehref = this.prefix;

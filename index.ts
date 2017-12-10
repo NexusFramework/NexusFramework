@@ -2,16 +2,16 @@
 
 import { NexusFramework } from "./src/nexusframework";
 import { nexusfork } from "nexusfork/types";
-import { nexusframework } from "./types";
 import { Application } from "express";
+import { Config } from "./types";
 import { Server } from "http";
 import path = require("path");
 import _ = require("lodash");
 
 const _export: {
-    (config: nexusframework.Config, logger: nulllogger.INullLogger, server: Server, app: Application): nexusfork.WebRequestHandler;
+    (config: Config, logger: nulllogger.INullLogger, server: Server, app: Application): nexusfork.WebRequestHandler;
     NexusFramework: typeof NexusFramework
-} = function (config: nexusframework.Config, logger: nulllogger.INullLogger, server: Server, app: Application) {
+} = function (config: Config, logger: nulllogger.INullLogger, server: Server, app: Application) {
     if (config.prefix) {
         if(config.prefix[0] != "/")
             config.prefix = "/" + config.prefix;
