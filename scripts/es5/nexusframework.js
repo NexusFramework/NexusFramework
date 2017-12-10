@@ -84,9 +84,10 @@ Object.defineProperties(window, {
                 var execute_1 = function (method, url, data, cb, extraHeaders, progcb) {
                     var request = new XMLHttpRequest();
                     request.open(method, url, true);
-                    Object.keys(extraHeaders).forEach(function (key) {
-                        request.setRequestHeader(key, extraHeaders[key]);
-                    });
+                    if (extraHeaders)
+                        Object.keys(extraHeaders).forEach(function (key) {
+                            request.setRequestHeader(key, extraHeaders[key]);
+                        });
                     if (progcb)
                         request.onprogress = function (ev) {
                             if (ev.lengthComputable && ev.total)

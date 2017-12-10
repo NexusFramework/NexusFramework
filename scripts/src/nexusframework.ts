@@ -57,9 +57,10 @@ Object.defineProperties(window, {
                 const execute = function (method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void) {
                     const request = new XMLHttpRequest();
                     request.open(method, url, true);
-                    Object.keys(extraHeaders).forEach(function (key) {
-                        request.setRequestHeader(key, extraHeaders[key]);
-                    });
+                    if (extraHeaders)
+                        Object.keys(extraHeaders).forEach(function (key) {
+                            request.setRequestHeader(key, extraHeaders[key]);
+                        });
                     if (progcb)
                         request.onprogress = function (ev) {
                             if (ev.lengthComputable && ev.total)
