@@ -728,13 +728,17 @@ Object.defineProperties(window, {
                         return true;
                     });
                     var forwardPopState;
+                    const hashOrNothing = /^(#.*)?$/;
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent {
                         constructor() {
                             this.handler = (e) => {
                                 if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
                                     return;
-                                var url = this.element.href;
+                                var url = this.element.getAttribute("href");
+                                if (hashOrNothing.test(url))
+                                    return;
+                                url = this.element.href;
                                 if (startsWith.test(url)) {
                                     try {
                                         const match = url.match(/^(.+)#.*$/);

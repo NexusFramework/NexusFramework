@@ -775,6 +775,7 @@ Object.defineProperties(window, {
                         return true;
                     });
                     var forwardPopState;
+                    var hashOrNothing = /^(#.*)?$/;
                     var startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     var AnchorElementComponent = (function () {
                         function AnchorElementComponent() {
@@ -782,7 +783,10 @@ Object.defineProperties(window, {
                             this.handler = function (e) {
                                 if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic"))
                                     return;
-                                var url = _this.element.href;
+                                var url = _this.element.getAttribute("href");
+                                if (hashOrNothing.test(url))
+                                    return;
+                                url = _this.element.href;
                                 if (startsWith.test(url)) {
                                     try {
                                         var match = url.match(/^(.+)#.*$/);
