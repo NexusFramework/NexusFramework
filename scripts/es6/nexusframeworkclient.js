@@ -313,8 +313,15 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         return;
                     }
-                    for (var i = 0; i < this.progressBar.length; i++)
-                        this.progressBar[i]['style'].width = '0%';
+                    for (var i = 0; i < this.progressBar.length; i++) {
+                        try {
+                            const progbar = this.progressBar[i];
+                            progbar.className += " noani";
+                            progbar['style'].width = '0%';
+                            progbar.className = progbar.className.replace(/ noani$/, "");
+                        }
+                        catch (e) { }
+                    }
                     if (this.progressBarContainer.length) {
                         var timer;
                         this.progressFadeCallbacks = [];
@@ -404,6 +411,7 @@ Object.defineProperties(window, {
                     this._analytics = value ? value : GA_ANALYTICS;
                 }
                 reportError(err, fatal) {
+                    console[fatal ? "error" : "warn"](err.stack);
                     if (this.errorreporter)
                         this.errorreporter(err, fatal);
                 }
@@ -718,24 +726,30 @@ Object.defineProperties(window, {
                                     document.body.removeChild(child);
                             }
                         }
-                        toAdd.forEach(function (el) {
+                        toAdd.forEach((el) => {
                             document.body.appendChild(el);
+                            this.createComponents(el);
                         });
                         window.NexusFrameworkLoader.load(loaderScript, this.fadeOutProgress.bind(this));
                         return true;
                     });
                     var forwardPopState;
-                    const hashOrNothing = /^(#.*)?$/;
+                    const beforeHash = /^([^#]+)(#.+)?$/;
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent {
                         constructor() {
                             this.handler = (e) => {
-                                if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
+                                if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic")) {
+                                    console.warn("Ignoring due to nopagesys or nodynamic attribute");
                                     return;
-                                var url = this.element.getAttribute("href");
-                                if (hashOrNothing.test(url))
+                                }
+                                var url = this.element.href;
+                                const bhash = url.match(beforeHash);
+                                const chash = location.href.match(beforeHash);
+                                if (bhash && chash && bhash[2] && chash[1] === bhash[1]) {
+                                    console.warn("Ignoring due to only hash changed...");
                                     return;
-                                url = this.element.href;
+                                }
                                 if (startsWith.test(url)) {
                                     try {
                                         const match = url.match(/^(.+)#.*$/);
@@ -835,8 +849,13 @@ Object.defineProperties(window, {
                             }, post, rid);
                         }
                     };
+                    var cchash = location.href.match(beforeHash);
                     this.registerComponent("a", AnchorElementComponent);
                     window.addEventListener('popstate', (e) => {
+                        const bhash = location.href.match(beforeHash);
+                        if (bhash && cchash && cchash[1] === bhash[1])
+                            return;
+                        cchash = bhash;
                         if (forwardPopState) {
                             const forward = forwardPopState;
                             setTimeout(() => {
@@ -931,20 +950,20 @@ Object.defineProperties(window, {
             return impl;
         }
     },
-    NexusFramework: {
+    NexusFrameworkClient: {
         configurable: true,
         set: function (instance) {
-            Object.defineProperty(window, "NexusFramework", {
+            Object.defineProperty(window, "NexusFrameworkClient", {
                 value: instance
             });
         },
         get: function () {
             const instance = new window.NexusFrameworkImpl();
-            Object.defineProperty(window, "NexusFramework", {
+            Object.defineProperty(window, "NexusFrameworkClient", {
                 value: instance
             });
             return instance;
         }
     }
 });
-//# sourceMappingURL=nexusframework.js.map
+//# sourceMappingURL=nexusframeworkclient.js.map

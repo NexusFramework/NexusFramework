@@ -1,0 +1,1 @@
+/mnt/c/Users/ktaey/Documents/NodeJS/NexusFrameworkJS/scripts/src/nexusframeworkclient.ts

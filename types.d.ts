@@ -263,7 +263,7 @@ declare interface Response extends nexusfork.WebResponse {
     /**
      * Add a style to the style queue.
      */
-    addStyle(url: string, version?: string, ...deps: string[]): void;
+    addStyle(url: string, integrity?: string, ...deps: string[]): void;
     addInlineStyle(source: string, ...deps: string[]): void;
     /**
      * Add a font from Google's library, with the specified weight.
@@ -312,7 +312,7 @@ declare interface Response extends nexusfork.WebResponse {
     /**
      * Add a script to the script queue.
      */
-    addScript(url: string, version?: string, ...deps: string[]): void;
+    addScript(url: string, integrity?: string, ...deps: string[]): void;
     addInlineScript(source: string, ...deps: string[]): void;
     /**
      * Add the Socket.IO Client to the script queue.

@@ -1,3 +1,10 @@
+@mixin transition($transition...) {
+    -moz-transition:    $transition;
+    -o-transition:      $transition;
+    -webkit-transition: $transition;
+    transition:         $transition;
+}
+
 .loader-container {
     top: 0px;
     left: 0px;
@@ -7,7 +14,7 @@
     position: absolute;
     background: #fafafa;
     pointer-events: none;
-    transition: opacity .2s;
+    @include transition(opacity .2s);
     position: fixed;
     opacity: 0;
     
@@ -77,6 +84,9 @@
         width: 0px;
         height: 100%;
         background: #999;
-        transition: width .2s;
+        @include transition(width .2s);
+        &.noani {
+            @include transition(none);
+        }
     }
 }

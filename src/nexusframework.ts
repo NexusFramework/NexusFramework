@@ -23,6 +23,14 @@ import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
 
+const mainpkgversion: string = (function() {
+    try {
+        return require(path.resolve(path.dirname(require.main.filename), "package.json")).version;
+    } catch(e) {
+        return "Unknown";
+    }
+})();
+
 const iconSizes = [310, 196, 152, 150, 144, 128, 120, 114, 96, 76, 72, 70, 64, 60, 57, 48, 24, 16, 32];
 const socket_io_slim_js = require.resolve("socket.io-client/dist/socket.io.slim.js");
 const has_slim_io_js = fs.existsSync(socket_io_slim_js);
@@ -2236,7 +2244,7 @@ export class NexusFramework extends events.EventEmitter {
         try {
             res.locals.useragent = ua;
         } catch (e) {}
-        const scriptDir = legacy ? "legacy" : (es6 ? "es6" : "es5");
+        const scriptType = legacy ? "legacy" : (es6 ? "es6" : "es5");
         if (useLoader && !pagesys && legacy)
             useLoader = false;
         const meta: {[index: string]: string} = {generator};
@@ -2286,7 +2294,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch (e) {}
 
-        const addResource = function (type: string, queue: Resource[], source: string, integrity: string, inline: boolean, dependencies: string[]) {
+        const addResource = function (queue: Resource[], source: string, integrity: string, inline: boolean, dependencies: string[]) {
             const name = inline ? "inline-" + stringHash(source) : determineName(source);
             for (var i = 0; i < queue.length; i++) {
                 const resource = queue[i];
@@ -2297,6 +2305,7 @@ export class NexusFramework extends events.EventEmitter {
                         resource.dependencies = _.uniq(resource.dependencies);
                     }
                     resource.integrity = integrity;
+                    resource.source = source;
                     return;
                 }
             }
@@ -2308,9 +2317,9 @@ export class NexusFramework extends events.EventEmitter {
                 inline
             });
         }
-        const resourceQueue = [];
+        const resourceQueueStack: any[] = [];
         const addScript = function (source: string, integrity?: string, ...deps: string[]) {
-            addResource("script", scripts, source, integrity, false, deps);
+            addResource(scripts, source, integrity, false, deps);
         }
         const addSocketIOClient = () => {
             addScript(upath.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
@@ -2319,7 +2328,7 @@ export class NexusFramework extends events.EventEmitter {
             Object.defineProperty(res, "pushResourceQueues", {
                 configurable: true,
                 value: function (andClear?: boolean) {
-                    resourceQueue.push([_.clone(gfonts), scripts.slice(0), styles.slice(0)]);
+                    resourceQueueStack.push([_.clone(gfonts), scripts.slice(0), styles.slice(0)]);
                     if (andClear) {
                         gfonts = {};
                         scripts = [];
@@ -2330,7 +2339,7 @@ export class NexusFramework extends events.EventEmitter {
             Object.defineProperty(res, "popResourceQueues", {
                 configurable: true,
                 value: function () {
-                    const queue = resourceQueue.pop();
+                    const queue = resourceQueueStack.pop();
                     gfonts = queue[0];
                     scripts = queue[1];
                     styles = queue[2];
@@ -2376,7 +2385,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch (e) {}
         const addInlineScript = function (source: string, ...deps: string[]) {
-            addResource("script", scripts, source, undefined, true, deps);
+            addResource(scripts, source, undefined, true, deps);
         };
         try {
             Object.defineProperty(res, "addInlineScript", {
@@ -2389,14 +2398,14 @@ export class NexusFramework extends events.EventEmitter {
                 configurable: true,
                 value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
                     const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
-                    const path = upath.join(this.prefix, ":scripts/" + scriptDir + "/nexusframework.min.js?v=" + pkgjson.version);
+                    const path = upath.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
                     if (includeSocketIO) {
                         addSocketIOClient();
                         addScript(path, integrity, "socket.io");
-                        if (autoEnabledPageSystem)
-                            addInlineScript("NexusFramework.initPageSystem()", "nexusframework");
                     } else
                         addScript(path, integrity);
+                    if (autoEnabledPageSystem)
+                        addInlineScript("NexusFrameworkClient.initPageSystem()", "nexusframeworkclient");
                 }
             });
         } catch (e) {}
@@ -2409,7 +2418,7 @@ export class NexusFramework extends events.EventEmitter {
         try {
             Object.defineProperty(res, "addFooterRenderer", {
                 configurable: true,
-                value: function (renderer) {
+                value: function (renderer: Renderer | string) {
                     footerRenderers.push(renderer instanceof Function ? renderer : function (out) {
                         out.write("" + renderer);
                     });
@@ -2451,7 +2460,7 @@ export class NexusFramework extends events.EventEmitter {
             Object.defineProperty(res, "addStyle", {
                 configurable: true,
                 value: function (source: string, integrity?: string, ...deps: string[]) {
-                    addResource("style", styles, source, integrity, false, deps);
+                    addResource(styles, source, integrity, false, deps);
                 }
             });
         } catch (e) {}
@@ -2459,14 +2468,14 @@ export class NexusFramework extends events.EventEmitter {
             Object.defineProperty(res, "addInlineStyle", {
                 configurable: true,
                 value: function (source: string, ...deps: string[]) {
-                    addResource("style", styles, source, undefined, true, deps);
+                    addResource(styles, source, undefined, true, deps);
                 }
             });
         } catch (e) {}
         try {
             Object.defineProperty(res, "addHeaderRenderer", {
                 configurable: true,
-                value: function (renderer) {
+                value: function (renderer: Renderer | string) {
                     headerRenderers.push(renderer instanceof Function ? renderer : function (out) {
                         out.write("" + renderer);
                     });
@@ -2609,6 +2618,31 @@ export class NexusFramework extends events.EventEmitter {
                     const user = req.user;
                     if (user)
                         addInlineScript("NexusFramework['currentUserID'] = " + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframework");
+                    
+                    var replacements = [
+                        [
+                            /{{pkgversion}}/,
+                            mainpkgversion
+                        ]
+                    ];
+                    styles.forEach(function (style) {
+                        if(style.inline)
+                            return;
+                        replacements.forEach(function(replacement) {
+                            style.source = style.source.toString().replace(replacement[0], replacement[1]);
+                        });
+                    });
+                    replacements.push([
+                        /{{type}}/,
+                        scriptType
+                    ]);
+                    scripts.forEach(function (script) {
+                        if(script.inline)
+                            return;
+                        replacements.forEach(function(replacement) {
+                            script.source = script.source.toString().replace(replacement[0], replacement[1]);
+                        });
+                    });
                     if (useLoader) {
                         if (!servedLoader) {
                             const locals = res.locals;
@@ -2891,11 +2925,11 @@ export class NexusFramework extends events.EventEmitter {
                                     pagesysskeleton = require(pagesysskeleton) as PageSystemSkeleton;
                                 (pagesysskeleton as any as PageSystemSkeleton)(filename, vars, req, res, function (err, data) {
                                     if (err)
-                                        next(err);
+                                        res.sendFailure(err);
                                     else if (data)
                                         res.json(data);
                                     else
-                                        next(new Error("Server Error: No data passed"));
+                                        res.sendFailure(new Error("Server Error: No data passed"));
                                 });
                                 return;
                             }
@@ -2904,7 +2938,7 @@ export class NexusFramework extends events.EventEmitter {
                         const out = req.io ? res : new BufferingWritable(res);
                         const callback = function (err?: Error) {
                             if (err)
-                                next(err);
+                                res.sendFailure(err);
                             else
                                 out.end();
                         };
@@ -2923,7 +2957,7 @@ export class NexusFramework extends events.EventEmitter {
                     } else
                         res.render(filename, options, function (err?: Error, html?: string) {
                             if (err)
-                                next(err);
+                                res.sendFailure(err);
                             else {
                                 var buff = Buffer.from(html, "utf8");
                                 res.writeHead(200, {
@@ -2972,9 +3006,10 @@ export class NexusFramework extends events.EventEmitter {
                         res.addBodyClassName("error-" + code);
                         req.url = url.resolve("/", handler);
                         this.handle0(req, res, function (err?: Error) {
-                            if (err)
-                                next(err);
-                            else
+                            if (err) {
+                                console.warn(err);
+                                builtInSendStatus(500, new Error("Error with error page script"));
+                            } else
                                 builtInSendStatus(code, _err);
                         });
                     } else
@@ -3015,9 +3050,10 @@ export class NexusFramework extends events.EventEmitter {
                         res.addBodyClassName("error-500");
                         req.url = url.resolve("/", handler);
                         this.handle0(req, res, function (err?: Error) {
-                            if (err)
-                                next(err);
-                            else
+                            if (err) {
+                                console.warn(err);
+                                builtInSendStatus(500, new Error("Error with error page script"));
+                            } else
                                 builtInSendFailure(_err);
                         });
                     } else

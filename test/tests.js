@@ -57,7 +57,7 @@ it("create and configure", function (cb) {
             },
             {
                 inline: true,
-                source: "$(\".modal\").modal();NexusFramework.initPageSystem();",
+                source: "$(\".modal\").modal();NexusFrameworkClient.initPageSystem();",
                 dependencies: ["bootstrap"]
             }
         ],
@@ -196,7 +196,7 @@ describe("Skeleton", function () {
                 return cb(err);
             console.log(body);
             assert.equal(res.statusCode, 200);
-            assert.ok(/This is a test page for .+NexusFramework\./.test(body));
+            assert.ok(body.indexOf("This is a test page for") > -1);
             assert.ok(body.indexOf("<title>Test</title>") > -1);
             cb();
         });

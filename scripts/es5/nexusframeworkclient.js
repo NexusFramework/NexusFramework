@@ -349,8 +349,15 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         return;
                     }
-                    for (var i = 0; i < this.progressBar.length; i++)
-                        this.progressBar[i]['style'].width = '0%';
+                    for (var i = 0; i < this.progressBar.length; i++) {
+                        try {
+                            var progbar = this.progressBar[i];
+                            progbar.className += " noani";
+                            progbar['style'].width = '0%';
+                            progbar.className = progbar.className.replace(/ noani$/, "");
+                        }
+                        catch (e) { }
+                    }
                     if (this.progressBarContainer.length) {
                         var timer;
                         this.progressFadeCallbacks = [];
@@ -445,6 +452,7 @@ Object.defineProperties(window, {
                     configurable: true
                 });
                 NexusFrameworkBase.prototype.reportError = function (err, fatal) {
+                    console[fatal ? "error" : "warn"](err.stack);
                     if (this.errorreporter)
                         this.errorreporter(err, fatal);
                 };
@@ -767,23 +775,29 @@ Object.defineProperties(window, {
                         }
                         toAdd.forEach(function (el) {
                             document.body.appendChild(el);
+                            _this.createComponents(el);
                         });
                         window.NexusFrameworkLoader.load(loaderScript, _this.fadeOutProgress.bind(_this));
                         return true;
                     });
                     var forwardPopState;
-                    var hashOrNothing = /^(#.*)?$/;
+                    var beforeHash = /^([^#]+)(#.+)?$/;
                     var startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     var AnchorElementComponent = (function () {
                         function AnchorElementComponent() {
                             var _this = this;
                             this.handler = function (e) {
-                                if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic"))
+                                if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic")) {
+                                    console.warn("Ignoring due to nopagesys or nodynamic attribute");
                                     return;
-                                var url = _this.element.getAttribute("href");
-                                if (hashOrNothing.test(url))
+                                }
+                                var url = _this.element.href;
+                                var bhash = url.match(beforeHash);
+                                var chash = location.href.match(beforeHash);
+                                if (bhash && chash && bhash[2] && chash[1] === bhash[1]) {
+                                    console.warn("Ignoring due to only hash changed...");
                                     return;
-                                url = _this.element.href;
+                                }
                                 if (startsWith.test(url)) {
                                     try {
                                         var match = url.match(/^(.+)#.*$/);
@@ -885,8 +899,13 @@ Object.defineProperties(window, {
                             }, post, rid_1);
                         }
                     };
+                    var cchash = location.href.match(beforeHash);
                     this.registerComponent("a", AnchorElementComponent);
                     window.addEventListener('popstate', function (e) {
+                        var bhash = location.href.match(beforeHash);
+                        if (bhash && cchash && cchash[1] === bhash[1])
+                            return;
+                        cchash = bhash;
                         if (forwardPopState) {
                             var forward_1 = forwardPopState;
                             setTimeout(function () {
@@ -991,20 +1010,20 @@ Object.defineProperties(window, {
             return impl;
         }
     },
-    NexusFramework: {
+    NexusFrameworkClient: {
         configurable: true,
         set: function (instance) {
-            Object.defineProperty(window, "NexusFramework", {
+            Object.defineProperty(window, "NexusFrameworkClient", {
                 value: instance
             });
         },
         get: function () {
             var instance = new window.NexusFrameworkImpl();
-            Object.defineProperty(window, "NexusFramework", {
+            Object.defineProperty(window, "NexusFrameworkClient", {
                 value: instance
             });
             return instance;
         }
     }
 });
-//# sourceMappingURL=nexusframework.js.map
+//# sourceMappingURL=nexusframeworkclient.js.map
