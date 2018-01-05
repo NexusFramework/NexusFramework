@@ -739,17 +739,13 @@ Object.defineProperties(window, {
                     class AnchorElementComponent {
                         constructor() {
                             this.handler = (e) => {
-                                if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic")) {
-                                    console.warn("Ignoring due to nopagesys or nodynamic attribute");
+                                if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
                                     return;
-                                }
                                 var url = this.element.href;
                                 const bhash = url.match(beforeHash);
                                 const chash = location.href.match(beforeHash);
-                                if (bhash && chash && bhash[2] && chash[1] === bhash[1]) {
-                                    console.warn("Ignoring due to only hash changed...");
+                                if (bhash && chash && bhash[2] && chash[1] === bhash[1])
                                     return;
-                                }
                                 if (startsWith.test(url)) {
                                     try {
                                         const match = url.match(/^(.+)#.*$/);

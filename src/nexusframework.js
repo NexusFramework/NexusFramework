@@ -116,7 +116,7 @@ const isES6Browser = function (browser) {
         (browser.opera && major >= 43);
 };
 const multerInstance = multer().any();
-const regexp_escape = /[\?\.\^\$\|\\]/g;
+const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
 const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
@@ -348,7 +348,7 @@ SocketIOResponse.prototype.writeContinue = notSupported;
 SocketIOResponse.prototype.assignSocket = notSupported;
 SocketIOResponse.prototype.detachSocket = notSupported;
 function decodePath(path) {
-    return path.replace(/\$/g, "\\$").replace(/\^/g, "\\^").replace(/%([a-z0-9]{2}|%)/g, function (match, p1, offset) {
+    return path.replace(regexp_escape, "\\$&").replace(/%([a-z0-9]{2}|%)/g, function (match, p1, offset) {
         if (p1 === "%")
             return "%";
         return String.fromCharCode(parseInt(p1, 16));
@@ -414,6 +414,7 @@ class RequestHandlerWithChildren {
                         async.eachSeries(this._children, function (handler, cb) {
                             var match = currentpath.match(handler.pattern);
                             if (match) {
+                                req.logger.gears("Matched", handler.pattern, match);
                                 const cmatch = req.match;
                                 try {
                                     Object.defineProperty(req, "match", {
@@ -578,9 +579,9 @@ class RequestHandlerWithChildren {
         path = cleanPath(path);
         if (path) {
             const slash = path.lastIndexOf("/");
-            const toFind = slash > -1 ? path.substring(slash + 1) : path;
+            var toFind = slash > -1 ? path.substring(slash + 1) : path;
             if (toFind !== handler.rawPattern)
-                throw new Error("rawPattern must match path when setting a child. " + toFind + " !== " + handler.rawPattern);
+                toFind = path;
             if (slash > -1) {
                 const child = this.childAt(path.substring(0, slash), createIfNotExists);
                 if (child)
@@ -618,7 +619,7 @@ class RequestHandlerChildWithChildren extends RequestHandlerWithChildren {
     constructor(pattern) {
         super();
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+        this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 class LeafRequestHandler {
@@ -675,7 +676,7 @@ class LeafRequestChildHandler extends LeafRequestHandler {
     constructor(handler, pattern, actuallyLeaf = true) {
         super(handler, actuallyLeaf);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+        this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 class NHPRequestHandler extends LeafRequestHandler {
@@ -755,7 +756,7 @@ class NHPRequestChildHandler extends NHPRequestHandler {
     constructor(impl, pattern, redirect = true) {
         super(impl, redirect);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+        this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 function resolveHandler(mapping, req) {
@@ -1018,7 +1019,7 @@ class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
     constructor(imagefile, options, pattern) {
         super(imagefile, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+        this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
@@ -1070,7 +1071,8 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                     }
                     else if (/^([^.]+$)/.test(file)) {
                         const pattern = decodePath(file);
-                        this.setChild(pattern, new LazyLoadingNHPRequestChildHandler(filename, logger, undefined, pattern));
+                        logger.gears("Found", pattern);
+                        this.setChild(pattern, new LazyLoadingNHPRequestChildHandler(filename, logger, undefined, pattern), true);
                     }
                     else
                         logger.warn("Ignoring", filename);
@@ -1310,7 +1312,7 @@ class LazyLoadingNHPRequestChildHandler extends LazyLoadingNHPRequestHandler {
     constructor(fspath, logger, options, pattern) {
         super(fspath, logger, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+        this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 class FSWatcherRequestHandler extends RequestHandlerWithChildren {
@@ -1351,7 +1353,7 @@ class FSWatcherRequestChildHandler extends FSWatcherRequestHandler {
     constructor(fspath, logger, options, pattern) {
         super(fspath, logger, options);
         this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern.replace(regexp_escape, "\\$&") + "$", "i");
+        this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 class NexusFramework extends events.EventEmitter {
@@ -2226,8 +2228,10 @@ class NexusFramework extends events.EventEmitter {
         const addScript = function (source, integrity, ...deps) {
             addResource(scripts, source, integrity, false, deps);
         };
-        const addSocketIOClient = () => {
+        const addSocketIOClient = has_slim_io_js ? () => {
             addScript(upath.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
+        } : () => {
+            addScript(upath.join(this.prefix, ":io/socket.io.js"));
         };
         try {
             Object.defineProperty(res, "pushResourceQueues", {
@@ -2913,7 +2917,7 @@ class NexusFramework extends events.EventEmitter {
                 value: (code, _err) => {
                     var st = "" + code;
                     var handler;
-                    const errordoc = (res.renderoptions || this.renderoptions).errordoc;
+                    const errordoc = (res.renderoptions || this.renderoptions).errordoc || {};
                     if ((handler = (errordoc[st] || errordoc["*"])) && used[st] != handler) {
                         used[st] = handler;
                         try {

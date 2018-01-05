@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+process.env.VERBOSE = "gears";
 const nexusframework_1 = require("../src/nexusframework");
 const socketio_client = require("socket.io-client");
 //import phantomjs = require("phantomjs-prebuilt");
@@ -21,7 +22,7 @@ const app = express();
         cb(undefined, browser.url(url), program);
     }).catch(cb);
 }*/
-const aboutHtml = 'NexusFramework is a NodeJS Server framework compatible with ExpressJS, and is powering this website!</p> <p>It uses TypeScript, ExpressJS and Socket.IO to provide a rich API and deep control,<br /> and a page loading system that uses ajax or socket.io (when available) to dynamically load content!</p> <p>Check it out <a href="https://nexustools.com/projects/nexusframework/nodejs">on NexusTools</a> or <a href="https://github.com/NexusTools/NexusFrameworkJS">on GitHub</a>.';
+const aboutHtml = 'NexusFramework is a NodeJS Server framework, and is powering this website!';
 const indexHtml = "<h1>Test</h1> <p>This is a test page for <a href=\"/:about/\">NexusFramework</a>.<br /> <a href=\"/:scripts/es6/loader.min.js\">Minified loader script</a>.</p>";
 var iopath;
 var framework;
@@ -142,8 +143,19 @@ describe("request", function () {
         request("http://localhost:35438/:about/", function (err, res, body) {
             if (err)
                 return cb(err);
+            console.log(body);
             assert.equal(res.statusCode, 200);
-            assert.ok(body.indexOf(aboutHtml));
+            assert.ok(body.indexOf(aboutHtml) > -1);
+            cb();
+        });
+    });
+    it("/fb30cf8e2673c51ea6547f1704f71c93/", function (cb) {
+        request("http://localhost:35438/fb30cf8e2673c51ea6547f1704f71c93/", function (err, res, body) {
+            if (err)
+                return cb(err);
+            assert.equal(res.statusCode, 200);
+            assert.ok(body.indexOf("Yahaha! You found me!") > -1);
+            assert.ok(body.indexOf("fb30cf8e2673c51ea6547f1704f71c93") > -1);
             cb();
         });
     });

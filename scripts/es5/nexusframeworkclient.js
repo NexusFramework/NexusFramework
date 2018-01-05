@@ -787,17 +787,13 @@ Object.defineProperties(window, {
                         function AnchorElementComponent() {
                             var _this = this;
                             this.handler = function (e) {
-                                if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic")) {
-                                    console.warn("Ignoring due to nopagesys or nodynamic attribute");
+                                if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic"))
                                     return;
-                                }
                                 var url = _this.element.href;
                                 var bhash = url.match(beforeHash);
                                 var chash = location.href.match(beforeHash);
-                                if (bhash && chash && bhash[2] && chash[1] === bhash[1]) {
-                                    console.warn("Ignoring due to only hash changed...");
+                                if (bhash && chash && bhash[2] && chash[1] === bhash[1])
                                     return;
-                                }
                                 if (startsWith.test(url)) {
                                     try {
                                         var match = url.match(/^(.+)#.*$/);
