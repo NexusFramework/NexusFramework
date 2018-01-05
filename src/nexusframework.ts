@@ -665,10 +665,12 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
     setChild(path: string, handler: RequestHandlerChildEntry, createIfNotExists?: boolean): void {
         path = cleanPath(path);
         if (path) {
-            const slash = path.lastIndexOf("/");
+            var slash = path.lastIndexOf("/");
             var toFind = slash > -1 ? path.substring(slash + 1) : path;
-            if (toFind !== handler.rawPattern)
+            if (toFind !== handler.rawPattern) {
                 toFind = path;
+                slash = -1;
+            }
             if (slash > -1) {
                 const child = this.childAt(path.substring(0, slash), createIfNotExists);
                 if (child)
