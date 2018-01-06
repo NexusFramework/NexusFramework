@@ -1196,7 +1196,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         (handler as RouteRequestHandler)(req, res, next, skip);
                                     else
-                                        next();
+                                        skip();
                                 }
                                 this.setRouteHandler(handler);
                                 handler(req, res, next, skip);
@@ -1218,9 +1218,9 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, exists, doesntExist) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as RouteRequestHandler)(req, res, exists, doesntExist);
+                                        (handler as ExistsRequestHandler)(req, res, exists, doesntExist);
                                     else
-                                        next();
+                                        doesntExist();
                                 }
                                 this.setRouteHandler(handler);
                                 handler(req, res, exists, doesntExist);
@@ -1244,7 +1244,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         (handler as RouteRequestHandler)(req, res, allowed, denied);
                                     else
-                                        next();
+                                        allowed();
                                 }
                                 this.setAccessHandler(handler);
                                 handler(req, res, allowed, denied);
@@ -3031,6 +3031,7 @@ export class NexusFramework extends events.EventEmitter {
                     var handler: string;
                     const errordoc = (res.renderoptions || this.renderoptions).errordoc;
                     if ((handler = (errordoc["500"] || errordoc["*"])) && used["500"] != handler) {
+                        req.logger.warn(_err);
                         used["500"] = handler;
                         handler = upath.join("/", handler);
                         try {

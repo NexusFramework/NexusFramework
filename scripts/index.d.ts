@@ -197,7 +197,7 @@ declare interface Window {
     NexusFrameworkImpl?: any;
     NexusFrameworkLoader?: NexusFrameworkLoader;
     NexusFrameworkTransport?: NexusFrameworkTransport;
-    NexusFramework?: NexusFrameworkClient;
+    NexusFrameworkClient?: NexusFrameworkClient;
     io?: SocketIOClientStatic;
     jQuery?: JQueryStatic;
     ga?: GoogleAnalytics;

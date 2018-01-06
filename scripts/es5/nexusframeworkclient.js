@@ -349,14 +349,21 @@ Object.defineProperties(window, {
                             this.progressFadeCallbacks.push(cb);
                         return;
                     }
-                    for (var i = 0; i < this.progressBar.length; i++) {
+                    var _loop_1 = function () {
                         try {
-                            var progbar = this.progressBar[i];
-                            progbar.className += " noani";
-                            progbar['style'].width = '0%';
-                            progbar.className = progbar.className.replace(/ noani$/, "");
+                            var progbar_1 = this_1.progressBar[i];
+                            var origClassName_1 = progbar_1.className;
+                            progbar_1.className += " noani";
+                            progbar_1['style'].width = '0%';
+                            setTimeout(function () {
+                                progbar_1.className = origClassName_1;
+                            });
                         }
                         catch (e) { }
+                    };
+                    var this_1 = this;
+                    for (var i = 0; i < this.progressBar.length; i++) {
+                        _loop_1();
                     }
                     if (this.progressBarContainer.length) {
                         var timer;

@@ -316,9 +316,12 @@ Object.defineProperties(window, {
                     for (var i = 0; i < this.progressBar.length; i++) {
                         try {
                             const progbar = this.progressBar[i];
+                            const origClassName = progbar.className;
                             progbar.className += " noani";
                             progbar['style'].width = '0%';
-                            progbar.className = progbar.className.replace(/ noani$/, "");
+                            setTimeout(function () {
+                                progbar.className = origClassName;
+                            });
                         }
                         catch (e) { }
                     }

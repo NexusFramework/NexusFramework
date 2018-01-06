@@ -1093,7 +1093,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         handler(req, res, next, skip);
                                     else
-                                        next();
+                                        skip();
                                 };
                                 this.setRouteHandler(handler);
                                 handler(req, res, next, skip);
@@ -1119,7 +1119,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         handler(req, res, exists, doesntExist);
                                     else
-                                        next();
+                                        doesntExist();
                                 };
                                 this.setRouteHandler(handler);
                                 handler(req, res, exists, doesntExist);
@@ -1144,7 +1144,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         handler(req, res, allowed, denied);
                                     else
-                                        next();
+                                        allowed();
                                 };
                                 this.setAccessHandler(handler);
                                 handler(req, res, allowed, denied);
@@ -2971,6 +2971,7 @@ class NexusFramework extends events.EventEmitter {
                     var handler;
                     const errordoc = (res.renderoptions || this.renderoptions).errordoc;
                     if ((handler = (errordoc["500"] || errordoc["*"])) && used["500"] != handler) {
+                        req.logger.warn(_err);
                         used["500"] = handler;
                         handler = upath.join("/", handler);
                         try {
