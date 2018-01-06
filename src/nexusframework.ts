@@ -2623,7 +2623,7 @@ export class NexusFramework extends events.EventEmitter {
                 if (!noScript) {
                     const user = req.user;
                     if (user)
-                        addInlineScript("window.NexusFrameworkClient['currentUserID'] = " + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframework");
+                        addInlineScript("window.NexusFrameworkClient['currentUserID']=" + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframeworkclient");
                     
                     var replacements: any[] = [
                         [
