@@ -1159,9 +1159,10 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                 var mapping: {[index: string]: {[index: string]: {[index: string]: FunctionOrStringOrEitherWithData}}} = {};
                 files.forEach((file) => {
                     const filename = path.resolve(this.fspath, file);
-                    const match = file.match(/([^.]+)(\.([^.]+))?\.([^.]+)/);
+                    const match = file.match(/^([^.]+)(\.([^.]+))?\.([^.]+)$/);
                     if (match) {
                         const route = decodePath(match[1].toLowerCase());
+                        
                         var fmapping = mapping[route];
                         if (!fmapping)
                             mapping[route] = fmapping = {};
@@ -1196,7 +1197,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         (handler as RouteRequestHandler)(req, res, next, skip);
                                     else
-                                        skip();
+                                        next();
                                 }
                                 this.setRouteHandler(handler);
                                 handler(req, res, next, skip);
@@ -1220,7 +1221,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     if (handler)
                                         (handler as ExistsRequestHandler)(req, res, exists, doesntExist);
                                     else
-                                        doesntExist();
+                                        exists();
                                 }
                                 this.setRouteHandler(handler);
                                 handler(req, res, exists, doesntExist);

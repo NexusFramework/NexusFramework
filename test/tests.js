@@ -159,6 +159,21 @@ describe("request", function () {
             cb();
         });
     });
+    it("post /fb30cf8e2673c51ea6547f1704f71c93/", function (cb) {
+        request.post("http://localhost:35438/fb30cf8e2673c51ea6547f1704f71c93/?key=FAU%28HQE%28*3qt", {
+            form: {
+                test: true,
+                tuna: 123456
+            }
+        }, function (err, res, body) {
+            if (err)
+                return cb(err);
+            assert.equal(res.statusCode, 200);
+            assert.ok(body.indexOf("Yahaha! You found me!") > -1);
+            assert.ok(body.indexOf("Shh... its a secret...") > -1);
+            cb();
+        });
+    });
 });
 var client;
 describe("socket.io", function () {

@@ -8,7 +8,7 @@
         }
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.49",
+    "version": "0.3.0-beta.50",
     "license": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [
@@ -37,9 +37,9 @@
     },
     "scripts": {
         "compile-scripts": "node compileScripts",
-        "test": "mocha --bail --timeout 10000 --reporter spec --check-leaks test/",
-        "test-coverage": "istanbul cover node_modules/mocha/bin/_mocha -- --bail --reporter spec --check-leaks test/ --exit",
-        "test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly -- --reporter spec --check-leaks test/ --exit"
+        "test": "mocha --bail --timeout 10000 --reporter spec --check-leaks  --require source-map-support/register test/",
+        "test-coverage": "istanbul cover node_modules/mocha/bin/_mocha -- --bail --reporter spec --check-leaks  --require source-map-support/register test/ --exit",
+        "test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly -- --reporter spec --check-leaks --require source-map-support/register test/ --exit"
     },
     "main": "index",
     "engines": {
@@ -71,16 +71,17 @@
         "@types/lru-cache": "^4.1.0",
         "@types/mocha": "^2.2.44",
         "@types/request": "^2.0.8",
+        "@types/sharp": "^0.17.5",
         "@types/socket.io": "^1.4.31",
         "@types/socket.io-client": "^1.4.32",
         "@types/useragent": "^2.1.1",
-        "@types/sharp": "^0.17.5",
         "debug": "^3.1.0",
         "istanbul": "^0.4.5",
         "mocha": "^4.0.1",
         "nexusfork": "^0.5.2",
         "ntypescript": "^1.201706190042.1",
         "request": "^2.83.0",
+        "source-map-support": "^0.5.0",
         "uglify-es": "^3.1.9",
         "uglify-js": "^3.1.9"
     }
