@@ -813,14 +813,14 @@ Object.defineProperties(window, {
                                 try {
                                     if (rid != this.activerid)
                                         return;
-                                    const location = res.headers['location'];
+                                    const location = res.headers['x-location'] || res.headers['location'];
                                     if (location) {
                                         const url = resolveUrl(location[0]);
                                         if (startsWith.test(url)) {
                                             this.requestPage(url.substring(this.url.length), undefined, true);
                                             return;
                                         }
-                                        console.warn("Requested redirect to url outside of website:", url);
+                                        console.warn("Requested redirect to external url:", url);
                                         window.location.href = url;
                                         return;
                                     }

@@ -1636,6 +1636,27 @@ class NexusFramework extends events.EventEmitter {
                         });
                     }
                     catch (e) { }
+                    try {
+                        const origwriteHead = res.writeHead;
+                        Object.defineProperty(res, "writeHead", {
+                            value: function (statusCode, reasonPhrase, headers) {
+                                const location = res.getHeader("location");
+                                if (location) {
+                                    if (headers) {
+                                        delete headers['location'];
+                                        delete headers['Location'];
+                                        headers['X-Location'] = location;
+                                    }
+                                    res.setHeader("X-Location", location);
+                                    res.removeHeader("location");
+                                    origwriteHead.call(this, 200, "OK", headers);
+                                }
+                                else
+                                    origwriteHead.call(this, statusCode, reasonPhrase, headers);
+                            }
+                        });
+                    }
+                    catch (e) { }
                     res.locals.pagesys = true;
                 }
             }

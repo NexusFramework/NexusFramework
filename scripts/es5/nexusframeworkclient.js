@@ -867,14 +867,14 @@ Object.defineProperties(window, {
                                 try {
                                     if (rid_1 != _this.activerid)
                                         return;
-                                    var location_1 = res.headers['location'];
+                                    var location_1 = res.headers['x-location'] || res.headers['location'];
                                     if (location_1) {
                                         var url_2 = resolveUrl(location_1[0]);
                                         if (startsWith.test(url_2)) {
                                             _this.requestPage(url_2.substring(_this.url.length), undefined, true);
                                             return;
                                         }
-                                        console.warn("Requested redirect to url outside of website:", url_2);
+                                        console.warn("Requested redirect to external url:", url_2);
                                         window.location.href = url_2;
                                         return;
                                     }

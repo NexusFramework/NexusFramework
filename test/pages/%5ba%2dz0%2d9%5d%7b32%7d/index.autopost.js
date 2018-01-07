@@ -3,4 +3,4 @@ module.exports = function(req, res, next) {
         title: "Whoa there...",
         match: "Shh... its a secret... " + JSON.stringify(Object.keys(req.files))
     });
-}
+};
