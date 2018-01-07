@@ -5,6 +5,25 @@ import { Template } from "nhp/lib/Template";
 
 import { Agent, Details } from "useragent";
 
+declare interface UploadedFile {
+    /**
+     * The original filename when uploaded.
+     */
+    originalname: string,
+    destination: string,
+    /**
+     * The name of the field the file was uploaded to.
+     */
+    fieldname: string,
+    filename: string,
+    mimetype: string,
+    /**
+     * The full path and filename where the file was uploaded to.
+     */
+    path: string,
+    size: number
+}
+
 declare const enum BodyProcessor {
     URLEncoded,
     MultipartFormData,
@@ -183,7 +202,7 @@ declare interface Request extends nexusfork.WebRequest {
     /**
      * Contains an array of uploaded files.
      */
-    files?: any[];
+    files?: {[index: string]: UploadedFile|UploadedFile[]};
     /**
      * Process the request body.
      * By default all processors are usable, and the processor chosen is determined by the request content-type header.

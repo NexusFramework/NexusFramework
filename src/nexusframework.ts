@@ -1,4 +1,4 @@
-import {RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource as _Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
+import {UploadedFile,RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource as _Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
 import cookieParser = require("cookie-parser");
 import querystring = require("querystring");
 import {Template} from "nhp/lib/Template";
@@ -1922,10 +1922,8 @@ export class NexusFramework extends events.EventEmitter {
                     } else
                         next();
                 });
-            else {
-                console.log("!startsWith", startsWith, filename);
+            else
                 res.sendStatus(403);
-            }
         };
         return this.mountHandler(webpath, handler, false);
     }
@@ -2147,7 +2145,7 @@ export class NexusFramework extends events.EventEmitter {
                         if (!processors.length)
                             processors = [BodyProcessor.URLEncoded, BodyProcessor.JSONBody, BodyProcessor.MultipartFormData];
                         req.body = {};
-                        req.files = [];
+                        req.files = {};
                         try {
                             processors.forEach((processor) => {
                                 switch (processor) {
@@ -2187,14 +2185,26 @@ export class NexusFramework extends events.EventEmitter {
                                                 if (err)
                                                     cb(err);
                                                 else {
-                                                    const files = req.files;
-                                                    console.log(files);
-                                                    if (files)
+                                                    const files: UploadedFile[] = req.files as any;
+                                                    if (Array.isArray(files)) {
                                                         res.on('finish', function() {
                                                             files.forEach(function(file) {
                                                                 fs.unlink(file.path, noop);
                                                             });
                                                         });
+                                                        const _files: {[index: string]:UploadedFile|UploadedFile[]} = req.files = {};
+                                                        files.forEach(function(file) {
+                                                            const fieldname = file.fieldname;
+                                                            var f = _files[fieldname];
+                                                            if (f) {
+                                                                if (Array.isArray(f))
+                                                                    f.push(file);
+                                                                else
+                                                                    f = _files[fieldname] = [f, file];
+                                                            } else
+                                                                _files[fieldname] = file;
+                                                        });
+                                                    }
                                                     cb();
                                                 }
                                             });

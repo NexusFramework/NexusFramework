@@ -1805,10 +1805,8 @@ class NexusFramework extends events.EventEmitter {
                     else
                         next();
                 });
-            else {
-                console.log("!startsWith", startsWith, filename);
+            else
                 res.sendStatus(403);
-            }
         };
         return this.mountHandler(webpath, handler, false);
     }
@@ -2026,7 +2024,7 @@ class NexusFramework extends events.EventEmitter {
                         if (!processors.length)
                             processors = [0 /* URLEncoded */, 2 /* JSONBody */, 1 /* MultipartFormData */];
                         req.body = {};
-                        req.files = [];
+                        req.files = {};
                         try {
                             processors.forEach((processor) => {
                                 switch (processor) {
@@ -2069,13 +2067,26 @@ class NexusFramework extends events.EventEmitter {
                                                     cb(err);
                                                 else {
                                                     const files = req.files;
-                                                    console.log(files);
-                                                    if (files)
+                                                    if (Array.isArray(files)) {
                                                         res.on('finish', function () {
                                                             files.forEach(function (file) {
                                                                 fs.unlink(file.path, noop);
                                                             });
                                                         });
+                                                        const _files = req.files = {};
+                                                        files.forEach(function (file) {
+                                                            const fieldname = file.fieldname;
+                                                            var f = _files[fieldname];
+                                                            if (f) {
+                                                                if (Array.isArray(f))
+                                                                    f.push(file);
+                                                                else
+                                                                    f = _files[fieldname] = [f, file];
+                                                            }
+                                                            else
+                                                                _files[fieldname] = file;
+                                                        });
+                                                    }
                                                     cb();
                                                 }
                                             });
