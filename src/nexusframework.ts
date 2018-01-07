@@ -22,6 +22,9 @@ import _ = require("lodash");
 import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
+import os = require("os");
+
+const noop = function() {};
 
 const mainpkgversion: string = (function() {
     try {
@@ -120,7 +123,6 @@ const isES6Browser = function (browser: UserAgentDetails) {
         (browser.opera && major >= 43);
 }
 
-const multerInstance = multer().any();
 const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
@@ -1483,6 +1485,7 @@ export class NexusFramework extends events.EventEmitter {
     private footer: Renderer[];
     private header: Renderer[];
     private loaderEnabled: boolean;
+    private multerInstance: any;
     private logging: boolean;
     constructor(app: Application = express(), server?: http.Server, logger: nulllogger.INullLogger = new nulllogger("NexusFramework"), prefix = "/", nhpoptions: Object = {}) {
         super();
@@ -1559,6 +1562,43 @@ export class NexusFramework extends events.EventEmitter {
         });
         app.set("view engine", "nhp");
         app.engine("nhp", this.nhp.render.bind(this.nhp));
+        const destination = path.resolve(os.tmpdir(), "nexusframework-" + +(new Date));
+        fs.mkdirSync(destination);
+        const multerStorage = multer.diskStorage({
+            destination,
+            filename: function (req, file, cb) {
+                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + path.extname(file.originalname));
+            }
+        });
+        process.on("exit", function() {
+            const destroyDir = function(dir: string) {
+                fs.readdirSync(dir).forEach(function(dest) {
+                    dest = path.resolve(dir, dest);
+                    if (!fs.realpathSync(dest).startsWith(destination)) {
+                        console.warn(dest, "is outside", destination);
+                        return; // Outside somehow...
+                    }
+                    if (fs.statSync(dest).isDirectory())
+                        destroyDir(dest);
+                    try {
+                        fs.unlinkSync(dest);
+                    } catch(e) {
+                        console.warn(e);
+                    }
+                });
+            }
+            destroyDir(destination);
+        });
+        this.multerInstance = multer({
+            limits: {
+                fieldNameSize: 100,
+                fieldSize: 1024 * 1024,
+                fileSize: 1024 * 1024 * 100
+            },
+            storage: multerStorage
+        }).any({
+            storage: multerStorage
+        });
     }
     enableLoader() {
         this.loaderEnabled = true;
@@ -2102,13 +2142,14 @@ export class NexusFramework extends events.EventEmitter {
             else
                 Object.defineProperty(req, "processBody", {
                     configurable: true,
-                    value: function (cb: (err?: Error) => void, ...processors: BodyProcessor[]) {
+                    value: (cb: (err?: Error) => void, ...processors: BodyProcessor[]) => {
                         const contentType = req.get("content-type");
                         if (!processors.length)
                             processors = [BodyProcessor.URLEncoded, BodyProcessor.JSONBody, BodyProcessor.MultipartFormData];
                         req.body = {};
+                        req.files = [];
                         try {
-                            processors.forEach(function (processor) {
+                            processors.forEach((processor) => {
                                 switch (processor) {
                                     case BodyProcessor.JSONBody:
                                         if (/\/(x\-)?json$/.test(contentType)) {
@@ -2142,7 +2183,21 @@ export class NexusFramework extends events.EventEmitter {
                                         break;
                                     case BodyProcessor.MultipartFormData:
                                         if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
-                                            multerInstance(req, res, cb);
+                                            this.multerInstance(req, res, function(err) {
+                                                if (err)
+                                                    cb(err);
+                                                else {
+                                                    const files = req.files;
+                                                    console.log(files);
+                                                    if (files)
+                                                        res.on('finish', function() {
+                                                            files.forEach(function(file) {
+                                                                fs.unlink(file.path, noop);
+                                                            });
+                                                        });
+                                                    cb();
+                                                }
+                                            });
                                             throw true;
                                         }
                                         break;

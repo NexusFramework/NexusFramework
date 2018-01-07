@@ -57,6 +57,7 @@ export declare class NexusFramework extends events.EventEmitter {
     private footer;
     private header;
     private loaderEnabled;
+    private multerInstance;
     private logging;
     constructor(app?: Application, server?: http.Server, logger?: nulllogger.INullLogger, prefix?: string, nhpoptions?: Object);
     enableLoader(): void;

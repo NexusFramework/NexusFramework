@@ -161,9 +161,15 @@ describe("request", function () {
     });
     it("post /fb30cf8e2673c51ea6547f1704f71c93/", function (cb) {
         request.post("http://localhost:35438/fb30cf8e2673c51ea6547f1704f71c93/?key=FAU%28HQE%28*3qt", {
-            form: {
-                test: true,
-                tuna: 123456
+            formData: {
+                tuna: 123456,
+                test: "abc123",
+                hornet: {
+                    value: new Buffer([0, 1, 2, 3, 4, 5]),
+                    options: {
+                        filename: "Farmer John.bin"
+                    }
+                }
             }
         }, function (err, res, body) {
             if (err)

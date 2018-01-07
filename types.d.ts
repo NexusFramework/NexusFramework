@@ -181,6 +181,10 @@ declare interface Request extends nexusfork.WebRequest {
      */
     xhrOrIO?: boolean;
     /**
+     * Contains an array of uploaded files.
+     */
+    files?: any[];
+    /**
      * Process the request body.
      * By default all processors are usable, and the processor chosen is determined by the request content-type header.
      * 

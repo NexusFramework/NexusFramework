@@ -22,6 +22,8 @@ const _ = require("lodash");
 const url = require("url");
 const nhp = require("nhp");
 const fs = require("fs");
+const os = require("os");
+const noop = function () { };
 const mainpkgversion = (function () {
     try {
         return require(path.resolve(path.dirname(require.main.filename), "package.json")).version;
@@ -115,7 +117,6 @@ const isES6Browser = function (browser) {
         (browser.safari && major >= 9) ||
         (browser.opera && major >= 43);
 };
-const multerInstance = multer().any();
 const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
@@ -1434,6 +1435,44 @@ class NexusFramework extends events.EventEmitter {
         });
         app.set("view engine", "nhp");
         app.engine("nhp", this.nhp.render.bind(this.nhp));
+        const destination = path.resolve(os.tmpdir(), "nexusframework-" + +(new Date));
+        fs.mkdirSync(destination);
+        const multerStorage = multer.diskStorage({
+            destination,
+            filename: function (req, file, cb) {
+                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + path.extname(file.originalname));
+            }
+        });
+        process.on("exit", function () {
+            const destroyDir = function (dir) {
+                fs.readdirSync(dir).forEach(function (dest) {
+                    dest = path.resolve(dir, dest);
+                    if (!fs.realpathSync(dest).startsWith(destination)) {
+                        console.warn(dest, "is outside", destination);
+                        return; // Outside somehow...
+                    }
+                    if (fs.statSync(dest).isDirectory())
+                        destroyDir(dest);
+                    try {
+                        fs.unlinkSync(dest);
+                    }
+                    catch (e) {
+                        console.warn(e);
+                    }
+                });
+            };
+            destroyDir(destination);
+        });
+        this.multerInstance = multer({
+            limits: {
+                fieldNameSize: 100,
+                fieldSize: 1024 * 1024,
+                fileSize: 1024 * 1024 * 100
+            },
+            storage: multerStorage
+        }).any({
+            storage: multerStorage
+        });
     }
     enableLoader() {
         this.loaderEnabled = true;
@@ -1982,13 +2021,14 @@ class NexusFramework extends events.EventEmitter {
             else
                 Object.defineProperty(req, "processBody", {
                     configurable: true,
-                    value: function (cb, ...processors) {
+                    value: (cb, ...processors) => {
                         const contentType = req.get("content-type");
                         if (!processors.length)
                             processors = [0 /* URLEncoded */, 2 /* JSONBody */, 1 /* MultipartFormData */];
                         req.body = {};
+                        req.files = [];
                         try {
-                            processors.forEach(function (processor) {
+                            processors.forEach((processor) => {
                                 switch (processor) {
                                     case 2 /* JSONBody */:
                                         if (/\/(x\-)?json$/.test(contentType)) {
@@ -2024,7 +2064,21 @@ class NexusFramework extends events.EventEmitter {
                                         break;
                                     case 1 /* MultipartFormData */:
                                         if (/multipart\/form\-data(;.+)?$/.test(contentType)) {
-                                            multerInstance(req, res, cb);
+                                            this.multerInstance(req, res, function (err) {
+                                                if (err)
+                                                    cb(err);
+                                                else {
+                                                    const files = req.files;
+                                                    console.log(files);
+                                                    if (files)
+                                                        res.on('finish', function () {
+                                                            files.forEach(function (file) {
+                                                                fs.unlink(file.path, noop);
+                                                            });
+                                                        });
+                                                    cb();
+                                                }
+                                            });
                                             throw true;
                                         }
                                         break;
