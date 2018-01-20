@@ -174,6 +174,7 @@ const express_res_install = createInstall(express_res);
 class SocketIORequest extends events.EventEmitter {
     constructor(upgradedRequest, method, path, body, headers) {
         super();
+        this.readableHighWaterMark = 0;
         this.pagesys = true;
         this.method = method;
         this.originalUrl = this.url = upath.join("/", path);
@@ -2518,6 +2519,32 @@ class NexusFramework extends events.EventEmitter {
             });
         }
         catch (e) { }
+        const processResources = function () {
+            var replacements = [
+                [
+                    /{{pkgversion}}/,
+                    mainpkgversion
+                ]
+            ];
+            styles.forEach(function (style) {
+                if (style.inline)
+                    return;
+                replacements.forEach(function (replacement) {
+                    style.source = style.source.toString().replace(replacement[0], replacement[1]);
+                });
+            });
+            replacements.push([
+                /{{type}}/,
+                scriptType
+            ]);
+            scripts.forEach(function (script) {
+                if (script.inline)
+                    return;
+                replacements.forEach(function (replacement) {
+                    script.source = script.source.toString().replace(replacement[0], replacement[1]);
+                });
+            });
+        };
         var servedLoader;
         var servedAfterBody;
         try {
@@ -2579,6 +2606,7 @@ class NexusFramework extends events.EventEmitter {
         }
         catch (e) { }
         const getLoaderData = function () {
+            processResources();
             const resarray = [];
             const gfontkeys = Object.keys(gfonts);
             if (gfontkeys.length) {
@@ -2641,30 +2669,6 @@ class NexusFramework extends events.EventEmitter {
                     const user = req.user;
                     if (user)
                         addInlineScript("window.NexusFrameworkClient['currentUserID']=" + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframeworkclient");
-                    var replacements = [
-                        [
-                            /{{pkgversion}}/,
-                            mainpkgversion
-                        ]
-                    ];
-                    styles.forEach(function (style) {
-                        if (style.inline)
-                            return;
-                        replacements.forEach(function (replacement) {
-                            style.source = style.source.toString().replace(replacement[0], replacement[1]);
-                        });
-                    });
-                    replacements.push([
-                        /{{type}}/,
-                        scriptType
-                    ]);
-                    scripts.forEach(function (script) {
-                        if (script.inline)
-                            return;
-                        replacements.forEach(function (replacement) {
-                            script.source = script.source.toString().replace(replacement[0], replacement[1]);
-                        });
-                    });
                     if (useLoader) {
                         if (!servedLoader) {
                             const locals = res.locals;
@@ -2863,6 +2867,7 @@ class NexusFramework extends events.EventEmitter {
                     }
                 }
                 else {
+                    processResources();
                     const gfontkeys = Object.keys(gfonts);
                     if (gfontkeys.length) {
                         out.write("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=");

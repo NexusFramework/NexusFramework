@@ -3,12 +3,12 @@ import cookieParser = require("cookie-parser");
 import querystring = require("querystring");
 import {Template} from "nhp/lib/Template";
 import nulllogger = require("nulllogger");
+import {Application,Send} from "express";
 import socket_io = require("socket.io");
 import useragent = require("useragent");
 import lrucache = require("lru-cache");
 import statuses = require('statuses');
 import chokidar = require("chokidar");
-import {Application} from "express";
 import express = require("express");
 import events = require("events");
 import stream = require("stream");
@@ -189,6 +189,7 @@ class SocketIORequest extends events.EventEmitter implements express.Request {
     method: string;
     readable: false;
     rawTrailers: any;
+    readableHighWaterMark = 0;
     headers: {[index: string]: string[] | string};
     httpVersionMinor: number;
     httpVersionMajor: number;
@@ -405,7 +406,7 @@ class SocketIOResponse extends stream.Writable implements express.Response {
     status: any;
     sendStatus: any;
     links: any;
-    json(data: any): this {
+    json(data: any): any{
         this.response = data;
         this.end();
         return this;
@@ -2594,6 +2595,32 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         } catch (e) {}
+        const processResources = function() {
+            var replacements: any[] = [
+                [
+                    /{{pkgversion}}/,
+                    mainpkgversion
+                ]
+            ];
+            styles.forEach(function (style) {
+                if(style.inline)
+                    return;
+                replacements.forEach(function(replacement) {
+                    style.source = style.source.toString().replace(replacement[0], replacement[1]);
+                });
+            });
+            replacements.push([
+                /{{type}}/,
+                scriptType
+            ]);
+            scripts.forEach(function (script) {
+                if(script.inline)
+                    return;
+                replacements.forEach(function(replacement) {
+                    script.source = script.source.toString().replace(replacement[0], replacement[1]);
+                });
+            });
+        };
         var servedLoader: boolean;
         var servedAfterBody: boolean;
         try {
@@ -2653,6 +2680,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch (e) {}
         const getLoaderData = function () {
+            processResources();
             const resarray: (Resource & {type: string})[] = [];
             const gfontkeys = Object.keys(gfonts);
             if (gfontkeys.length) {
@@ -2719,30 +2747,6 @@ export class NexusFramework extends events.EventEmitter {
                     if (user)
                         addInlineScript("window.NexusFrameworkClient['currentUserID']=" + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframeworkclient");
                     
-                    var replacements: any[] = [
-                        [
-                            /{{pkgversion}}/,
-                            mainpkgversion
-                        ]
-                    ];
-                    styles.forEach(function (style) {
-                        if(style.inline)
-                            return;
-                        replacements.forEach(function(replacement) {
-                            style.source = style.source.toString().replace(replacement[0], replacement[1]);
-                        });
-                    });
-                    replacements.push([
-                        /{{type}}/,
-                        scriptType
-                    ]);
-                    scripts.forEach(function (script) {
-                        if(script.inline)
-                            return;
-                        replacements.forEach(function(replacement) {
-                            script.source = script.source.toString().replace(replacement[0], replacement[1]);
-                        });
-                    });
                     if (useLoader) {
                         if (!servedLoader) {
                             const locals = res.locals;
@@ -2935,6 +2939,7 @@ export class NexusFramework extends events.EventEmitter {
                         out.write("</style>");
                     }
                 } else {
+                    processResources();
                     const gfontkeys = Object.keys(gfonts);
                     if (gfontkeys.length) {
                         out.write("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=");

@@ -26,10 +26,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
     fs.readdir(indir, function(err: Error, files?: string[]) {
         if (err)
             return cb(err);
-        async.eachSeries(types, function(_type, cb) {
-            const typeOutDir = path.resolve(outdir, _type);
-            console.log("Processing", _type);
-            
+        const compileDir = function(typeOutDir: string, _type: string, cb: (err?: Error) => void) {
             async.eachLimit(files, cpus, function(tsRaw, cb) {
                 if (!/\.ts$/.test(tsRaw)) {
                     console.log("Skipping", tsRaw);
@@ -65,7 +62,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                             cb();
                         })
                     }
-                ], function(err) {
+                ], function(err: Error) {
                     if (err)
                         return cb(err);
                     if (outmtime >= inmtime)
@@ -131,7 +128,13 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                     });
                 });
             }, cb);
-        }, cb);
+        }
+        if(types.length === 1)
+            compileDir(outdir, types[0], cb);
+        else
+            async.eachSeries(types, function(_type, cb) {
+                compileDir(path.resolve(outdir, _type), _type, cb);
+            }, cb);
     });
 }
 export = compile;
