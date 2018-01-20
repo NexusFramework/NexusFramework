@@ -20,7 +20,7 @@ Object.defineProperties(window, {
         get: function () {
             var impl;
             if ("XMLHttpRequest" in window) {
-                var NexusFrameworkXMLHttpRequestResponse_1 = (function () {
+                var NexusFrameworkXMLHttpRequestResponse_1 = /** @class */ (function () {
                     function NexusFrameworkXMLHttpRequestResponse(request, url) {
                         this._url = url;
                         this.request = request;
@@ -288,7 +288,7 @@ Object.defineProperties(window, {
                 };
             };
             var loaderContainerRegex = /(^|\s)loader\-(progress|error)\-container(\s|$)/;
-            var NexusFrameworkBase = (function () {
+            var NexusFrameworkBase = /** @class */ (function () {
                 function NexusFrameworkBase(url, io) {
                     if (url === void 0) { url = "/"; }
                     this.activerid = 0;
@@ -791,7 +791,7 @@ Object.defineProperties(window, {
                     var forwardPopState;
                     var beforeHash = /^([^#]+)(#.+)?$/;
                     var startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
-                    var AnchorElementComponent = (function () {
+                    var AnchorElementComponent = /** @class */ (function () {
                         function AnchorElementComponent() {
                             var _this = this;
                             this.handler = function (e) {
@@ -986,7 +986,7 @@ Object.defineProperties(window, {
             }());
             var impl;
             if (window.io)
-                impl = (function (_super) {
+                impl = /** @class */ (function (_super) {
                     __extends(NexusFrameworkWithIO, _super);
                     function NexusFrameworkWithIO(url) {
                         var _this = _super.call(this, url, window.io({
@@ -1001,7 +1001,7 @@ Object.defineProperties(window, {
                     return NexusFrameworkWithIO;
                 }(NexusFrameworkBase));
             else
-                impl = (function (_super) {
+                impl = /** @class */ (function (_super) {
                     __extends(NexusFrameworkNoIO, _super);
                     function NexusFrameworkNoIO(url) {
                         return _super.call(this, url) || this;

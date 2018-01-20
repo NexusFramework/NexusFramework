@@ -8,7 +8,7 @@ const _ = require("lodash");
 const fs = require("fs");
 const os = require("os");
 const cpus = os.cpus().length;
-const tsc = require.resolve("ntypescript/bin/tsc");
+const tsc = require.resolve("typescript/bin/tsc");
 const typeOptions = {
     "es5": ["--target", "ES5"],
     "es6": ["--target", "ES6"]
@@ -49,8 +49,13 @@ const compile = function (indir, outdir, cb, types = ["es5", "es6"]) {
                     },
                     function (cb) {
                         fs.stat(minOutJs, function (err, stat) {
-                            if (err)
+                            if (err) {
+                                if (err.code === "ENOENT") {
+                                    outmtime = 0;
+                                    return cb();
+                                }
                                 return cb(err);
+                            }
                             outmtime = stat.mtimeMs;
                             cb();
                         });

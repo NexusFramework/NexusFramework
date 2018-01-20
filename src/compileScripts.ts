@@ -8,7 +8,7 @@ import fs = require("fs");
 import os = require("os");
 
 const cpus = os.cpus().length;
-const tsc = require.resolve("ntypescript/bin/tsc");
+const tsc = require.resolve("typescript/bin/tsc");
 
 const typeOptions = {
     "es5": ["--target", "ES5"],
@@ -54,8 +54,13 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                     },
                     function(cb) {
                         fs.stat(minOutJs, function(err, stat) {
-                            if (err)
+                            if (err) {
+                                if (err.code === "ENOENT") {
+                                    outmtime = 0;
+                                    return cb();
+                                }
                                 return cb(err);
+                            }
                             outmtime = stat.mtimeMs;
                             cb();
                         })
