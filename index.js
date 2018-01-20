@@ -64,5 +64,15 @@ const _export = function (config, logger, server, app) {
     return instance.handle.bind(instance);
 };
 _export.NexusFramework = nexusframework_1.NexusFramework;
+Object.defineProperty(_export, "CompileScripts", {
+    configurable: true,
+    get: function () {
+        const compileScripts = require("./src/compileScripts");
+        Object.defineProperty(_export, "CompileScripts", {
+            value: compileScripts
+        });
+        return compileScripts;
+    }
+});
 module.exports = _export;
 //# sourceMappingURL=index.js.map

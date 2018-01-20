@@ -8,7 +8,7 @@
         }
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.54",
+    "version": "0.3.0-beta.55",
     "license": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [

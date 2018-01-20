@@ -73,4 +73,14 @@ const _export: {
     return instance.handle.bind(instance);
 } as any;
 _export.NexusFramework = NexusFramework;
+Object.defineProperty(_export, "CompileScripts", {
+    configurable: true,
+    get: function() {
+        const compileScripts = require("./src/compileScripts");
+        Object.defineProperty(_export, "CompileScripts", {
+            value: compileScripts
+        });
+        return compileScripts;
+    }
+});
 export = _export;
