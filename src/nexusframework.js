@@ -121,8 +121,8 @@ const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 const pkgjson = require(path.resolve(__dirname, "../package.json"));
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
 const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
-const loaderScriptEs5 = fs.readFileSync(path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s*\/\/# sourceMappingURL=.+\s*/, "");
-const loaderScriptEs6 = fs.readFileSync(path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s*\/\/# sourceMappingURL=.+\s*/, "");
+const loaderScriptEs5 = fs.readFileSync(path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
+const loaderScriptEs6 = fs.readFileSync(path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
 const overlayHtmlParts = [];
 (function (html) {
     var next;
@@ -452,6 +452,13 @@ class RequestHandlerWithChildren {
                     else if (this['_index']) {
                         var urlpath;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
+                            var prefix;
+                            if (req.pagesys)
+                                prefix = "/:pagesys";
+                            else
+                                prefix = req.get("prefix");
+                            if (urlpath.startsWith(prefix))
+                                urlpath = urlpath.substring(prefix.length);
                             const q = urlpath.indexOf("?");
                             if (q == -1)
                                 urlpath += "/";
@@ -762,7 +769,7 @@ class NHPRequestChildHandler extends NHPRequestHandler {
         this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
-function resolveHandler(mapping, req) {
+function resolveHandler(mapping, req, getAsFallback = false) {
     var handler;
     const method = req.method.toLowerCase();
     const isHead = method === "head";
@@ -773,7 +780,7 @@ function resolveHandler(mapping, req) {
         (method === "patch" && (handler = mapping.patch)) ||
         (method === "put" && (handler = mapping.put)) ||
         (method === "delete" && (handler = mapping.del));
-    return handler || mapping.use;
+    return handler || mapping.use || (getAsFallback && mapping.get);
 }
 function createExtendedRequestHandler() {
     const requestHandler = function (req, res, next) {
@@ -1068,6 +1075,8 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                         var method = match[3];
                         if (method)
                             method = method.toLowerCase();
+                        else if (/^__(exists|route|access)$/.test(route))
+                            method = "use";
                         else
                             method = "get";
                         cmapping[method] = filename;
@@ -2529,7 +2538,7 @@ class NexusFramework extends events.EventEmitter {
                         const icons = (res.renderoptions || this.renderoptions).icons;
                         if (icons) {
                             if (_.isString(icons))
-                                locals.progressContainerHead = "<div class=\"loader-progress-heading\"><img src=\"" + icons + "152." + req.webpOrPng + "\" /></div>";
+                                locals.progressContainerHead = "<div class=\"loader-progress-heading\"><img src=\"" + icons + "152." + req.webpOrPng + "\" srcset=\"" + icons + "152." + req.webpOrPng + " 1x, " + icons + "310." + req.webpOrPng + " 2x\" /></div>";
                             else {
                                 var icon;
                                 var distance = Number.MAX_VALUE;

@@ -1,5 +1,6 @@
 /// <reference types="nulllogger" />
 
+import compileScripts = require("./src/compileScripts");
 import { NexusFramework } from "./src/nexusframework";
 import { nexusfork } from "nexusfork/types";
 import { Application } from "express";
@@ -10,7 +11,8 @@ import _ = require("lodash");
 
 const _export: {
     (config: Config, logger: nulllogger.INullLogger, server: Server, app: Application): nexusfork.WebRequestHandler;
-    NexusFramework: typeof NexusFramework
+    NexusFramework: typeof NexusFramework,
+    CompileScripts: typeof compileScripts
 } = function (config: Config, logger: nulllogger.INullLogger, server: Server, app: Application) {
     if (config.prefix) {
         if(config.prefix[0] != "/")

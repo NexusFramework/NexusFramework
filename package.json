@@ -8,7 +8,7 @@
         }
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.53",
+    "version": "0.3.0-beta.54",
     "license": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [
@@ -36,7 +36,7 @@
         "url": "https://github.com/NexusTools/NexusFrameworkJS.git"
     },
     "scripts": {
-        "compile-scripts": "node compileScripts",
+        "compile-scripts": "node src/compileScripts",
         "test": "mocha --bail --timeout 10000 --reporter spec --check-leaks  --require source-map-support/register test/",
         "test-coverage": "istanbul cover node_modules/mocha/bin/_mocha -- --bail --reporter spec --check-leaks  --require source-map-support/register test/ --exit",
         "test-travis": "istanbul cover node_modules/mocha/bin/_mocha --report lcovonly -- --reporter spec --check-leaks --require source-map-support/register test/ --exit"

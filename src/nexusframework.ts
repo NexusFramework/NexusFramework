@@ -129,8 +129,8 @@ const pkgjson = require(path.resolve(__dirname, "../package.json"));
 
 const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
 const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
-const loaderScriptEs5 = fs.readFileSync(path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s*\/\/# sourceMappingURL=.+\s*/, "");
-const loaderScriptEs6 = fs.readFileSync(path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s*\/\/# sourceMappingURL=.+\s*/, "");
+const loaderScriptEs5 = fs.readFileSync(path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
+const loaderScriptEs6 = fs.readFileSync(path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
 
 const overlayHtmlParts: Function[] = [];
 (function (html) {
@@ -543,6 +543,13 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                     else if (this['_index']) {
                         var urlpath: string;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
+                            var prefix: string;
+                            if (req.pagesys)
+                                prefix = "/:pagesys";
+                            else
+                                prefix = req.get("prefix");
+                            if (urlpath.startsWith(prefix))
+                                urlpath = urlpath.substring(prefix.length);
                             const q = urlpath.indexOf("?");
                             if (q == -1)
                                 urlpath += "/";
@@ -860,7 +867,7 @@ class NHPRequestChildHandler extends NHPRequestHandler implements RequestHandler
     }
 }
 
-function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request) {
+function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request, getAsFallback = false) {
     var handler: RequestHandler;
     const method = req.method.toLowerCase();
     const isHead = method === "head";
@@ -873,7 +880,7 @@ function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request) {
         (method === "put" && (handler = mapping.put)) ||
         (method === "delete" && (handler = mapping.del));
 
-    return handler || mapping.use;
+    return handler || mapping.use || (getAsFallback && mapping.get);
 }
 export function createExtendedRequestHandler() {
     const requestHandler: MappedRequestHandler = function (req: Request, res: Response, next: (err?: Error) => void) {
@@ -1175,6 +1182,8 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                         var method = match[3];
                         if (method)
                             method = method.toLowerCase();
+                        else if(/^__(exists|route|access)$/.test(route))
+                            method = "use";
                         else
                             method = "get";
                         cmapping[method] = filename;
@@ -2605,7 +2614,7 @@ export class NexusFramework extends events.EventEmitter {
                         const icons = (res.renderoptions || this.renderoptions).icons;
                         if (icons) {
                             if (_.isString(icons))
-                                locals.progressContainerHead = "<div class=\"loader-progress-heading\"><img src=\"" + icons + "152." + req.webpOrPng + "\" /></div>";
+                                locals.progressContainerHead = "<div class=\"loader-progress-heading\"><img src=\"" + icons + "152." + req.webpOrPng + "\" srcset=\"" + icons + "152." + req.webpOrPng + " 1x, " + icons + "310." + req.webpOrPng + " 2x\" /></div>";
                             else {
                                 var icon: string;
                                 var distance = Number.MAX_VALUE;

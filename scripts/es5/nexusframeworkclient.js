@@ -8,6 +8,7 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+/// <reference path="../index.d.ts" />
 Object.defineProperties(window, {
     NexusFrameworkTransport: {
         configurable: true,

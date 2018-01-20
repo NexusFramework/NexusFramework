@@ -1,3 +1,4 @@
+/// <reference path="../index.d.ts" />
 (function (w) {
     var d = window.document;
     var r = d.createElement("a");
@@ -132,9 +133,11 @@
                 return btoa(data);
             }
             catch (e) {
+                // script file may contain characters that not included in Latin1
                 var symbols = data.split('');
                 for (var i = 0, l = symbols.length; i < l; i++) {
                     var symbol = symbols[i];
+                    // here we are trying to find these symbols in catch branch
                     try {
                         btoa(symbol);
                     }
@@ -143,9 +146,11 @@
                         while (code.length < 4) {
                             code = '0' + code;
                         }
+                        // replace original symbol to unicode character
                         symbols[i] = '\\u' + code;
                     }
                 }
+                // create new base64 string from string with replaced characters
                 return btoa(symbols.join(''));
             }
         };

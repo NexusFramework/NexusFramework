@@ -1,3 +1,4 @@
+/// <reference path="../index.d.ts" />
 Object.defineProperties(window, {
     NexusFrameworkTransport: {
         configurable: true,
