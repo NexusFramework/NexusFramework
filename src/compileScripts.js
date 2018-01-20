@@ -24,7 +24,7 @@ const compile = function (indir, outdir, cb, types = ["es5", "es6"]) {
     fs.readdir(indir, function (err, files) {
         if (err)
             return cb(err);
-        const compileAll = function (typeOutDir, cb) {
+        const compileDir = function (typeOutDir, _type, cb) {
             async.eachLimit(files, cpus, function (tsRaw, cb) {
                 if (!/\.ts$/.test(tsRaw)) {
                     console.log("Skipping", tsRaw);
@@ -123,10 +123,10 @@ const compile = function (indir, outdir, cb, types = ["es5", "es6"]) {
             }, cb);
         };
         if (types.length === 1)
-            compileAll(outdir, cb);
+            compileDir(outdir, types[0], cb);
         else
             async.eachSeries(types, function (_type, cb) {
-                compileAll(path.resolve(outdir, _type), cb);
+                compileDir(path.resolve(outdir, _type), _type, cb);
             }, cb);
     });
 };
