@@ -1,6 +1,7 @@
 import child_process = require("child_process");
 import uglifyJs = require("uglify-js");
 import uglifyEs = require("uglify-es");
+import logger = require("nulllogger");
 import async = require("async");
 import path = require("path");
 import _ = require("lodash");
@@ -16,6 +17,7 @@ const typeOptions = {
 };
 
 const compile = function(indir: string, outdir: string, cb: (err?: Error) => void, types = ["es5", "es6"]) {
+    const log = new logger("NexusFramework");
     const sourcemap = indir === outdir;
     const options: any = {
         mangle: true,
@@ -23,15 +25,16 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
     };
     if (sourcemap)
         indir = path.resolve(indir, "src");
+    const _cpus = Math.max(1, Math.floor(cpus / types.length));
     fs.readdir(indir, function(err: Error, files?: string[]) {
         if (err)
             return cb(err);
         const compileDir = function(typeOutDir: string, _type: string, cb: (err?: Error) => void) {
-            async.eachLimit(files, cpus, function(tsRaw, cb) {
-                if (!/\.ts$/.test(tsRaw)) {
-                    console.log("Skipping", tsRaw);
+            const l = log.extend(_type);
+            l.info("Processing");
+            async.eachLimit(files, _cpus, function(tsRaw, cb) {
+                if (!/\.ts$/.test(tsRaw))
                     return cb();
-                }
                     
                 const base = path.basename(tsRaw, ".ts");
                 const minOut = base + ".min.js";
@@ -76,7 +79,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                         args.push.apply(args, opts);
                     args.push(tsIn);
 
-                    console.log("Compiling", tsIn);
+                    l.info("Compiling", tsIn);
                     const child = child_process.fork(tsc, args, {stdio:"inherit"} as any);
                     child.on("exit", function(code, signal) {
                         if(signal)
@@ -85,7 +88,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                             return cb(new Error("Exited with code " + code));
 
                         const uglify = _type === "es6" ? uglifyEs : uglifyJs;
-                        console.log("uglify-js ", jsOut, minOut);
+                        l.info("uglify ", jsOut, minOut);
                         fs.readFile(jsOut, "utf8", function(err, code) {
                             if(err)
                                 return cb(err);
@@ -132,7 +135,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
         if(types.length === 1)
             compileDir(outdir, types[0], cb);
         else
-            async.eachSeries(types, function(_type, cb) {
+            async.each(types, function(_type, cb) {
                 compileDir(path.resolve(outdir, _type), _type, cb);
             }, cb);
     });

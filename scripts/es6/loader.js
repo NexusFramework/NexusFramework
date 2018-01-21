@@ -164,9 +164,22 @@
                 hash = (((hash << 5) - hash) + data.charCodeAt(i)) | 0;
             return padLeft(hash.toString(16));
         };
+        var initialVersions;
         const loadCallbacks = {};
         const NexusFrameworkLoaderImpl = {
-            load(resources, oncomplete) {
+            load(data, oncomplete) {
+                if (initialVersions) {
+                    const versions = data[0];
+                    const len = versions.length;
+                    if (len !== initialVersions.length)
+                        return location.reload(true);
+                    for (var i = 0; i < len; i++)
+                        if (versions[i] !== initialVersions[i])
+                            return location.reload(true);
+                }
+                else
+                    initialVersions = data[0];
+                const resources = data[1];
                 if (resources.length) {
                     resetProgress(resources.length);
                     resources.forEach(function (resource) {

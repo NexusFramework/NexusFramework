@@ -359,6 +359,18 @@ class SocketIOResponse extends stream.Writable implements express.Response {
     setHeader(key: string, val?: string) {
         this.headers[key.toLowerCase()] = val || "";
     }
+    append(key: string, val?: string) {
+        key = key.toLowerCase();
+        var list = this.headers[key];
+        if (list) {
+            if (Array.isArray(list))
+                list.push(val);
+            else
+                this.headers[key] = [list, val];
+        } else
+            this.headers[key] = [val];
+        return this;
+    }
     writeHead(statusCode: number, reasonPhraseOrHeaders?: any, headers?: any) {
         this.statusCode = statusCode;
         this.statusMessage = statuses[statusCode] || String(statusCode);
@@ -383,12 +395,10 @@ class SocketIOResponse extends stream.Writable implements express.Response {
         cb();
     }
     _final(callback: Function) {
-        const headers = {};
+        const headers: {[index: string]: string[]} = {};
         Object.keys(this.headers).forEach((key) => {
-            var val = this.headers[key];
-            if (!Array.isArray(val))
-                val = [val];
-            headers[key] = val;
+            const val = this.headers[key];
+            headers[key] = Array.isArray(val) ? val : [val];
         });
         this.cb({
             code: this.statusCode,
@@ -549,7 +559,7 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                                 prefix = "/:pagesys";
                             else
                                 prefix = req.get("prefix");
-                            if (urlpath.startsWith(prefix))
+                            if (urlpath.startsWith(prefix + "/"))
                                 urlpath = urlpath.substring(prefix.length);
                             const q = urlpath.indexOf("?");
                             if (q == -1)
@@ -794,6 +804,13 @@ export class NHPRequestHandler extends LeafRequestHandler {
                 const _next = () => {
                     var urlpath: string;
                     if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
+                        var prefix: string;
+                        if (req.pagesys)
+                            prefix = "/:pagesys";
+                        else
+                            prefix = req.get("prefix");
+                        if (urlpath.startsWith(prefix + "/"))
+                            urlpath = urlpath.substring(prefix.length);
                         const q = urlpath.indexOf("?");
                         if (q == -1)
                             urlpath = urlpath.substring(0, urlpath.length - 1);
@@ -1486,6 +1503,7 @@ export class NexusFramework extends events.EventEmitter {
     readonly server: http.Server;
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
+    private versions = [pkgjson.version, mainpkgversion];
     private cookieParser: express.RequestHandler;
     private stack: RequestHandler[];
     private default: RequestHandlerEntry;
@@ -1615,6 +1633,9 @@ export class NexusFramework extends events.EventEmitter {
     }
     disableLoader() {
         this.loaderEnabled = false;
+    }
+    addVersion(version: string) {
+        this.versions.push(version);
     }
     enableSignedCookies(secret: any) {
         Object.defineProperty(this, "cookieParser", {
@@ -1888,6 +1909,13 @@ export class NexusFramework extends events.EventEmitter {
                             if (options.autoIndex) {
                                 req.logger.info(urlpath);
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
+                                    var prefix: string;
+                                    if (req.pagesys)
+                                        prefix = "/:pagesys";
+                                    else
+                                        prefix = req.get("prefix");
+                                    if (urlpath.startsWith(prefix + "/"))
+                                        urlpath = urlpath.substring(prefix.length);
                                     const q = urlpath.indexOf("?");
                                     if (q == -1)
                                         urlpath += "/";
@@ -2598,7 +2626,11 @@ export class NexusFramework extends events.EventEmitter {
         const processResources = function() {
             var replacements: any[] = [
                 [
-                    /{{pkgversion}}/,
+                    /{{version}}/,
+                    pkgjson.version
+                ],
+                [
+                    /{{mainversion}}/,
                     mainpkgversion
                 ]
             ];
@@ -2679,7 +2711,7 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         } catch (e) {}
-        const getLoaderData = function () {
+        const getLoaderData = () => {
             processResources();
             const resarray: (Resource & {type: string})[] = [];
             const gfontkeys = Object.keys(gfonts);
@@ -2729,7 +2761,7 @@ export class NexusFramework extends events.EventEmitter {
                 resarray.push(script as any);
             });
 
-            return resarray;
+            return [this.versions, resarray];
         };
         try {
             Object.defineProperty(res, "getLoaderData", {

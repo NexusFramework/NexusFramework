@@ -739,6 +739,7 @@ Object.defineProperties(window, {
                     });
                     var forwardPopState;
                     const beforeHash = /^([^#]+)(#.+)?$/;
+                    var chash = location.href.match(beforeHash);
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent {
                         constructor() {
@@ -747,10 +748,10 @@ Object.defineProperties(window, {
                                     return;
                                 var url = this.element.href;
                                 const bhash = url.match(beforeHash);
-                                const chash = location.href.match(beforeHash);
                                 if (bhash && chash && bhash[2] && chash[1] === bhash[1])
                                     return;
-                                if (startsWith.test(url)) {
+                                chash = bhash;
+                                if (startsWith.test(url))
                                     try {
                                         const match = url.match(/^(.+)#.*$/);
                                         if (match)
@@ -768,7 +769,6 @@ Object.defineProperties(window, {
                                     catch (e) {
                                         console.warn(e);
                                     }
-                                }
                                 else
                                     console.log("Navigating", url);
                             };
@@ -849,13 +849,12 @@ Object.defineProperties(window, {
                             }, post, rid);
                         }
                     };
-                    var cchash = location.href.match(beforeHash);
                     this.registerComponent("a", AnchorElementComponent);
                     window.addEventListener('popstate', (e) => {
                         const bhash = location.href.match(beforeHash);
-                        if (bhash && cchash && cchash[1] === bhash[1])
+                        if (bhash && chash && chash[1] === bhash[1])
                             return;
-                        cchash = bhash;
+                        chash = bhash;
                         if (forwardPopState) {
                             const forward = forwardPopState;
                             setTimeout(() => {

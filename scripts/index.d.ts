@@ -9,8 +9,12 @@ interface NexusFrameworkResource {
     integrity?: string;
     dependencies: string[];
 }
+declare interface NexusFrameworkLoaderData {
+    [0]: string[];
+    [1]: NexusFrameworkResource[];
+}
 declare interface NexusFrameworkLoader {
-    load(data: any, cb: (err?: Error) => void): void;
+    load(data: NexusFrameworkLoaderData, cb: (err?: Error) => void): void;
     /**
      * Loads a resource.
      * Downloads the file asynchroniously and reads any header for @ tags.
