@@ -1390,6 +1390,16 @@ class FSWatcherRequestChildHandler extends FSWatcherRequestHandler {
 class NexusFramework extends events.EventEmitter {
     constructor(app = express(), server, logger = new nulllogger("NexusFramework"), prefix = "/", nhpoptions = {}) {
         super();
+        this.replacements = [
+            [
+                /{{version}}/,
+                pkgjson.version
+            ],
+            [
+                /{{version_main}}/,
+                mainpkgversion
+            ]
+        ];
         this.versions = [pkgjson.version, mainpkgversion];
         if (!server)
             server = new http.Server(app);
@@ -1509,8 +1519,19 @@ class NexusFramework extends events.EventEmitter {
     disableLoader() {
         this.loaderEnabled = false;
     }
-    addVersion(version) {
+    /**
+     * Push a named version into the array of versions and add a new resource replacement.
+     * The resource replacer can be accessed via `version_{{name}}`
+     */
+    addVersion(version, name) {
         this.versions.push(version);
+        this.replacements.push([
+            new RegExp("{{version_" + name.toLowerCase().replace(regexp_escape, "\\$&").replace(/\s+/g, "_") + "}}"),
+            version
+        ]);
+    }
+    addReplacement(regex, replacement) {
+        this.replacements.push([regex, replacement]);
     }
     enableSignedCookies(secret) {
         Object.defineProperty(this, "cookieParser", {
@@ -2548,17 +2569,8 @@ class NexusFramework extends events.EventEmitter {
             });
         }
         catch (e) { }
+        const replacements = this.replacements;
         const processResources = function () {
-            var replacements = [
-                [
-                    /{{version}}/,
-                    pkgjson.version
-                ],
-                [
-                    /{{mainversion}}/,
-                    mainpkgversion
-                ]
-            ];
             styles.forEach(function (style) {
                 if (style.inline)
                     return;
@@ -2566,16 +2578,13 @@ class NexusFramework extends events.EventEmitter {
                     style.source = style.source.toString().replace(replacement[0], replacement[1]);
                 });
             });
-            replacements.push([
-                /{{type}}/,
-                scriptType
-            ]);
             scripts.forEach(function (script) {
                 if (script.inline)
                     return;
                 replacements.forEach(function (replacement) {
                     script.source = script.source.toString().replace(replacement[0], replacement[1]);
                 });
+                script.source = script.source.toString().replace(/{{type}}/, scriptType);
             });
         };
         var servedLoader;

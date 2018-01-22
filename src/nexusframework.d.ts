@@ -48,6 +48,7 @@ export declare class NexusFramework extends events.EventEmitter {
     readonly server: http.Server;
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
+    private replacements;
     private versions;
     private cookieParser;
     private stack;
@@ -63,7 +64,12 @@ export declare class NexusFramework extends events.EventEmitter {
     constructor(app?: Application, server?: http.Server, logger?: nulllogger.INullLogger, prefix?: string, nhpoptions?: Object);
     enableLoader(): void;
     disableLoader(): void;
-    addVersion(version: string): void;
+    /**
+     * Push a named version into the array of versions and add a new resource replacement.
+     * The resource replacer can be accessed via `version_{{name}}`
+     */
+    addVersion(version: string, name: string): void;
+    addReplacement(regex: RegExp, replacement: string | Function): void;
     enableSignedCookies(secret: any): void;
     installAfterBodyRenderer(renderer: Renderer): void;
     installFooterRenderer(renderer: Renderer): void;

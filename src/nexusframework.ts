@@ -1503,6 +1503,16 @@ export class NexusFramework extends events.EventEmitter {
     readonly server: http.Server;
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
+    private replacements: any[][] = [
+        [
+            /{{version}}/,
+            pkgjson.version
+        ],
+        [
+            /{{version_main}}/,
+            mainpkgversion
+        ]
+    ];
     private versions = [pkgjson.version, mainpkgversion];
     private cookieParser: express.RequestHandler;
     private stack: RequestHandler[];
@@ -1634,8 +1644,19 @@ export class NexusFramework extends events.EventEmitter {
     disableLoader() {
         this.loaderEnabled = false;
     }
-    addVersion(version: string) {
+    /**
+     * Push a named version into the array of versions and add a new resource replacement.
+     * The resource replacer can be accessed via `version_{{name}}`
+     */
+    addVersion(version: string, name: string) {
         this.versions.push(version);
+        this.replacements.push([
+            new RegExp("{{version_" + name.toLowerCase().replace(regexp_escape, "\\$&").replace(/\s+/g, "_") + "}}"),
+            version
+        ]);
+    }
+    addReplacement(regex: RegExp, replacement: string | Function) {
+        this.replacements.push([regex, replacement]);
     }
     enableSignedCookies(secret: any) {
         Object.defineProperty(this, "cookieParser", {
@@ -2623,17 +2644,8 @@ export class NexusFramework extends events.EventEmitter {
                 }
             });
         } catch (e) {}
+        const replacements = this.replacements;
         const processResources = function() {
-            var replacements: any[] = [
-                [
-                    /{{version}}/,
-                    pkgjson.version
-                ],
-                [
-                    /{{mainversion}}/,
-                    mainpkgversion
-                ]
-            ];
             styles.forEach(function (style) {
                 if(style.inline)
                     return;
@@ -2641,16 +2653,13 @@ export class NexusFramework extends events.EventEmitter {
                     style.source = style.source.toString().replace(replacement[0], replacement[1]);
                 });
             });
-            replacements.push([
-                /{{type}}/,
-                scriptType
-            ]);
             scripts.forEach(function (script) {
                 if(script.inline)
                     return;
                 replacements.forEach(function(replacement) {
                     script.source = script.source.toString().replace(replacement[0], replacement[1]);
                 });
+                script.source = script.source.toString().replace(/{{type}}/, scriptType);
             });
         };
         var servedLoader: boolean;
