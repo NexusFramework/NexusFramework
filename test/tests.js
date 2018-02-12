@@ -176,7 +176,7 @@ describe("request", function () {
                 return cb(err);
             assert.equal(res.statusCode, 200);
             assert.ok(body.indexOf("Yahaha! You found me!") > -1);
-            assert.ok(body.indexOf("Shh... its a secret...") > -1);
+            assert.ok(body.indexOf("Shh... its a secret... [\"hornet\"]") > -1);
             cb();
         });
     });

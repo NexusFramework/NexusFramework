@@ -1,0 +1,134 @@
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Index Of {{path}}</title>
+        <style>
+        body {
+            margin: 2em;
+            background: #fafafa;
+            font-family: Helvetica, Arial, sans-serif;
+        }
+        h1 {
+            margin: 0;
+        }
+        dd {
+            margin: 0 0 10px;
+            font-size: 80%;
+            color: #555;
+        }
+        dt span {
+            display: block;
+            position: absolute;
+            text-align: center;
+            width: 32px;
+        }
+        dt i {
+            font-size: 200%;
+        }
+        dt a {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            text-decoration: none;
+            margin-right: 10px;
+            color: #225;
+        }
+        dt a,
+        dd {
+            margin-left: 28pt;
+        }
+        </style>
+        <link href="https://use.fontawesome.com/releases/v5.0.6/css/all.css" rel="stylesheet">
+    </head>
+    <body>
+        <h1>Index Of {{path}}</h1>
+        <dl>
+            <?each files?>
+                <dt>
+                    <span>
+                        <?if entry[1] == "parent"?>
+                            <i class="fas fa-level-up-alt"></i>
+                        <?elseif entry[1] == "directory"?>
+                            <i class="far fa-folder"></i>
+                        <?elseif /\/(json|javascript)$/.test(entry[1])?>
+                            <i class="far fa-file-code"></i>
+                        <?elseif /^audio\//.test(entry[1])?>
+                            <i class="far fa-file-audio"></i>
+                        <?elseif /^video\//.test(entry[1])?>
+                            <i class="far fa-file-video"></i>
+                        <?elseif /^image\//.test(entry[1])?>
+                            <i class="far fa-file-image"></i>
+                        <?elseif /\/(x\-)?pdf$/.test(entry[1])?>
+                            <i class="far fa-file-pdf"></i>
+                        <?elseif /\/(x\-)?(jar|zip|7z|rar|archive)(\-compressed)?$/.test(entry[1])?>
+                            <?if /\.pptx$/i.test(entry[0])?>
+                                <i class="far fa-file-powerpoint"></i>
+                            <?elseif /\.docx$/i.test(entry[0])?>
+                                <i class="far fa-file-word"></i>
+                            <?else?>
+                                <i class="far fa-file-archive"></i>
+                            <?endif?>
+                        <?elseif /\/.+\.(opendocument\.spreadsheet|excel|xls|ods)$/.test(entry[1])?>
+                            <i class="far fa-file-excel"></i>
+                        <?elseif /\/.+\.(opendocument\.presentation|powerpoint|odp|pptx?)$/.test(entry[1])?>
+                            <i class="far fa-file-powerpoint"></i>
+                        <?elseif /\/.+\.(opendocument\.text|word|odt|docx?)$/.test(entry[1])?>
+                            <i class="far fa-file-word"></i>
+                        <?elseif /(^text\/(x\-)?(asm|java|c(\-sharp|s|\+\+|pp)|ts|(cascading\-)stylesheet|(type|java)script|make(file)?|(shell)?script|html?|js)|\/xml)$/.test(entry[1])?>
+                            <i class="far fa-file-code"></i>
+                        <?elseif /^text\//.test(entry[1])?>
+                            <?if /\.(java|c(\-sharp|s|\+\+|pp)|h|hpp|s|ts|mk|sh(ellscript)?|inc(lude)?|xml|properties|js|html?|css)$/i.test(entry[0])?>
+                                <i class="far fa-file-code"></i>
+                            <?else?>
+                                <i class="far fa-file-alt"></i>
+                            <?endif?>
+                        <?elseif entry[1] === "application/octet-stream"?>
+                            <?if /\.(mp3|flac)$/i.test(entry[0])?>
+                                <i class="far fa-file-audio"></i>
+                            <?else?>
+                                <i class="far fa-file"></i>
+                            <?endif?>
+                        <?else?>
+                            <i class="far fa-file"></i>
+                        <?endif?>
+                    </span>
+                    <a title="{{entry[1]}}" href="{{entry[1] === 'parent' ? '..' : encodeURIComponent(entry[0]).replace(/ /g, '%20')}}">{{entry[0]}}</a>
+                </dt>
+                <dd>
+                    <?if entry[1] == "parent"?>
+                        ..
+                    <?else?>
+                        <?if entry[1] == "directory"?>
+                            {{entry[2]}} File(s)
+                        <?else?>
+                            <?set suffix "b"?>
+                            <?set size entry[2]?>
+                            <?if 1024 < env.size?>
+                                <?set suffix "kb"?>
+                                <?set size env.size/1024?>
+                            <?endif?>
+                            <?if 1024 < env.size?>
+                                <?set suffix "mb"?>
+                                <?set size env.size/1024?>
+                            <?endif?>
+                            <?if 1024 < env.size?>
+                                <?set suffix "gb"?>
+                                <?set size env.size/1024?>
+                            <?endif?>
+                            <?if 1024 < env.size?>
+                                <?set suffix "tb"?>
+                                <?set size env.size/1024?>
+                            <?endif?>
+                            {{round(env.size*10)/10}}{{env.suffix}}
+                        <?endif?> -
+                        Modified {{moment(entry[3]).fromNow()}}
+                    <?endif?>
+                </dd>
+            <?done?>
+        </dl>
+        <hr />
+        <small>Generated by NexusFramework V{{frameworkVersion}}</small>
+    </body>
+</html>

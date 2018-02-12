@@ -69,6 +69,8 @@ declare interface User {
     [key: string]: any;
 }
 declare interface StaticMountOptions {
+    autoIndexSkeleton?: string | Template;
+    noOtherMounts?: boolean;
     autoIndex?: boolean;
     mutable?: boolean;
 }
@@ -101,6 +103,10 @@ declare interface RenderOptions {
      * The legacy NHP skeleton to use for this mount, relative to the root path (if set).
      */
     legacyskeleton?: string | Template;
+    /**
+     * The NHP skeleton to use for displaying folder directories, relative to the root path (if set).
+     */
+    autoindexskeleton?: string | Template;
 
     /**
      * Paths to error documents, relative to the pages of this mount.

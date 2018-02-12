@@ -10,9 +10,11 @@ import lrucache = require("lru-cache");
 import statuses = require('statuses');
 import chokidar = require("chokidar");
 import express = require("express");
+import mime = require('mime-magic');
 import events = require("events");
 import stream = require("stream");
 import multer = require("multer");
+import moment = require("moment");
 import upath = require("upath");
 import async = require("async");
 import sharp = require("sharp");
@@ -1446,6 +1448,7 @@ class LazyLoadingNHPRequestChildHandler extends LazyLoadingNHPRequestHandler {
 class FSWatcherRequestHandler extends RequestHandlerWithChildren {
     private skeleton: Template;
     private legacyskeleton: Template;
+    private autoindexskeleton: Template;
     private fswatcher: chokidar.FSWatcher;
     private pagesysskeleton: PageSystemSkeleton;
     constructor(fspath: string, logger: nulllogger.INullLogger, options: MountOptions) {
@@ -1453,6 +1456,7 @@ class FSWatcherRequestHandler extends RequestHandlerWithChildren {
         this.skeleton = options.skeleton as any;
         this.legacyskeleton = options.legacyskeleton as any;
         this.pagesysskeleton = options.pagesysskeleton as any;
+        this.autoindexskeleton = options.autoindexskeleton as any;
         var onready: Function[] = [];
         const fswatcher = this.fswatcher = chokidar.watch(fspath, {
             ignorePermissionErrors: true
@@ -1571,6 +1575,7 @@ export class NexusFramework extends events.EventEmitter {
             renderoptions: {
                 value: {
                     legacyskeleton: _nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp")),
+                    autoindexskeleton: _nhp.template(path.resolve(__dirname, "../indexOfSkeleton.nhp")),
                     errordoc: {}
                 }
             }
@@ -1691,6 +1696,12 @@ export class NexusFramework extends events.EventEmitter {
             this.renderoptions.legacyskeleton = this.nhp.template(val);
         else
             this.renderoptions.legacyskeleton = val;
+    }
+    setIndexOfSkeleton(val: string | Template) {
+        if (_.isString(val))
+            this.renderoptions.autoindexskeleton = this.nhp.template(val);
+        else
+            this.renderoptions.autoindexskeleton = val;
     }
     setSkeleton(val: string | Template) {
         if (_.isString(val))
@@ -1862,6 +1873,8 @@ export class NexusFramework extends events.EventEmitter {
             options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton)) as PageSystemSkeleton;
         if (_.isString(options.legacyskeleton))
             options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
+        if (_.isString(options.autoindexskeleton))
+            options.autoindexskeleton = this.nhp.template(path.resolve(options.root, options.autoindexskeleton));
         if (webpath == "/") {
             _.assign(this.renderoptions, options);
             const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingNHPRequestHandler(fspath, this.logger, options);
@@ -1910,16 +1923,21 @@ export class NexusFramework extends events.EventEmitter {
      * @param fspath The filesystem path
      * @param options The mount options
      */
-    mountStatic(webpath: string, fspath: string, options?: StaticMountOptions) {
+    mountStatic(webpath: string, fspath: string, options: StaticMountOptions = {autoIndex:true}) {
         var serveOptions = options.mutable ? {} : {
             maxAge: 3.154e+10,
             immutable: true
         };
+        
+        var template = options.autoIndexSkeleton;
+        if(_.isString(template))
+            template = this.nhp.template(template);
 
+        const self = this;
         fspath = path.resolve(process.cwd(), fspath);
         const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
         const handler = function (req: Request, res: Response, next: (err?: Error) => void) {
-            const filename = path.resolve(fspath, req.path.substring(1));
+            const filename = path.resolve(fspath, decodeURIComponent(req.path.substring(1)));
             if (startsWith.test(filename))
                 fs.stat(filename, function (err, stats) {
                     if (err && err.code != "ENOENT")
@@ -1955,8 +1973,65 @@ export class NexusFramework extends events.EventEmitter {
                                         if (err)
                                             return next(err);
 
-                                        const path = url.parse(req.originalUrl).pathname;
-                                        res.write("<html><head><title>Directory: ");
+                                        const _files = res.locals.files = [];
+                                        const _path = url.parse(req.originalUrl).pathname;
+                                        res.locals.encodeURIComponent = encodeURIComponent;
+                                        res.locals.path = decodeURIComponent(_path);
+                                        res.locals.filepath = filename;
+                                        var tmpl = template;
+                                        if(!tmpl) {
+                                            const renderoptions = res.renderoptions || self.renderoptions;
+                                            tmpl = renderoptions.autoindexskeleton;
+                                        }
+                                        if(!tmpl)
+                                            tmpl = self.nhp.template(path.resolve(__dirname, "../indexOfSkeleton.nhp"));
+                                        async.each(files, function(file, cb) {
+                                            const full = path.resolve(filename, file);
+                                            fs.stat(full, function(err, stat) {
+                                                if (err || !stat)
+                                                    _files.push([file, "application/octet-stream", 0, new Date(0)]);
+                                                else if (stat.isDirectory())
+                                                    fs.readdir(full, function(err, files) {
+                                                        _files.push([file, "directory", files && files.length || 0, stat.mtime]);
+                                                        cb();
+                                                    });
+                                                else
+                                                    mime(full, function(err, type = "application/octet-stream") {
+                                                        _files.push([file, type, stat.size, stat.mtime]);
+                                                        cb();
+                                                    });
+                                            });
+                                        }, function(err: Error) {
+                                            _files.sort(function(a, b) {
+                                                const adir = a[1] == "directory";
+                                                const bdir = b[1] == "directory";
+                                                if((adir || bdir) && !(adir && bdir)) {
+                                                    if(adir)
+                                                        return -1;
+                                                    return 1;
+                                                }
+                                                if (a[0] < b[0])
+                                                    return -1;
+                                                if (a[0] > b[0])
+                                                    return 1;
+                                                return 0;
+                                            });
+                                            res.locals.ceil = Math.ceil.bind(Math);
+                                            res.locals.round = Math.round.bind(Math);
+                                            res.locals.floor = Math.floor.bind(Math);
+                                            res.locals.moment = moment;
+                                            if (_path.length > 1)
+                                                _files.unshift(["Parent", "parent", 0, 0]);
+                                            (tmpl as Template).renderToStream(res.locals, res, function(err?) {
+                                                if (err)
+                                                    res.sendFailure(err);
+                                                else
+                                                    res.end();
+                                            });
+                                        });
+                                            
+                                                
+                                        /*res.write("<html><head><meta charset=\"UTF-8\"><title>Directory: ");
                                         res.write(path);
                                         res.write("</title></head><body><h1>Directory listing for ");
                                         res.write(path);
@@ -1975,7 +2050,7 @@ export class NexusFramework extends events.EventEmitter {
                                         });
                                         res.write("</ul><hr /><small>Listing generated by NexusFramework ");
                                         res.write(pkgjson.version);
-                                        res.end("</small></body></html>");
+                                        res.end("</small></body></html>");*/
                                     });
                             } else
                                 next();

@@ -86,6 +86,7 @@ export declare class NexusFramework extends events.EventEmitter {
      * Opera below version 3.5.
      */
     setLegacySkeleton(val: string | Template): void;
+    setIndexOfSkeleton(val: string | Template): void;
     setSkeleton(val: string | Template): void;
     setPageSystemSkeleton(val: string | PageSystemSkeleton): void;
     setErrorDocument(code: number | "*", page?: string): void;
