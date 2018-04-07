@@ -486,13 +486,13 @@ class RequestHandlerWithChildren {
                         }
                         this['_index'].handle(req, res, (err, locals) => {
                             if (err)
-                                next(err);
+                                res.sendFailure(err);
                             else if (locals) {
                                 const view = this['views']["nhp"];
                                 if (view)
                                     res.sendRender(view, locals);
                                 else
-                                    next(new Error("No view to render"));
+                                    res.sendFailure(new Error("No view to render"));
                             }
                             else
                                 next();
@@ -504,7 +504,7 @@ class RequestHandlerWithChildren {
                 if (this.access)
                     this.access(req, res, function (err) {
                         if (err)
-                            next(err);
+                            res.sendFailure(err);
                         else
                             _next();
                     }, function () {
@@ -516,7 +516,7 @@ class RequestHandlerWithChildren {
             if (this.exists)
                 this.exists(req, res, function (err) {
                     if (err)
-                        next(err);
+                        res.sendFailure(err);
                     else
                         _next();
                 }, next);
@@ -526,7 +526,7 @@ class RequestHandlerWithChildren {
         if (this.route)
             this.route(req, res, function (err, route) {
                 if (err)
-                    next(err);
+                    res.sendFailure(err);
                 else {
                     if (route)
                         req.url = url.resolve("/", route);
@@ -1308,7 +1308,10 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             const clocals = _.cloneDeep(res.locals);
                             next = function (err) {
                                 res.locals = clocals;
-                                _next(err);
+                                if (err)
+                                    res.sendFailure(err);
+                                else
+                                    _next();
                             };
                             _.merge(res.locals, renderoptions.locals);
                         }
@@ -1317,7 +1320,10 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             const _next = next;
                             next = function (err) {
                                 res.popResourceQueues();
-                                _next(err);
+                                if (err)
+                                    res.sendFailure(err);
+                                else
+                                    _next();
                             };
                             res.pushResourceQueues();
                             if (renderoptions.fonts)

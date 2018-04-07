@@ -2,6 +2,9 @@
 <p>This is a test page for <a href="/:about/">NexusFramework</a>.</p>
 <ul>
   <li>
+    <a href="/error">error</a>
+  </li>
+  <li>
     <a href="/test.ext/">test.ext</a>
   </li>
   <li>

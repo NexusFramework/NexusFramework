@@ -519,7 +519,7 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
         this._index = index;
     }
 
-    handle(req: Request, res: Response, next: (err?: Error) => void) {
+    handle(req: Request, res: Response, next: () => void) {
         const _next = () => {
             const _next = () => {
                 const _next = () => {
@@ -576,13 +576,13 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                         }
                         this['_index'].handle(req, res, (err, locals?) => {
                             if (err)
-                                next(err);
+                              res.sendFailure(err);
                             else if (locals) {
-                                const view = this['views']["nhp"];
-                                if (view)
-                                    res.sendRender(view, locals);
-                                else
-                                    next(new Error("No view to render"));
+                              const view = this['views']["nhp"];
+                              if (view)
+                                res.sendRender(view, locals);
+                              else
+                                res.sendFailure(new Error("No view to render"));
                             } else
                                 next();
                         });
@@ -591,35 +591,35 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                 }
                 if (this.access)
                     this.access(req, res, function (err?: Error) {
-                        if (err)
-                            next(err);
-                        else
-                            _next();
+                      if (err)
+                        res.sendFailure(err);
+                      else
+                        _next();
                     }, function () {
-                        res.sendStatus(403);
+                      res.sendStatus(403);
                     });
                 else
                     _next();
             }
             if (this.exists)
-                this.exists(req, res, function (err?: Error) {
-                    if (err)
-                        next(err);
-                    else
-                        _next();
-                }, next);
+              this.exists(req, res, function (err?: Error) {
+                if (err)
+                  res.sendFailure(err);
+                else
+                  _next();
+              }, next);
             else
-                _next();
+              _next();
         }
         if (this.route)
             this.route(req, res, function (err?: Error, route?: string) {
-                if (err)
-                    next(err);
-                else {
-                    if (route)
-                        req.url = url.resolve("/", route);
-                    _next();
-                }
+              if (err)
+                res.sendFailure(err);
+              else {
+                if (route)
+                  req.url = url.resolve("/", route);
+                _next();
+              }
             }, next);
         else
             _next();
@@ -1405,16 +1405,22 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             const clocals = _.cloneDeep(res.locals);
                             next = function (err?: Error) {
                                 res.locals = clocals;
-                                _next(err);
+                                if (err)
+                                  res.sendFailure(err);
+                                else
+                                  _next();
                             }
                             _.merge(res.locals, renderoptions.locals);
                         }
                         const hasResources = renderoptions.scripts || renderoptions.styles || renderoptions.fonts;
                         if (hasResources) {
-                            const _next = next;
+                          const _next = next;
                             next = function (err?: Error) {
                                 res.popResourceQueues();
-                                _next(err);
+                                if (err)
+                                  res.sendFailure(err);
+                                else
+                                  _next();
                             }
                             res.pushResourceQueues();
                             if (renderoptions.fonts)

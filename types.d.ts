@@ -99,7 +99,7 @@ declare interface RenderOptions {
     /**
      * The page system skeleton to use for this mount, relative to the root path (if set).
      */
-    pagesysskeleton?: string | nexusframework.PageSystemSkeleton;
+    pagesysskeleton?: string | PageSystemSkeleton;
     /**
      * The legacy NHP skeleton to use for this mount, relative to the root path (if set).
      */
@@ -143,7 +143,7 @@ declare interface MountOptions extends RenderOptions {
      */
     mutable?: boolean;
 }
-export type FunctionOrString = string | Function;
+export type FunctionOrString = Function | string;
 export type FunctionOrStringOrEitherWithData = FunctionOrString | {impl: FunctionOrString, data: any};
 declare interface PageSystemSkeleton {
     (template: string, options: any, req: Request, res: Response, next: (err: Error, data?: any) => void): void;
@@ -464,36 +464,36 @@ interface RequestHandlerEntry {
     /**
      * Fetches the index handler for this entry.
      */
-    index(): nexusframework.RequestHandlerEntry;
+    index(): RequestHandlerEntry;
     /**
      * Set the index handler for this entry.
      */
-    setIndex(index: nexusframework.RequestHandlerEntry): void;
+    setIndex(index: RequestHandlerEntry): void;
 
     /**
      * Fetches the route resolver for this entry.
      */
-    routeHandler(): nexusframework.RouteRequestHandler;
+    routeHandler(): RouteRequestHandler;
     /**
      * Fetches the access handler for this entry.
      */
-    accessHandler(): nexusframework.AccessRequestHandler;
+    accessHandler(): AccessRequestHandler;
     /**
      * Fetches the existence handler for this entry.
      */
-    existsHandler(): nexusframework.ExistsRequestHandler;
+    existsHandler(): ExistsRequestHandler;
     /**
      * Set the route resolver for this entry.
      */
-    setRouteHandler(index: nexusframework.RouteRequestHandler): void;
+    setRouteHandler(index: RouteRequestHandler): void;
     /**
      * Set the access handler for this entry.
      */
-    setAccessHandler(index: nexusframework.AccessRequestHandler): void;
+    setAccessHandler(index: AccessRequestHandler): void;
     /**
      * Set the existence handler for this entry.
      */
-    setExistsHandler(index: nexusframework.ExistsRequestHandler): void;
+    setExistsHandler(index: ExistsRequestHandler): void;
     /**
      * Destroy this entry and all children
      */

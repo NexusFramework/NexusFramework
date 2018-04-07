@@ -1,7 +1,6 @@
 <h1>Error {{errorCode}}</h1>
-<pre><?if error?>
-{{error.stack || error}}
-<?elseif errorCode == 403?>
+<pre>
+<?if errorCode == 403?>
 You do not have permission to view this
 <?elseif errorCode == 404?>
 The page you're looking for does not exist
@@ -9,4 +8,6 @@ The page you're looking for does not exist
 An internal server error occured
 <?else?>
 An error occured
+<?endif?><?if error?>
+<code style="display: block; font-size: 80%; padding: 0.5em; background: rgba(0, 0, 0, 0.1)">{{error.stack || error}}</code>
 <?endif?></pre>
