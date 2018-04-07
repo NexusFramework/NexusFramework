@@ -23,7 +23,7 @@ const app = express();
     }).catch(cb);
 }*/
 const aboutHtml = 'NexusFramework is a NodeJS Server framework, and is powering this website!';
-const indexHtml = "<h1>Test</h1> <p>This is a test page for <a href=\"/:about/\">NexusFramework</a>.<br /> <a href=\"/:scripts/es6/loader.min.js\">Minified loader script</a>.</p>";
+const indexHtml = '<h1>Test</h1> <p>This is a test page for <a href="/:about/">NexusFramework</a>.</p> <ul><li><a href="/test.ext/">test.ext</a> </li><li><a href="/:scripts/es6/loader.min.js">Minified loader script</a> </li></ul>';
 var iopath;
 var framework;
 it("create and configure", function (cb) {
@@ -310,7 +310,7 @@ describe("more socket.io", function () {
         });
         client.emit("page", "GET", "/", undefined, { "user-agent": "Testorola" }, function (res) {
             assert.equal(res.code, 200);
-            assert.equal(JSON.stringify(res.data), '{"title":"Test","page":"<h1>Test</h1> <p>This is a test page for <a href=\\"/:about/\\">NexusFramework</a>.<br /> <a href=\\"/:scripts/es6/loader.min.js\\">Minified loader script</a>.</p>"}');
+            assert.equal(JSON.stringify(res.data), JSON.stringify({ title: "Test", page: indexHtml }));
             framework.setPageSystemSkeleton(undefined);
             cb();
         });
@@ -376,5 +376,5 @@ describe("post", function () {
         phantomjs.kill();
         cb(err);
     });
-});*/ 
+});*/
 //# sourceMappingURL=tests.js.map

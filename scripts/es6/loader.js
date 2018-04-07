@@ -30,14 +30,14 @@
         }
     };
     var errorShowed = false;
-    var showError = function (err) {
+    const errorFade = "loader-error-visible";
+    const errorContainerArray = errorFade ? d.getElementsByClassName("loader-error-container") : undefined;
+    const errorMessageArray = d.getElementsByClassName("loader-error-message");
+    const showError = function (err) {
         console.warn(err);
         if (errorShowed)
             return;
         errorShowed = true;
-        const errorFade = "loader-error-visible";
-        const errorContainerArray = errorFade ? d.getElementsByClassName("loader-error-container") : undefined;
-        const errorMessageArray = d.getElementsByClassName("loader-error-message");
         if (errorMessageArray.length) {
             const messageAndStack = "" + (err.stack || err);
             const replacements = {
@@ -184,8 +184,10 @@
                     resetProgress(resources.length);
                     resources.forEach(function (resource) {
                         NexusFrameworkLoaderImpl.loadResource(resource.type, resource.source, function (err) {
-                            if (err)
-                                showError(err);
+                            if (err) {
+                                console.log(err);
+                                NexusFrameworkLoaderImpl.showError(err);
+                            }
                             else
                                 incrementProgress(oncomplete);
                         }, resource.dependencies, resource.inline || resource.integrity, resource.name);
@@ -202,47 +204,47 @@
                 return Object.keys(loadCallbacks);
             },
             loadResource(type, source, cb, deps = [], inlineOrIntegrity, name) {
-                var processResource, callCallbacks;
-                var contentType;
-                if (type == "script") {
-                    contentType = "text/javascript";
-                    processResource = function (url) {
-                        const scriptel = d.createElement('script');
-                        scriptel.type = "text/javascript";
-                        if (inlineOrIntegrity && inlineOrIntegrity !== true)
-                            scriptel.integrity = inlineOrIntegrity;
-                        scriptel.async = true;
-                        scriptel.onload = function () {
-                            callCallbacks();
-                        };
-                        scriptel.onerror = function () {
-                            callCallbacks(new Error("Failed to load resource: " + source));
-                        };
-                        scriptel.src = url;
-                        d.body.appendChild(scriptel);
-                    };
-                }
-                else if (type == "style") {
-                    contentType = "text/css";
-                    processResource = function (url) {
-                        const linkel = d.createElement('link');
-                        linkel.type = "text/css";
-                        linkel.rel = "stylesheet";
-                        if (inlineOrIntegrity && inlineOrIntegrity !== true)
-                            linkel.integrity = inlineOrIntegrity;
-                        linkel.onload = function () {
-                            callCallbacks();
-                        };
-                        linkel.onerror = function () {
-                            callCallbacks(new Error("Failed to load resource: " + source));
-                        };
-                        linkel.href = url;
-                        d.body.appendChild(linkel);
-                    };
-                }
-                else
-                    throw new Error("Unknown type: " + type);
                 try {
+                    var processResource, callCallbacks;
+                    var contentType;
+                    if (type == "script") {
+                        contentType = "text/javascript";
+                        processResource = function (url) {
+                            const scriptel = d.createElement('script');
+                            scriptel.type = "text/javascript";
+                            if (inlineOrIntegrity && inlineOrIntegrity !== true)
+                                scriptel.integrity = inlineOrIntegrity;
+                            scriptel.async = true;
+                            scriptel.onload = function () {
+                                callCallbacks();
+                            };
+                            scriptel.onerror = function () {
+                                callCallbacks(new Error("Failed to load resource: " + source));
+                            };
+                            scriptel.src = url;
+                            d.body.appendChild(scriptel);
+                        };
+                    }
+                    else if (type == "style") {
+                        contentType = "text/css";
+                        processResource = function (url) {
+                            const linkel = d.createElement('link');
+                            linkel.type = "text/css";
+                            linkel.rel = "stylesheet";
+                            if (inlineOrIntegrity && inlineOrIntegrity !== true)
+                                linkel.integrity = inlineOrIntegrity;
+                            linkel.onload = function () {
+                                callCallbacks();
+                            };
+                            linkel.onerror = function () {
+                                callCallbacks(new Error("Failed to load resource: " + source));
+                            };
+                            linkel.href = url;
+                            d.body.appendChild(linkel);
+                        };
+                    }
+                    else
+                        throw new Error("Unknown type: " + type);
                     var errored = false;
                     const onLoad = function (err) {
                         if (errored)
@@ -262,7 +264,7 @@
                             name = "inline-" + stringHash(source);
                         }
                         else {
-                            var name = source;
+                            name = source;
                             var index = name.lastIndexOf("/");
                             if (index > -1)
                                 name = name.substring(index + 1);
@@ -290,12 +292,9 @@
                         callbacks.forEach(function (cb) {
                             cb(err);
                         });
-                        (loadCallbacks[key] = []).push = function (...items) {
-                            Array.prototype.forEach.call(items, function (cb) {
+                        loadCallbacks[key] = { push: function (cb) {
                                 cb(err);
-                            });
-                            return 0;
-                        };
+                            } };
                     };
                     callbacks = loadCallbacks[key] = [onLoad];
                     if (inlineOrIntegrity !== true && source.indexOf("/") == -1)
@@ -325,6 +324,15 @@
                     cb(e);
                 }
             }
+        };
+        NexusFrameworkLoaderImpl.resetError = function () {
+            if (errorFade && errorContainerArray.length)
+                rmClass(errorContainerArray, errorFade);
+            errorShowed = false;
+        };
+        NexusFrameworkLoaderImpl.showError = function (err) {
+            errorShowed = false;
+            showError(err);
         };
         Object.defineProperty(w, "NexusFrameworkLoader", {
             value: NexusFrameworkLoaderImpl

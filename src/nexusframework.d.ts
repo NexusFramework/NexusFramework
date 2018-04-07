@@ -1,4 +1,6 @@
 /// <reference types="node" />
+/// <reference types="express" />
+/// <reference types="socket.io" />
 /// <reference types="nulllogger" />
 import { StaticMountOptions, Renderer, PageSystemSkeleton, MountOptions, ImageResizerOptions, MappedRequestHandler, RequestHandler, RequestHandlerEntry, ExistsRequestHandler, RouteRequestHandler, AccessRequestHandler, RequestHandlerChildEntry, Request, Response } from "../types";
 import { Template } from "nhp/lib/Template";

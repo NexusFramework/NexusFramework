@@ -4,6 +4,7 @@
         <meta charset="utf-8" />
         <base href="{{basehref}}">
         <title>{{title}}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <?header?>
     </head>
     <body style="padding-top: 5rem" class="{{bodyclass}}">

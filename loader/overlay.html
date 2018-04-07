@@ -7,6 +7,15 @@
 </div>
 <div class="loader-container loader-error-container">
     {{errorContainerHead}}
-    <div class="loader-error-message"></div>
+    <div class="loader-error-message-container">
+      <center>
+        <h3>An Error Occured</h3>
+        <p>Sorry but there was an issue loading this page</p>
+      </center>
+      <div class="loader-error-message"></div>
+      <center>
+        <p>Check your internet connection and <a class="loader-error-reload" href="javascript:location.reload(true);void(0);">reload this page</a>.</p>
+      </center>
+    </div>
     {{errorContainerFoot}}
 </div>

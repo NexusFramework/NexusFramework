@@ -29,16 +29,16 @@
                 element.className = (element.className ? element.className + " " : "") + visibleClass;
         }
     }
-    
+
     var errorShowed = false;
-    var showError = function(err: Error) {
+    const errorFade = "loader-error-visible";
+    const errorContainerArray: HTMLElement | HTMLCollection = errorFade ? d.getElementsByClassName("loader-error-container") : undefined;
+    const errorMessageArray: HTMLElement | HTMLCollection = d.getElementsByClassName("loader-error-message");
+    const showError = function(err: Error) {
         console.warn(err);
         if(errorShowed)
             return;
         errorShowed = true;
-        const errorFade = "loader-error-visible";
-        const errorContainerArray: HTMLElement | HTMLCollection = errorFade ? d.getElementsByClassName("loader-error-container") : undefined;
-        const errorMessageArray: HTMLElement | HTMLCollection = d.getElementsByClassName("loader-error-message");
         if (errorMessageArray.length) {
             const messageAndStack = "" + (err.stack || err);
             const replacements: {[index: string]: string} = {
@@ -58,7 +58,7 @@
             });
             for(var i=0; i<errorMessageArray.length; i++)
                 errorMessageArray[i].innerHTML = html;
-            
+
             if(w.ga)
                 try {
                     w.ga('send', 'exception', {
@@ -68,7 +68,7 @@
                 } catch(e) {
                     console.warn(e);
                 }
-            
+
             if(errorFade && errorContainerArray.length)
                 addClass(errorContainerArray, errorFade);
         }
@@ -163,162 +163,170 @@
         var initialVersions: string[];
         const loadCallbacks: {[index: string]: Function[]} = {};
         const NexusFrameworkLoaderImpl = {
-            load(data: NexusFrameworkLoaderData, oncomplete?: Function) {
+            load(data: NexusFrameworkLoaderData, oncomplete?: () => void) {
                 if (initialVersions) {
-                    const versions = data[0];
-                    const len = versions.length;
-                    if (len !== initialVersions.length)
-                        return location.reload(true);
-                    for (var i=0; i<len; i++)
-                        if (versions[i] !== initialVersions[i])
-                            return location.reload(true);
+                  const versions = data[0];
+                  const len = versions.length;
+                  if (len !== initialVersions.length)
+                    return location.reload(true);
+                  for (var i=0; i<len; i++)
+                    if (versions[i] !== initialVersions[i])
+                      return location.reload(true);
                 } else
-                    initialVersions = data[0];
+                  initialVersions = data[0];
                 const resources = data[1];
                 if (resources.length) {
-                    resetProgress(resources.length);
-                    resources.forEach(function(resource) {
-                        NexusFrameworkLoaderImpl.loadResource(resource.type, resource.source, function(err) {
-                            if(err)
-                                showError(err);
-                            else
-                                incrementProgress(oncomplete);
-                        }, resource.dependencies, resource.inline || resource.integrity, resource.name);
-                    });
+                  resetProgress(resources.length);
+                  resources.forEach(function(resource) {
+                    NexusFrameworkLoaderImpl.loadResource(resource.type, resource.source, function(err) {
+                      if(err) {
+                        console.log(err);
+                        NexusFrameworkLoaderImpl.showError(err);
+                      } else
+                        incrementProgress(oncomplete);
+                    }, resource.dependencies, resource.inline || resource.integrity, resource.name);
+                  });
                 } else if(oncomplete)
-                    oncomplete();
+                  oncomplete();
                 else {
-                    resetProgress();
-                    incrementProgress(oncomplete);
+                  resetProgress();
+                  incrementProgress(oncomplete);
                 }
             },
             requestedResources() {
                 return Object.keys(loadCallbacks);
             },
             loadResource(type: string, source: string, cb: (err?: Error) => void, deps: string[] = [], inlineOrIntegrity?: boolean | string, name?: string) {
-                var processResource: (data: string) => void, callCallbacks: (err?: Error) => void;
-                var contentType: string;
-                if(type == "script") {
-                    contentType = "text/javascript";
-                    processResource = function(url) {
-                        const scriptel = d.createElement('script');
-                        scriptel.type = "text/javascript";
-                        if (inlineOrIntegrity && inlineOrIntegrity !== true)
-                            scriptel.integrity = inlineOrIntegrity;
-                        scriptel.async = true;
-                        scriptel.onload = function() {
-                            callCallbacks();
-                        };
-                        scriptel.onerror = function() {
-                            callCallbacks(new Error("Failed to load resource: " + source));
-                        };
-                        scriptel.src = url;
-                        d.body.appendChild(scriptel);
-                    }
-                } else if(type == "style") {
-                    contentType = "text/css";
-                    processResource = function(url) {
-                        const linkel = d.createElement('link');
-                        linkel.type = "text/css";
-                        linkel.rel = "stylesheet";
-                        if (inlineOrIntegrity && inlineOrIntegrity !== true)
-                            linkel.integrity = inlineOrIntegrity;
-                        linkel.onload = function() {
-                            callCallbacks();
-                        };
-                        linkel.onerror = function() {
-                            callCallbacks(new Error("Failed to load resource: " + source));
-                        };
-                        linkel.href = url;
-                        d.body.appendChild(linkel);
-                    }
-                } else
-                    throw new Error("Unknown type: " + type);
-                
+
                 try {
-                    var errored = false;
-                    const onLoad = function(err?: Error) {
-                        if(errored)
-                            return;
-                        if(err) {
-                            errored = true;
-                            cb(err);
-                        } else
-                            cb();
-                    };
-                    var url: string;
-                    if (inlineOrIntegrity !== true)
-                        url = source = resolveUrl(source);
-                    if (!name) {
-                        if(inlineOrIntegrity === true) {
-                            name = "inline-" + stringHash(source);
-                        } else {
-                            var name = source;
-                            var index = name.lastIndexOf("/");
-                            if(index > -1)
-                                name = name.substring(index+1);
-                            var match = name.match(/^(([a-z][a-z0-9]*[\-_\.]?)+)\.(css|js)(\?.*)?$/i);
-                            if(match)
-                                name = match[1];
-                            else
-                                name = name.replace(/\.(css|js)(\?.*)?$/i, "");
-                            if(/\.min$/.test(name))
-                                name = name.substring(0, name.length-4);
-                            if(/\.slim$/.test(name))
-                                name = name.substring(0, name.length-5);
-                            if(/\.umd$/.test(name))
-                                name = name.substring(0, name.length-4);
-                            match = name.match(/^(.+)\-\d+([\.\-]\d)*$/);
-                            if (match)
-                                name = match[1];
-                        }
-                    }
-                    const key = type + ":" + name;
-                    
-                    var callbacks = loadCallbacks[key];
-                    if(callbacks)
-                        return callbacks.push(onLoad);
+                  var processResource: (data: string) => void, callCallbacks: (err?: Error) => void;
+                  var contentType: string;
+                  if(type == "script") {
+                      contentType = "text/javascript";
+                      processResource = function(url) {
+                          const scriptel = d.createElement('script');
+                          scriptel.type = "text/javascript";
+                          if (inlineOrIntegrity && inlineOrIntegrity !== true)
+                              scriptel.integrity = inlineOrIntegrity;
+                          scriptel.async = true;
+                          scriptel.onload = function() {
+                              callCallbacks();
+                          };
+                          scriptel.onerror = function() {
+                              callCallbacks(new Error("Failed to load resource: " + source));
+                          };
+                          scriptel.src = url;
+                          d.body.appendChild(scriptel);
+                      }
+                  } else if(type == "style") {
+                      contentType = "text/css";
+                      processResource = function(url) {
+                          const linkel = d.createElement('link');
+                          linkel.type = "text/css";
+                          linkel.rel = "stylesheet";
+                          if (inlineOrIntegrity && inlineOrIntegrity !== true)
+                              linkel.integrity = inlineOrIntegrity;
+                          linkel.onload = function() {
+                              callCallbacks();
+                          };
+                          linkel.onerror = function() {
+                              callCallbacks(new Error("Failed to load resource: " + source));
+                          };
+                          linkel.href = url;
+                          d.body.appendChild(linkel);
+                      }
+                  } else
+                      throw new Error("Unknown type: " + type);
 
-                    callCallbacks = function(err?: Error) {
-                        callbacks.forEach(function(cb) {
-                            cb(err);
-                        });
-                        (loadCallbacks[key] = []).push = function(...items: Function[]) {
-                            Array.prototype.forEach.call(items, function(cb) {
-                                cb(err);
-                            });
-                            return 0;
-                        };
-                    }
+                  var errored = false;
+                  const onLoad = function(err?: Error) {
+                      if(errored)
+                          return;
+                      if(err) {
+                          errored = true;
+                          cb(err);
+                      } else
+                          cb();
+                  };
+                  var url: string;
+                  if (inlineOrIntegrity !== true)
+                      url = source = resolveUrl(source);
+                  if (!name) {
+                      if(inlineOrIntegrity === true) {
+                          name = "inline-" + stringHash(source);
+                      } else {
+                          name = source;
+                          var index = name.lastIndexOf("/");
+                          if(index > -1)
+                              name = name.substring(index+1);
+                          var match = name.match(/^(([a-z][a-z0-9]*[\-_\.]?)+)\.(css|js)(\?.*)?$/i);
+                          if(match)
+                              name = match[1];
+                          else
+                              name = name.replace(/\.(css|js)(\?.*)?$/i, "");
+                          if(/\.min$/.test(name))
+                              name = name.substring(0, name.length-4);
+                          if(/\.slim$/.test(name))
+                              name = name.substring(0, name.length-5);
+                          if(/\.umd$/.test(name))
+                              name = name.substring(0, name.length-4);
+                          match = name.match(/^(.+)\-\d+([\.\-]\d)*$/);
+                          if (match)
+                              name = match[1];
+                      }
+                  }
+                  const key = type + ":" + name;
 
-                    callbacks = loadCallbacks[key] = [onLoad];
-                    if(inlineOrIntegrity !== true && source.indexOf("/") == -1) 
-                        return callCallbacks(new Error(type[0].toUpperCase() + type.substring(1) + " `" + name + "` is required, but not included."));
-                    
-                    if (deps.length) {
-                        var toLoad = deps.length;
-                        deps.forEach(function(dep) {
-                            NexusFrameworkLoaderImpl.loadResource(type, dep, function(err?: Error) {
-                                if(err)
-                                    callCallbacks(err);
-                                else if(!--toLoad) {
-                                    if(inlineOrIntegrity === true)
-                                        processResource('data:'+contentType+';base64,' + base64(source));
-                                    else
-                                        processResource(source);
-                                }
-                            });
-                        });
-                    } else if(inlineOrIntegrity === true)
-                        processResource('data:'+contentType+';base64,' + base64(source));
-                    else
-                        processResource(source);
-                } catch(e) {
-                    console.warn(e);
-                    cb(e);
-                }
+                  var callbacks = loadCallbacks[key];
+                  if(callbacks)
+                      return callbacks.push(onLoad);
+
+                  callCallbacks = function(err?: Error) {
+                      callbacks.forEach(function(cb) {
+                          cb(err);
+                      });
+                      loadCallbacks[key] = {push: function(cb: Function) {
+                         cb(err);
+                      }} as any;
+                  }
+
+                  callbacks = loadCallbacks[key] = [onLoad];
+                  if(inlineOrIntegrity !== true && source.indexOf("/") == -1)
+                      return callCallbacks(new Error(type[0].toUpperCase() + type.substring(1) + " `" + name + "` is required, but not included."));
+
+                  if (deps.length) {
+                      var toLoad = deps.length;
+                      deps.forEach(function(dep) {
+                          NexusFrameworkLoaderImpl.loadResource(type, dep, function(err?: Error) {
+                              if(err)
+                                  callCallbacks(err);
+                              else if(!--toLoad) {
+                                  if(inlineOrIntegrity === true)
+                                      processResource('data:'+contentType+';base64,' + base64(source));
+                                  else
+                                      processResource(source);
+                              }
+                          });
+                      });
+                  } else if(inlineOrIntegrity === true)
+                      processResource('data:'+contentType+';base64,' + base64(source));
+                  else
+                      processResource(source);
+              } catch(e) {
+                  console.warn(e);
+                  cb(e);
+              }
             }
         } as NexusFrameworkLoader;
+        NexusFrameworkLoaderImpl.resetError = function() {
+          if(errorFade && errorContainerArray.length)
+            rmClass(errorContainerArray, errorFade);
+          errorShowed = false;
+        };
+        NexusFrameworkLoaderImpl.showError = function(err) {
+          errorShowed = false;
+          showError(err);
+        };
         Object.defineProperty(w, "NexusFrameworkLoader", {
             value: NexusFrameworkLoaderImpl
         });

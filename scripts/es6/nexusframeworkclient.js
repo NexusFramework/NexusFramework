@@ -173,6 +173,15 @@ Object.defineProperties(window, {
             });
         },
         get: function () {
+            const loader = window.NexusFrameworkLoader;
+            const showError = loader.showError;
+            const debug = console.log.bind(console);
+            var currentResponse;
+            loader.showError = function (error) {
+                history.replaceState({ error: error.stack || "" + error }, document.title, location.href);
+                currentResponse = undefined;
+                showError(error);
+            };
             const GA_ANALYTICS = {
                 reportError: function (err, fatal) {
                     if (window.ga)
@@ -217,20 +226,6 @@ Object.defineProperties(window, {
                     href = protocol + href;
                 return href;
             };
-            const addAnimationEnd = function (el, handler) {
-                el.addEventListener("transitionend", handler);
-                el.addEventListener("transitionEnd", handler);
-                el.addEventListener("webkitTransitionEnd", handler);
-                el.addEventListener("mozTransitionEnd", handler);
-                el.addEventListener("oTransitionEnd", handler);
-            };
-            const removeAnimationEnd = function (el, handler) {
-                el.removeEventListener("transitionend", handler);
-                el.removeEventListener("transitionEnd", handler);
-                el.removeEventListener("webkitTransitionEnd", handler);
-                el.removeEventListener("mozTransitionEnd", handler);
-                el.removeEventListener("oTransitionEnd", handler);
-            };
             const convertResponse = function (res, url = location.href) {
                 var storage;
                 return (typeof res.data === "string" || res.data instanceof String) ? {
@@ -264,6 +259,7 @@ Object.defineProperties(window, {
                     this.progressBar = document.getElementsByClassName("loader-progress-bar");
                     this.progressBarContainer = document.getElementsByClassName("loader-progress-container");
                     this.progressVisible = false;
+                    this.animationTiming = 500;
                     this.requestPage = this.defaultRequestPage;
                     this._listeners = {};
                     url = resolveUrl(url);
@@ -337,7 +333,6 @@ Object.defineProperties(window, {
                                 clearTimeout(timer);
                             }
                             catch (e) { }
-                            removeAnimationEnd(el, onAnimationEnd);
                             this.progressVisible = true;
                             const callbacks = this.progressFadeCallbacks;
                             delete this.progressFadeCallbacks;
@@ -345,8 +340,7 @@ Object.defineProperties(window, {
                                 cb();
                             });
                         };
-                        addAnimationEnd(el, onAnimationEnd);
-                        timer = setTimeout(onAnimationEnd, 500);
+                        timer = setTimeout(onAnimationEnd, this.animationTiming);
                         setTimeout(() => {
                             for (var i = 0; i < this.progressBarContainer.length; i++) {
                                 const container = this.progressBarContainer[i];
@@ -385,7 +379,6 @@ Object.defineProperties(window, {
                                 clearTimeout(timer);
                             }
                             catch (e) { }
-                            removeAnimationEnd(el, onAnimationEnd);
                             this.progressVisible = false;
                             const callbacks = this.progressFadeCallbacks;
                             delete this.progressFadeCallbacks;
@@ -393,8 +386,7 @@ Object.defineProperties(window, {
                                 cb();
                             });
                         };
-                        addAnimationEnd(el, onAnimationEnd);
-                        timer = setTimeout(onAnimationEnd, 500);
+                        timer = setTimeout(onAnimationEnd, this.animationTiming);
                         for (var i = 0; i < this.progressBarContainer.length; i++) {
                             const container = this.progressBarContainer[i];
                             container.className = container.className.replace(/(^|\s)loader\-progress\-visible(\s|$)/g, function (match) {
@@ -580,13 +572,13 @@ Object.defineProperties(window, {
                     return state;
                 }
                 initPageSystem(opts) {
-                    if (!window.NexusFrameworkLoader)
+                    if (!loader)
                         return console.warn("The NexusFramework Loader is required for the dynamic Page System to work correctly.");
                     if (!history.pushState || !history.replaceState)
                         return console.warn("This browser is missing an essential feature required for the dynamic Page System.");
                     opts = opts || {};
                     const self = this;
-                    var currentResponse;
+                    this.animationTiming = opts.animationTiming || 500;
                     const wrapCB = (cb) => {
                         return (res) => {
                             const user = res.headers['x-user'];
@@ -730,21 +722,29 @@ Object.defineProperties(window, {
                                     document.body.removeChild(child);
                             }
                         }
+                        const fragment = document.createDocumentFragment();
                         toAdd.forEach((el) => {
-                            document.body.appendChild(el);
+                            fragment.appendChild(el);
                             this.createComponents(el);
                         });
-                        window.NexusFrameworkLoader.load(loaderScript, this.fadeOutProgress.bind(this));
+                        document.body.appendChild(fragment);
+                        loader.load(loaderScript, function () {
+                            self.progressVisible = true;
+                            self.fadeOutProgress();
+                        });
                         return true;
                     });
                     var forwardPopState;
-                    const beforeHash = /^([^#]+)(#.+)?$/;
+                    const beforeHash = /^([^#]+)(#.*)?$/;
                     var chash = location.href.match(beforeHash);
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent {
                         constructor() {
                             this.handler = (e) => {
                                 if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
+                                    return;
+                                const href = this.element.getAttribute("href");
+                                if (!href || !href.length)
                                     return;
                                 var url = this.element.href;
                                 const bhash = url.match(beforeHash);
@@ -770,7 +770,7 @@ Object.defineProperties(window, {
                                         console.warn(e);
                                     }
                                 else
-                                    console.log("Navigating", url);
+                                    debug("Navigating", url);
                             };
                         }
                         create(element) {
@@ -797,11 +797,15 @@ Object.defineProperties(window, {
                         return undefined;
                     };
                     this.requestPage = (path, post, replace = false) => {
-                        if (/\..+$/.test(path))
+                        const match = path.match(/\.([^\/]+)([\?#].*)?$/);
+                        if (match && match[0] !== "htm" && match[0] !== "html") {
                             this.defaultRequestPage(path, post);
+                            debug("Ignoring navigation", path, match);
+                        }
                         else {
                             const rid = ++this.activerid;
                             const url = this.resolveUrl(path);
+                            debug(replace, currentResponse, document.title);
                             if (replace)
                                 history.replaceState(genState(currentResponse), "Loading...", url);
                             else {
@@ -810,6 +814,8 @@ Object.defineProperties(window, {
                                 currentResponse = undefined;
                                 window.scrollTo(0, 0);
                             }
+                            loader.resetError();
+                            chash = url.match(beforeHash);
                             this.pagesysimpl.requestPage(path, (res) => {
                                 try {
                                     if (rid != this.activerid)
@@ -831,6 +837,7 @@ Object.defineProperties(window, {
                                     if (!this.pagesyshandler(res))
                                         throw new Error("Could not handle response");
                                     const contentType = res.headers['content-type'];
+                                    debug("history.replaceState", document.title);
                                     history.replaceState(genState(currentResponse = {
                                         code: res.code,
                                         headers: res.headers,
@@ -851,11 +858,27 @@ Object.defineProperties(window, {
                     };
                     this.registerComponent("a", AnchorElementComponent);
                     window.addEventListener('popstate', (e) => {
+                        self.activerid++;
+                        currentResponse = undefined;
                         const bhash = location.href.match(beforeHash);
-                        if (bhash && chash && chash[1] === bhash[1])
+                        debug("popstate", bhash, chash, e.state);
+                        if (bhash && chash && chash[1] === bhash[1]) {
+                            debug("Only hash has changed...");
                             return;
+                        }
                         chash = bhash;
+                        const hasState = !!e.state;
+                        if (hasState && e.state.error) {
+                            showError({
+                                stack: e.state.error,
+                                toString: function () {
+                                    return this.stack;
+                                }
+                            });
+                            return;
+                        }
                         if (forwardPopState) {
+                            debug("forwardPopState", forwardPopState);
                             const forward = forwardPopState;
                             setTimeout(() => {
                                 this.defaultRequestPage(forward[0], forward[1]);
@@ -864,7 +887,7 @@ Object.defineProperties(window, {
                             return;
                         }
                         try {
-                            if (!e.state)
+                            if (!hasState)
                                 throw new Error("No state, reloading...");
                             if (e.state.user != this.currentUserID)
                                 throw new Error("User has changed since state was created, reloading...");
@@ -872,9 +895,13 @@ Object.defineProperties(window, {
                             if (!page)
                                 throw new Error("Page was never loaded or page data is corrupt, reloading...");
                             document.title = e.state.title;
+                            debug(e.state.title, page);
                             this.pagesyshandler(convertResponse(page));
-                            this.restoreComponents(document.body, e.state.body);
-                            window.scrollTo.apply(window, e.state.scroll);
+                            if (e.state.body)
+                                this.restoreComponents(document.body, e.state.body);
+                            if (e.state.scroll)
+                                window.scrollTo.apply(window, e.state.scroll);
+                            loader.resetError();
                         }
                         catch (err) {
                             console.warn(err);
@@ -933,7 +960,7 @@ Object.defineProperties(window, {
                         }));
                         const io = this.io;
                         io.on("connect", function () {
-                            io.emit("init", window.NexusFrameworkLoader.requestedResources());
+                            io.emit("init", loader.requestedResources());
                         });
                     }
                 };

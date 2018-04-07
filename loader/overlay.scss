@@ -1,98 +1,112 @@
 @mixin transition($transition...) {
-    -moz-transition:    $transition;
-    -o-transition:      $transition;
-    -webkit-transition: $transition;
-    transition:         $transition;
+  -moz-transition:    $transition;
+  -o-transition:      $transition;
+  -webkit-transition: $transition;
+  transition:         $transition;
 }
 
 .loader-container {
-    top: 0px;
-    left: 0px;
-    width: 100%;
-    height: 100%;
-    z-index: 99999999;
-    position: absolute;
-    background: #fafafa;
-    pointer-events: none;
-    @include transition(opacity .2s);
-    position: fixed;
-    opacity: 0;
-    
-    &, * {
-        box-sizing: border-box;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  z-index: 99999999;
+  position: absolute;
+  background: #fafafa;
+  pointer-events: none;
+  @include transition(opacity .2s);
+  position: fixed;
+  opacity: 0;
+
+  &, * {
+    box-sizing: border-box;
+  }
+
+  &.loader-progress-container {
+    &.loader-progress-visible {
+      pointer-events: auto;
+      opacity: 1;
     }
-    
-    &.loader-progress-container {
-        &.loader-progress-visible {
-            pointer-events: auto;
-            opacity: 1;
-        }
+  }
+  &.loader-error-container {
+    &.loader-error-visible {
+      pointer-events: auto;
+      opacity: 1;
     }
-    &.loader-error-container {
-        &.loader-error-visible {
-            pointer-events: auto;
-            opacity: 1;
-        }
-        .loader-error-message {
-            display: block;
-            position: absolute;
-            transform: translateX(-50%);
-            font-family: 'Courier New', Courier, Console, System, monospace;
-            background: #cc4444;
-            border-radius: 1em;
-            max-width: 80%;
-            padding: 1em;
-            margin: 4em;
-            left: 50%;
-        }
-        background: #550000;
+    .loader-error-message-container {
+      display: block;
+      position: absolute;
+      transform: translateX(-50%);
+      background: #cc4444;
+      border-radius: 1em;
+      max-width: 80%;
+      padding: 0.5em;
+      margin: 0;
+      left: 50%;
+      top: 20%;
+
+      .loader-error-message {
+        font-family: 'Courier New', Courier, Console, System, monospace;
+        background: rgba(0, 0, 0, 0.2);
+        margin-bottom: 1em;
+        border-radius: 1em;
+        overflow: auto;
+        padding: 1em;
+      }
+
+      .loader-error-reload {
+        text-decoration: underline;
         color: white;
+      }
     }
-    .loader-progress-heading,
-    .loader-progress-bar-container {
-        left: 50%;
-        transform: translateX(-50%);
-        position: absolute;
+    background: #550000;
+    color: white;
+  }
+  .loader-progress-heading,
+  .loader-progress-bar-container {
+    left: 50%;
+    transform: translateX(-50%);
+    position: absolute;
+  }
+  .loader-progress-heading {
+    top: 15%;
+    font-size: 4em;
+    min-width: 152px;
+    line-height: 1.2;
+    font-weight: 600;
+    text-align: center;
+    text-shadow: #999 0px 0px 5px;
+    color: #555;
+
+    h1 {
+      font-weight: 700;
     }
-    .loader-progress-heading {
-        top: 15%;
-        font-size: 4em;
-        min-width: 152px;
-        line-height: 1.2;
-        font-weight: 600;
-        text-align: center;
-        text-shadow: #999 0px 0px 5px;
-        color: #555;
-        
-        h1 {
-            font-weight: 700;
-        }
-        small {
-            font-weight: 400;
-        }
-        
-        &, * {
-            font-family: Helvetica, Arial, sans-serif;
-        }
-        
-        img {
-            width: 152px;
-            height: 152px;
-        }
+    small {
+      font-weight: 400;
     }
-    .loader-progress-bar-container {
-        width: 80%;
-        border: solid 0.8pt #999;
-        height: 10px;
-        bottom: 5%;
+
+    &, * {
+      font-family: Helvetica, Arial, sans-serif;
     }
-    .loader-progress-bar {
-        width: 0px;
-        height: 100%;
-        background: #999;
-        @include transition(width .2s);
-        &.noani {
-            @include transition(none);
-        }
+
+    img {
+      width: 152px;
+      height: 152px;
     }
+  }
+  .loader-progress-bar-container {
+    width: 80%;
+    border: solid 0.8pt #999;
+    height: 10px;
+    bottom: 5%;
+  }
+  .loader-progress-bar {
+    width: 0px;
+    height: 100%;
+    background: #999;
+    @include transition(width .2s);
+    &.noani {
+      @include transition(none);
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import { NexusFramework } from "./src/nexusframework";
+import { CacheGenerator } from "lru-weak-cache/types";
 import { nexusfork } from "nexusfork/types";
 
 import { Template } from "nhp/lib/Template";
@@ -128,6 +129,7 @@ declare interface ImageResizerOptions {
     square?: boolean;
     notransparency?: boolean;
     sizes?: number[] | number[][];
+    cache?: number | {minAge?:number,maxAge?:number,capacity?:number,resetTimersOnAccess?:boolean} | false | undefined;
     diskcache?: string;
 }
 declare interface MountOptions extends RenderOptions {
@@ -212,7 +214,7 @@ declare interface Request extends nexusfork.WebRequest {
     /**
      * Process the request body.
      * By default all processors are usable, and the processor chosen is determined by the request content-type header.
-     * 
+     *
      * @param cb The callback
      * @param processors The processors, all by default
      */
@@ -262,7 +264,7 @@ declare interface Response extends nexusfork.WebResponse {
     /**
      * Render a page using a template engine and serve it.
      * This method will use the skeleton if available, `render` will not.
-     * 
+     *
      * @param filename The absolute path to a file to render, or template source
      * @param options The variables to use for rendering
      */
@@ -296,7 +298,7 @@ declare interface Response extends nexusfork.WebResponse {
     addInlineStyle(source: string, ...deps: string[]): void;
     /**
      * Add a font from Google's library, with the specified weight.
-     * 
+     *
      * @param family The font family
      * @param weight The font weight, default 400
      * @param italic Italic, default false
@@ -309,7 +311,7 @@ declare interface Response extends nexusfork.WebResponse {
     /**
      * Push the script and style queue.
      * Stores it for popping later.
-     * 
+     *
      * @param andClear And clear the queue
      */
     pushResourceQueues(andClear?: boolean): void;
@@ -349,7 +351,7 @@ declare interface Response extends nexusfork.WebResponse {
     addSocketIOClient(): void;
     /**
      * Add the NexusFramework Client to the script queue.
-     * 
+     *
      * @param includeSocketIO Whether or not to include and rely on Socket.IO, true by default
      * @param autoEnablePageSystem Whether or not to enable the page system automatically, false by default
      */
@@ -431,14 +433,14 @@ interface RequestHandlerEntry {
     childPaths(cb: (paths: (RecursivePath | string)[]) => void, deep: true): void;
     /**
      * Fetches the child at path.
-     * 
+     *
      * @param path The path to search.
      * @param createIfNotExists Whether or not to create the path if it doesn't exist.
      */
     childAt(path: string, createIfNotExists?: boolean): RequestHandlerChildEntry;
     /**
      * Fetches the child at path.
-     * 
+     *
      * @param path The path.
      * @param handler The handler to set.
      * @param createIfNotExists Whether or not to create the path if it doesn't exist, true by default.
@@ -447,13 +449,13 @@ interface RequestHandlerEntry {
 
     /**
      * Fetches the view filename.
-     * 
+     *
      * @param type The type of view to fetch, by default its "nhp".
      */
     view(type?: string): string;
     /**
      * Set the view filename for type.
-     * 
+     *
      * @param filename The view filename
      * @param type The type of view to set, by default its "nhp".
      */

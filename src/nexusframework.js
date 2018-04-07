@@ -2,11 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const cookieParser = require("cookie-parser");
 const querystring = require("querystring");
+const lrucache = require("lru-weak-cache");
 const Template_1 = require("nhp/lib/Template");
 const nulllogger = require("nulllogger");
 const socket_io = require("socket.io");
 const useragent = require("useragent");
-const lrucache = require("lru-cache");
 const statuses = require("statuses");
 const chokidar = require("chokidar");
 const express = require("express");
@@ -15,11 +15,11 @@ const events = require("events");
 const stream = require("stream");
 const multer = require("multer");
 const moment = require("moment");
-const upath = require("upath");
+const crypto = require("crypto");
 const async = require("async");
 const sharp = require("sharp");
 const http = require("http");
-const path = require("path");
+const _path = require("path");
 const _ = require("lodash");
 const url = require("url");
 const nhp = require("nhp");
@@ -28,7 +28,7 @@ const os = require("os");
 const noop = function () { };
 const mainpkgversion = (function () {
     try {
-        return require(path.resolve(path.dirname(require.main.filename), "package.json")).version;
+        return require(_path.resolve(_path.dirname(require.main.filename), "package.json")).version;
     }
     catch (e) {
         return "Unknown";
@@ -42,30 +42,35 @@ var socket_io_slim_integrity;
 const sckclpkgjson = require("socket.io-client/package.json");
 if (has_slim_io_js) {
     socket_io_slim_path = ":scripts/socket.io.slim.js?v=" + sckclpkgjson.version;
-    /*try {
-        const hash = crypto.createHash("sha384");
+    try {
+        const hash = crypto.createHash("sha512");
         hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
-        socket_io_slim_integrity = "sha384-" + hash.digest("base64");
-    } catch(e) {
+        socket_io_slim_integrity = "sha512-" + hash.digest("base64");
+    }
+    catch (e) {
         console.warn(e);
-    }*/
+    }
 }
 else
     socket_io_slim_path = ":io/socket.io.js";
 var nexusframeworkclient_es5_integrity;
 var nexusframeworkclient_es6_integrity;
-/*try {
-    let hash = crypto.createHash("sha384");
-    hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es5/nexusframework.min.js"), "utf8"));
-    nexusframeworkclient_es5_integrity = "sha384-" + hash.digest("base64");
-    hash = crypto.createHash("sha384");
-    hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es6/nexusframework.min.js"), "utf8"));
-    nexusframeworkclient_es6_integrity = "sha384-" + hash.digest("base64");
-} catch(e) {
+try {
+    let hash = crypto.createHash("sha512");
+    hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/nexusframeworkclient.min.js"), "utf8"));
+    nexusframeworkclient_es5_integrity = "sha512-" + hash.digest("base64");
+    hash = crypto.createHash("sha512");
+    hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/nexusframeworkclient.min.js"), "utf8"));
+    nexusframeworkclient_es6_integrity = "sha512-" + hash.digest("base64");
+}
+catch (e) {
     console.warn(e);
-}*/
-const uacache = lrucache();
-const namecache = lrucache();
+}
+const cacheAge = parseInt(process.env.NEXUSFRAMEWORK_CACHE_MIN_AGE) || 600000;
+const cacheCapacity = parseInt(process.env.NEXUSFRAMEWORK_CACHE_CAPACITY) || 800;
+const cacheOpts = { capacity: cacheCapacity, minAge: cacheAge, resetTimersOnAccess: true };
+const uacache = new lrucache(cacheOpts);
+const namecache = new lrucache(cacheOpts);
 const padLeft = function (data, count = 8, using = "0") {
     while (data.length < count)
         data = using + data;
@@ -82,7 +87,7 @@ const stringHash = function (data) {
 const determineName = function (rawname) {
     const cached = namecache.get(rawname);
     if (cached)
-        return cached;
+        return cached[0];
     var name = rawname;
     var index = name.lastIndexOf("/");
     if (index > -1)
@@ -101,7 +106,7 @@ const determineName = function (rawname) {
     match = name.match(/^(.+)\-\d+([\.\-]\d)*$/);
     if (match)
         name = match[1];
-    namecache.set(rawname, name);
+    namecache.set(rawname, [name]);
     return name;
 };
 const isUnsupportedBrowser = function (browser) {
@@ -120,11 +125,11 @@ const isES6Browser = function (browser) {
         (browser.opera && major >= 43);
 };
 const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
-const pkgjson = require(path.resolve(__dirname, "../package.json"));
-const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
-const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
-const loaderScriptEs5 = fs.readFileSync(path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
-const loaderScriptEs6 = fs.readFileSync(path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
+const pkgjson = require(_path.resolve(__dirname, "../package.json"));
+const overlayCss = fs.readFileSync(_path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
+const overlayHtml = fs.readFileSync(_path.resolve(__dirname, "../loader/overlay.html"), "utf8");
+const loaderScriptEs5 = fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
+const loaderScriptEs6 = fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
 const overlayHtmlParts = [];
 (function (html) {
     var next;
@@ -179,7 +184,7 @@ class SocketIORequest extends events.EventEmitter {
         this.readableHighWaterMark = 0;
         this.pagesys = true;
         this.method = method;
-        this.originalUrl = this.url = upath.join("/", path);
+        this.originalUrl = this.url = _path.posix.join("/", path);
         this.connection = upgradedRequest.connection;
         this.httpVersionMinor = upgradedRequest.httpVersionMinor;
         this.httpVersionMajor = upgradedRequest.httpVersionMajor;
@@ -373,7 +378,7 @@ function stripPath(path) {
     return path.replace(/^\/|\/$/g, "");
 }
 function cleanPath(path) {
-    return upath.join("/", path).replace(/^\/|\/$/g, "");
+    return _path.posix.join("/", path).replace(/^\/|\/$/g, "");
 }
 function currentPath(req) {
     const path = stripPath(url.parse(req.url).pathname);
@@ -925,6 +930,7 @@ function processMapping(mapping, mapped) {
         };
     return mapped;
 }
+const imageBufferThreshold = 200 * 200;
 const squareImagePathWebpOrPng = /^\/(\d+)\.(webp|png)$/;
 const squareImagePathWebpOrJpeg = /^\/(\d+)\.(webp|jpg)$/;
 const squareImagePathJpeg = /^\/(\d+)\.(jpg)$/;
@@ -944,11 +950,87 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
         } : (req, res, next) => {
             this.handle0(req.webp ? imagePathWebpOrPng : imagePathPng, req, res, next);
         }), false);
-        this.cache = lrucache();
         this.queue = {};
+        var _cacheOpts = options.cache;
+        if (_cacheOpts === undefined)
+            _cacheOpts = cacheOpts;
+        if (_cacheOpts === false)
+            this.cache = {
+                generate: function (key, generator, cb) {
+                    generator(key, cb);
+                }
+            };
+        else
+            this.cache = new lrucache(_cacheOpts);
+        const source = this.image = sharp(imagefile);
         this.square = options.square;
-        this.image = sharp(imagefile);
         this.sizes = options.sizes;
+        this.cacheGenerator = function (key, cb) {
+            const opts = JSON.parse(key);
+            if (opts[0] * opts[1] > imageBufferThreshold)
+                cb(undefined, function (res) {
+                    var contentType;
+                    var image = source.clone().resize(opts[0], opts[1]);
+                    switch (opts[2]) {
+                        case "png":
+                            image = image.png({ compressionLevel: 9 });
+                            contentType = "image/png";
+                            break;
+                        case "jpg":
+                            image = image.jpeg({ quality: 85 });
+                            contentType = "image/jpeg";
+                            break;
+                        case "webp":
+                            image = image.webp();
+                            contentType = "image/webp";
+                            break;
+                        default:
+                            cb(new Error("Unknown format: " + opts[2]));
+                            return;
+                    }
+                    res.writeHead(200, {
+                        "Content-Type": contentType,
+                        "Cache-Control": "public, max-age=30672000",
+                        "Expires": new Date(+new Date + 30672000000).toUTCString()
+                    });
+                    image.clone().pipe(res);
+                });
+            else {
+                var contentType;
+                var image = source.clone().resize(opts[0], opts[1]);
+                switch (opts[2]) {
+                    case "png":
+                        image = image.png({ compressionLevel: 9 });
+                        contentType = "image/png";
+                        break;
+                    case "jpg":
+                        image = image.jpeg({ quality: 85 });
+                        contentType = "image/jpeg";
+                        break;
+                    case "webp":
+                        image = image.webp();
+                        contentType = "image/webp";
+                        break;
+                    default:
+                        cb(new Error("Unknown format: " + opts[2]));
+                        return;
+                }
+                image.toBuffer((err, data) => {
+                    if (err)
+                        cb(err);
+                    else
+                        cb(undefined, function (res) {
+                            res.writeHead(200, {
+                                "Content-Type": contentType,
+                                "Content-Length": data.length,
+                                "Cache-Control": "public, max-age=30672000",
+                                "Expires": new Date(+new Date + 30672000000).toUTCString()
+                            });
+                            res.end(data);
+                        });
+                });
+            }
+        };
     }
     canHandleSize(width, height = width) {
         if (this.sizes && this.sizes.length) {
@@ -999,50 +1081,8 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
             res.end("Cannot be served through page system.");
             return;
         }
-        const key = width + ":" + height + ":" + format;
-        const writer = this.cache.get(key);
-        if (writer) {
+        this.cache.generate(JSON.stringify([width, height, format]), this.cacheGenerator, function (err, writer) {
             writer(res);
-            return;
-        }
-        const queue = this.queue[key] || (this.queue[key] = []);
-        queue.push(res);
-        var contentType;
-        var image = this.image.clone().resize(width, height);
-        switch (format) {
-            case "png":
-                image = image.png({ compressionLevel: 9 });
-                contentType = "image/png";
-                break;
-            case "jpg":
-                image = image.jpeg({ quality: 85 });
-                contentType = "image/jpeg";
-                break;
-            case "webp":
-                image = image.webp();
-                contentType = "image/webp";
-                break;
-            default:
-                throw new Error("Unknown format: " + format);
-        }
-        image.toBuffer((err, data) => {
-            delete this.queue[key];
-            if (err)
-                queue.forEach(function (res) {
-                    res.sendFailure(err);
-                });
-            else {
-                const writer = function (res) {
-                    res.writeHead(200, {
-                        "Content-Type": contentType,
-                        "Cache-Control": "public, max-age=30672000",
-                        "Expires": new Date(+new Date + 30672000000).toUTCString()
-                    });
-                    res.end(data);
-                };
-                queue.forEach(writer);
-                this.cache.set(key, writer);
-            }
         });
     }
 }
@@ -1082,7 +1122,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
             else {
                 var mapping = {};
                 files.forEach((file) => {
-                    const filename = path.resolve(this.fspath, file);
+                    const filename = _path.resolve(this.fspath, file);
                     const match = file.match(/^([^.]+)(\.([^.]+))?\.([^.]+)$/);
                     if (match) {
                         const route = decodePath(match[1].toLowerCase());
@@ -1117,7 +1157,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             try {
                                 const methods = extensions['js'];
                                 if (!methods)
-                                    throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                    throw new Error("No JavaScript files found for `" + _path.resolve(this.fspath, key + ".*") + "`");
                                 const mapping = processMapping(methods);
                                 const handler = function (req, res, next, skip) {
                                     const handler = resolveHandler(mapping, req);
@@ -1143,7 +1183,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             try {
                                 const methods = extensions['js'];
                                 if (!methods)
-                                    throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                    throw new Error("No JavaScript files found for `" + _path.resolve(this.fspath, key + ".*") + "`");
                                 const mapping = processMapping(methods);
                                 const handler = function (req, res, exists, doesntExist) {
                                     const handler = resolveHandler(mapping, req);
@@ -1168,7 +1208,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             try {
                                 const methods = extensions['js'];
                                 if (!methods)
-                                    throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                    throw new Error("No JavaScript files found for `" + _path.resolve(this.fspath, key + ".*") + "`");
                                 const mapping = processMapping(methods);
                                 const handler = function (req, res, allowed, denied) {
                                     const handler = resolveHandler(mapping, req);
@@ -1235,7 +1275,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     });
                             }
                             if (!Object.keys(methods))
-                                throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                throw new Error("No JavaScript files found for `" + _path.posix.join(this.fspath, key + ".*") + "`");
                             processMapping(methods, handler);
                             var leaf;
                             if (key === "index")
@@ -1439,7 +1479,7 @@ class NexusFramework extends events.EventEmitter {
                 value: logger
             },
             prefix: {
-                value: upath.join("/", prefix, "/")
+                value: _path.posix.join("/", prefix, "/")
             },
             cookieParser: {
                 configurable: true,
@@ -1447,8 +1487,8 @@ class NexusFramework extends events.EventEmitter {
             },
             renderoptions: {
                 value: {
-                    legacyskeleton: _nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp")),
-                    autoindexskeleton: _nhp.template(path.resolve(__dirname, "../indexOfSkeleton.nhp")),
+                    legacyskeleton: _nhp.template(_path.resolve(__dirname, "../legacySkeleton.nhp")),
+                    autoindexskeleton: _nhp.template(_path.resolve(__dirname, "../indexOfSkeleton.nhp")),
                     errordoc: {}
                 }
             }
@@ -1478,18 +1518,18 @@ class NexusFramework extends events.EventEmitter {
         });
         app.set("view engine", "nhp");
         app.engine("nhp", this.nhp.render.bind(this.nhp));
-        const destination = path.resolve(os.tmpdir(), "nexusframework-" + +(new Date));
+        const destination = _path.resolve(os.tmpdir(), "nexusframework-" + +(new Date));
         fs.mkdirSync(destination);
         const multerStorage = multer.diskStorage({
             destination,
             filename: function (req, file, cb) {
-                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + path.extname(file.originalname));
+                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + _path.extname(file.originalname));
             }
         });
         process.on("exit", function () {
             const destroyDir = function (dir) {
                 fs.readdirSync(dir).forEach(function (dest) {
-                    dest = path.resolve(dir, dest);
+                    dest = _path.resolve(dir, dest);
                     if (!fs.realpathSync(dest).startsWith(destination)) {
                         console.warn(dest, "is outside", destination);
                         return; // Outside somehow...
@@ -1597,21 +1637,21 @@ class NexusFramework extends events.EventEmitter {
                 page = "errdoc/" + code;
         }
         else
-            page = upath.join("/", page).substring(1);
+            page = _path.posix.join("/", page).substring(1);
         this.renderoptions.errordoc[code] = page;
     }
     mountScripts(mpath = ":scripts") {
-        this.mountStatic(mpath, path.resolve(__dirname, "../scripts/"), {
+        this.mountStatic(mpath, _path.resolve(__dirname, "../scripts/"), {
             autoIndex: true
         });
     }
     mountAbout(mpath = ":about") {
-        this.mount(mpath, path.resolve(__dirname, "../about/"));
+        this.mount(mpath, _path.resolve(__dirname, "../about/"));
     }
     setupIO(path = ":io") {
         if (!this.server)
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
-        const iopath = upath.join(this.prefix, path);
+        const iopath = _path.posix.join(this.prefix, path);
         const io = socket_io(this.server, {
             serveClient: !has_slim_io_js,
             path: iopath
@@ -1630,7 +1670,7 @@ class NexusFramework extends events.EventEmitter {
             });
             client.on("page", (method, path, post, headers, cb) => {
                 try {
-                    const req = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers);
+                    const req = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers);
                     Object.defineProperty(req, "io", {
                         value: client
                     });
@@ -1735,27 +1775,27 @@ class NexusFramework extends events.EventEmitter {
      * @param options The optional mount options
      */
     mount(webpath, fspath, options = {}) {
-        webpath = upath.join("/", stripPath(webpath));
+        webpath = _path.posix.join("/", stripPath(webpath));
         options.root = options.root || process.cwd();
-        fspath = path.resolve(options.root, fspath);
+        fspath = _path.resolve(options.root, fspath);
         if (options.iconfile) {
-            options.iconfile = path.resolve(options.root, options.iconfile);
-            const iconpath = upath.join(webpath, ":icon");
+            options.iconfile = _path.resolve(options.root, options.iconfile);
+            const iconpath = _path.posix.join(webpath, ":icon");
             this.mountImageResizer(iconpath, options.iconfile, {
                 sizes: iconSizes,
                 square: true
             });
-            options.icons = upath.join(this.prefix, iconpath, "/");
+            options.icons = _path.posix.join(this.prefix, iconpath, "/");
         }
-        fspath = path.resolve(options.root, fspath);
+        fspath = _path.resolve(options.root, fspath);
         if (_.isString(options.skeleton))
-            options.skeleton = this.nhp.template(path.resolve(options.root, options.skeleton));
+            options.skeleton = this.nhp.template(_path.resolve(options.root, options.skeleton));
         if (_.isString(options.pagesysskeleton))
-            options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton));
+            options.pagesysskeleton = require(_path.resolve(options.root, options.pagesysskeleton));
         if (_.isString(options.legacyskeleton))
-            options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
+            options.legacyskeleton = this.nhp.template(_path.resolve(options.root, options.legacyskeleton));
         if (_.isString(options.autoindexskeleton))
-            options.autoindexskeleton = this.nhp.template(path.resolve(options.root, options.autoindexskeleton));
+            options.autoindexskeleton = this.nhp.template(_path.resolve(options.root, options.autoindexskeleton));
         if (webpath == "/") {
             _.assign(this.renderoptions, options);
             const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingNHPRequestHandler(fspath, this.logger, options);
@@ -1777,7 +1817,7 @@ class NexusFramework extends events.EventEmitter {
         }
     }
     mountImageResizer(webpath, imagefile, options = {}) {
-        webpath = upath.join("/", stripPath(webpath));
+        webpath = _path.posix.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new SharpResizerRequestHandler(imagefile, options);
             this.setDefaultHandler(newHandler);
@@ -1813,15 +1853,16 @@ class NexusFramework extends events.EventEmitter {
         if (_.isString(template))
             template = this.nhp.template(template);
         const self = this;
-        fspath = path.resolve(process.cwd(), fspath);
+        fspath = _path.resolve(process.cwd(), fspath);
         const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
         const handler = function (req, res, next) {
-            const filename = path.resolve(fspath, decodeURIComponent(req.path.substring(1)));
+            const filename = _path.resolve(fspath, decodeURIComponent(req.path.substring(1)));
             if (startsWith.test(filename))
                 fs.stat(filename, function (err, stats) {
                     if (err && err.code != "ENOENT")
                         next(err);
                     else if (stats) {
+                        const __path = _path;
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
@@ -1863,9 +1904,9 @@ class NexusFramework extends events.EventEmitter {
                                             tmpl = renderoptions.autoindexskeleton;
                                         }
                                         if (!tmpl)
-                                            tmpl = self.nhp.template(path.resolve(__dirname, "../indexOfSkeleton.nhp"));
+                                            tmpl = self.nhp.template(__path.resolve(__dirname, "../indexOfSkeleton.nhp"));
                                         async.each(files, function (file, cb) {
-                                            const full = path.resolve(filename, file);
+                                            const full = __path.resolve(filename, file);
                                             fs.stat(full, function (err, stat) {
                                                 if (err || !stat)
                                                     _files.push([file, "application/octet-stream", 0, new Date(0)]);
@@ -1915,12 +1956,12 @@ class NexusFramework extends events.EventEmitter {
                                         res.write("</h1><ul>");
                                         if (path !== "/") {
                                             res.write("<li><a href=\"");
-                                            res.write(upath.join(path, "../"));
+                                            res.write(_path.posix.join(path, "../"));
                                             res.write("\">..</a></li>");
                                         }
                                         files.forEach(function (file) {
                                             res.write("<li><a href=\"");
-                                            res.write(upath.join(path, file));
+                                            res.write(_path.posix.join(path, file));
                                             res.write("\">");
                                             res.write(file);
                                             res.write("</a></li>");
@@ -1971,7 +2012,7 @@ class NexusFramework extends events.EventEmitter {
      * @param leaf Whether or not this handler is a leaf, or branch
      */
     mountHandler(webpath, handler, leaf = true) {
-        webpath = upath.join("/", stripPath(webpath));
+        webpath = _path.posix.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new LeafRequestHandler(handler, leaf);
             this.setDefaultHandler(newHandler);
@@ -2068,7 +2109,7 @@ class NexusFramework extends events.EventEmitter {
         }, next);
     }
     handle0(req, res, next) {
-        const path = upath.normalize(req.path);
+        const path = _path.posix.normalize(req.path);
         if (path === "/")
             this.default.handle(req, res, next);
         else
@@ -2448,9 +2489,9 @@ class NexusFramework extends events.EventEmitter {
             addResource(scripts, source, integrity, false, deps);
         };
         const addSocketIOClient = has_slim_io_js ? () => {
-            addScript(upath.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
+            addScript(_path.posix.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
         } : () => {
-            addScript(upath.join(this.prefix, ":io/socket.io.js"));
+            addScript(_path.posix.join(this.prefix, ":io/socket.io.js"));
         };
         try {
             Object.defineProperty(res, "pushResourceQueues", {
@@ -2533,7 +2574,7 @@ class NexusFramework extends events.EventEmitter {
                 configurable: true,
                 value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
                     const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
-                    const path = upath.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
+                    const path = _path.posix.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
                     if (includeSocketIO) {
                         addSocketIOClient();
                         addScript(path, integrity, "socket.io");
@@ -2773,6 +2814,7 @@ class NexusFramework extends events.EventEmitter {
         }
         catch (e) { }
         try {
+            const self = this;
             const writefooter = res.locals.__writefooter = (out) => {
                 if (!servedAfterBody)
                     afterbodyRenderers.forEach(function (renderer) {
@@ -2817,7 +2859,7 @@ class NexusFramework extends events.EventEmitter {
                     if (!pagesys) {
                         out.write("<script type=\"text/javascript\">");
                         out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
-                        out.write("</script>");
+                        out.write("//# sourceMappingURL=" + req.protocol + "://" + req.hostname + ":" + req.socket.localPort + _path.posix.join("/", self.prefix, ":scripts/" + (es6 ? "es6" : "es5") + "/loader.min.js.map") + "</script>");
                     }
                     out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
                     out.write(JSON.stringify(getLoaderData()));
@@ -3186,7 +3228,7 @@ class NexusFramework extends events.EventEmitter {
                     if ((handler = (errordoc["500"] || errordoc["*"])) && used["500"] != handler) {
                         req.logger.warn(_err);
                         used["500"] = handler;
-                        handler = upath.join("/", handler);
+                        handler = _path.posix.join("/", handler);
                         try {
                             Object.defineProperty(req, "errorCode", {
                                 configurable: true,

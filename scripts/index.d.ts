@@ -14,12 +14,12 @@ declare interface NexusFrameworkLoaderData {
     [1]: NexusFrameworkResource[];
 }
 declare interface NexusFrameworkLoader {
-    load(data: NexusFrameworkLoaderData, cb: (err?: Error) => void): void;
+    load(data: NexusFrameworkLoaderData, onsuccess?: () => void): void;
     /**
      * Loads a resource.
      * Downloads the file asynchroniously and reads any header for @ tags.
      * After that, queues it for download, and returns an info object for the script when complete.
-     * 
+     *
      * @param type The type, script or style
      * @param name The name of the resource
      * @param source The source of the resource
@@ -33,6 +33,14 @@ declare interface NexusFrameworkLoader {
      * Each resource is listed as `type:name`.
      */
     requestedResources(): string[];
+    /**
+     * Show the specified error to the user.
+     */
+    showError(err: Error): void;
+    /**
+     * Clear the error screen.
+     */
+    resetError(): void;
 }
 declare interface NexusFrameworkTransportResponse {
     /**
@@ -64,13 +72,13 @@ declare interface NexusFrameworkPageSystemResponse {
 declare interface NexusFrameworkPageSystemOptions {
     /**
      * Override the built in way of handling page responses.
-     * 
+     *
      * @returns True when handled correctly, false to reload the page to the request url.
      */
     handler?: (res: NexusFrameworkTransportResponse) => boolean;
     /**
      * Method to call before attempting to make a page request.
-     * 
+     *
      * @returns True to continue, False to abort.
      */
     prerequest?: (path: string) => boolean;
@@ -85,6 +93,11 @@ declare interface NexusFrameworkPageSystemOptions {
      */
     nopagesysio?: boolean;
     /**
+     * The timing in milliseconds the page transition animation will take.
+     * Defaults to 500.
+     */
+    animationTiming?: number;
+    /**
      * Disables using SocketIO, which would be used otherwise, when available
      */
     noio?: boolean;
@@ -92,7 +105,7 @@ declare interface NexusFrameworkPageSystemOptions {
 declare interface NexusFrameworkComponent {
     create(element: HTMLElement): void;
     destroy(): void;
-    
+
     restore(data: any): void;
     save(): any;
 }
@@ -117,7 +130,7 @@ declare interface NexusFrameworkClient {
      * The analytics adapter.
      */
     analytics: NexusFrameworkAnalyticsAdapter;
-    
+
     /**
      * Initialize the page system.
      */
@@ -126,7 +139,7 @@ declare interface NexusFrameworkClient {
      * Loads a page, relative to the root URL for the website.
      */
     requestPage(path: string, post?: any): void;
-    
+
     /**
      * Register a component by selector.
      */
@@ -151,20 +164,20 @@ declare interface NexusFrameworkClient {
      * Restore components in root from a state object
      */
     restoreComponents(root: HTMLElement, state: Object): void;
-    
+
     /**
      * Disable an element and its children.
-     * 
+     *
      * @param root The root element, by default document.body
      */
     disableAll(root?: HTMLElement): void;
     /**
      * Enable an element and its children.
-     * 
+     *
      * @param root The root element, by default document.body
      */
     enableAll(root?: HTMLElement): void;
-    
+
     /**
      * Add an event listener for when pages are loaded via the dynamic page system.
      */

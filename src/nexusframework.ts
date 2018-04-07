@@ -1,12 +1,13 @@
 import {UploadedFile,RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource as _Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
+import {CacheGenerator} from "lru-weak-cache/types";
 import cookieParser = require("cookie-parser");
 import querystring = require("querystring");
+import lrucache = require("lru-weak-cache");
 import {Template} from "nhp/lib/Template";
 import nulllogger = require("nulllogger");
 import {Application,Send} from "express";
 import socket_io = require("socket.io");
 import useragent = require("useragent");
-import lrucache = require("lru-cache");
 import statuses = require('statuses');
 import chokidar = require("chokidar");
 import express = require("express");
@@ -15,11 +16,11 @@ import events = require("events");
 import stream = require("stream");
 import multer = require("multer");
 import moment = require("moment");
-import upath = require("upath");
+import crypto = require("crypto");
 import async = require("async");
 import sharp = require("sharp");
 import http = require("http");
-import path = require("path");
+import _path = require("path");
 import _ = require("lodash");
 import url = require("url");
 import nhp = require("nhp");
@@ -30,7 +31,7 @@ const noop = function() {};
 
 const mainpkgversion: string = (function() {
     try {
-        return require(path.resolve(path.dirname(require.main.filename), "package.json")).version;
+        return require(_path.resolve(_path.dirname(require.main.filename), "package.json")).version;
     } catch(e) {
         return "Unknown";
     }
@@ -45,30 +46,33 @@ var socket_io_slim_integrity: string;
 const sckclpkgjson = require("socket.io-client/package.json");
 if (has_slim_io_js) {
     socket_io_slim_path = ":scripts/socket.io.slim.js?v=" + sckclpkgjson.version;
-    /*try {
-        const hash = crypto.createHash("sha384");
+    try {
+        const hash = crypto.createHash("sha512");
         hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
-        socket_io_slim_integrity = "sha384-" + hash.digest("base64");
+        socket_io_slim_integrity = "sha512-" + hash.digest("base64");
     } catch(e) {
         console.warn(e);
-    }*/
+    }
 } else
     socket_io_slim_path = ":io/socket.io.js";
 var nexusframeworkclient_es5_integrity: string;
 var nexusframeworkclient_es6_integrity: string;
-/*try {
-    let hash = crypto.createHash("sha384");
-    hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es5/nexusframework.min.js"), "utf8"));
-    nexusframeworkclient_es5_integrity = "sha384-" + hash.digest("base64");
-    hash = crypto.createHash("sha384");
-    hash.update(fs.readFileSync(path.resolve(__dirname, "../scripts/es6/nexusframework.min.js"), "utf8"));
-    nexusframeworkclient_es6_integrity = "sha384-" + hash.digest("base64");
+try {
+    let hash = crypto.createHash("sha512");
+    hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/nexusframeworkclient.min.js"), "utf8"));
+    nexusframeworkclient_es5_integrity = "sha512-" + hash.digest("base64");
+    hash = crypto.createHash("sha512");
+    hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/nexusframeworkclient.min.js"), "utf8"));
+    nexusframeworkclient_es6_integrity = "sha512-" + hash.digest("base64");
 } catch(e) {
     console.warn(e);
-}*/
+}
 
-const uacache = lrucache<string, UserAgentDetails>();
-const namecache = lrucache<string, string>();
+const cacheAge = parseInt(process.env.NEXUSFRAMEWORK_CACHE_MIN_AGE) || 600000;
+const cacheCapacity = parseInt(process.env.NEXUSFRAMEWORK_CACHE_CAPACITY) || 800;
+const cacheOpts = {capacity:cacheCapacity,minAge:cacheAge,resetTimersOnAccess:true};
+const uacache = new lrucache<UserAgentDetails>(cacheOpts);
+const namecache = new lrucache<string[]>(cacheOpts);
 
 const padLeft = function (data: string, count = 8, using = "0") {
     while (data.length < count)
@@ -85,7 +89,7 @@ const stringHash = function (data: string) {
 const determineName = function (rawname: string) {
     const cached = namecache.get(rawname);
     if (cached)
-        return cached;
+        return cached[0];
 
     var name = rawname;
     var index = name.lastIndexOf("/");
@@ -105,7 +109,7 @@ const determineName = function (rawname: string) {
     match = name.match(/^(.+)\-\d+([\.\-]\d)*$/);
     if (match)
         name = match[1];
-    namecache.set(rawname, name);
+    namecache.set(rawname, [name]);
     return name;
 }
 
@@ -127,12 +131,12 @@ const isES6Browser = function (browser: UserAgentDetails) {
 
 const regexp_escape = /[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g;
 
-const pkgjson = require(path.resolve(__dirname, "../package.json"));
+const pkgjson = require(_path.resolve(__dirname, "../package.json"));
 
-const overlayCss = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
-const overlayHtml = fs.readFileSync(path.resolve(__dirname, "../loader/overlay.html"), "utf8");
-const loaderScriptEs5 = fs.readFileSync(path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
-const loaderScriptEs6 = fs.readFileSync(path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
+const overlayCss = fs.readFileSync(_path.resolve(__dirname, "../loader/overlay.css"), "utf8").replace(/\s*\/\*# sourceMappingURL=overlay.css.map \*\/\s*/, "");
+const overlayHtml = fs.readFileSync(_path.resolve(__dirname, "../loader/overlay.html"), "utf8");
+const loaderScriptEs5 = fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
+const loaderScriptEs6 = fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/loader.min.js"), "utf8").replace(/\s+\/\/# sourceMappingURL=.+\s*/, "");
 
 const overlayHtmlParts: Function[] = [];
 (function (html) {
@@ -207,7 +211,7 @@ class SocketIORequest extends events.EventEmitter implements express.Request {
     constructor(upgradedRequest: http.IncomingMessage, method: string, path: string, body: any, headers: {[index: string]: string[]}) {
         super();
         this.method = method;
-        this.originalUrl = this.url = upath.join("/", path);
+        this.originalUrl = this.url = _path.posix.join("/", path);
         this.connection = upgradedRequest.connection;
         this.httpVersionMinor = upgradedRequest.httpVersionMinor;
         this.httpVersionMajor = upgradedRequest.httpVersionMajor;
@@ -458,7 +462,7 @@ function stripPath(path: string) {
     return path.replace(/^\/|\/$/g, "");
 }
 function cleanPath(path: string) {
-    return upath.join("/", path).replace(/^\/|\/$/g, "");
+    return _path.posix.join("/", path).replace(/^\/|\/$/g, "");
 }
 function currentPath(req: http.IncomingMessage) {
     const path = stripPath(url.parse(req.url).pathname);
@@ -1021,6 +1025,7 @@ function processMapping(mapping: {[index: string]: FunctionOrStringOrEitherWithD
     return mapped;
 }
 
+const imageBufferThreshold = 200 * 200;
 const squareImagePathWebpOrPng = /^\/(\d+)\.(webp|png)$/;
 const squareImagePathWebpOrJpeg = /^\/(\d+)\.(webp|jpg)$/;
 const squareImagePathJpeg = /^\/(\d+)\.(jpg)$/;
@@ -1031,129 +1036,163 @@ const imagePathJpeg = /^\/(\d+)x(\d+)\.(jpg)$/;
 const imagePathPng = /^\/(\d+)x(\d+)\.(png)$/;
 type SharpImageWriter = (res: Response) => void;
 class SharpResizerRequestHandler extends LeafRequestHandler {
-    private square: boolean;
-    private image: sharp.SharpInstance;
-    private sizes: number[] | number[][];
-    private cache = lrucache<string, SharpImageWriter>();
-    private queue: {[index: string]: Response[]} = {};
-    constructor(imagefile: string, options: ImageResizerOptions) {
-        super(options.square ? (options.notransparency ? (req, res, next) => {
-            this.handle0square(req.webp ? squareImagePathWebpOrJpeg : squareImagePathJpeg, req, res, next);
-        } : (req, res, next) => {
-            this.handle0square(req.webp ? squareImagePathWebpOrPng : squareImagePathPng, req, res, next);
-        }) : (options.notransparency ? (req, res, next) => {
-            this.handle0(req.webp ? imagePathWebpOrJpeg : imagePathJpeg, req, res, next);
-        } : (req, res, next) => {
-            this.handle0(req.webp ? imagePathWebpOrPng : imagePathPng, req, res, next);
-        }), false);
-        this.square = options.square;
-        this.image = sharp(imagefile);
-        this.sizes = options.sizes;
-    }
-    canHandleSize(width: number, height = width) {
-        if (this.sizes && this.sizes.length) {
-            if (this.square)
-                return (this.sizes as number[]).indexOf(width) > -1;
-            const length = this.sizes.length;
-            for (var i = 0; i < length; i++) {
-                const size = this.sizes[i];
-                if (size[0] === width && size[1] === height)
-                    return true;
-            }
-            return false;
-        } else
-            return true;
-    }
-    private handle0square(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
-        var match = req.path.match(reg);
-        if (match) {
-            const size = parseInt(match[1]);
-            if (this.canHandleSize(size))
-                this.serve(size, size, match[2], res);
-            else
-                next();
-        } else
-            next();
-    }
-    private handle0(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
-        var match = req.path.match(reg);
-        if (match) {
-            const width = parseInt(match[1]);
-            const height = parseInt(match[2]);
-            if (this.canHandleSize(width, height))
-                this.serve(width, height, match[3], res);
-            else
-                next();
-        } else
-            next();
-    }
-    private serve(width: number, height: number, format: string, res: Response) {
-        if (res['req'] && res['req'].io) {
-            res.writeHead(200, {
-                "content-disposition": "attachment",
-                "content-type": "text/plain"
-            });
-            res.end("Cannot be served through page system.");
-            return;
+  private square: boolean;
+  private image: sharp.SharpInstance;
+  private sizes: number[] | number[][];
+  private queue: {[index: string]: Response[]} = {};
+  private cacheGenerator: CacheGenerator<SharpImageWriter>;
+  private cache: lrucache<SharpImageWriter>;
+  constructor(imagefile: string, options: ImageResizerOptions) {
+    super(options.square ? (options.notransparency ? (req, res, next) => {
+      this.handle0square(req.webp ? squareImagePathWebpOrJpeg : squareImagePathJpeg, req, res, next);
+    } : (req, res, next) => {
+      this.handle0square(req.webp ? squareImagePathWebpOrPng : squareImagePathPng, req, res, next);
+    }) : (options.notransparency ? (req, res, next) => {
+      this.handle0(req.webp ? imagePathWebpOrJpeg : imagePathJpeg, req, res, next);
+    } : (req, res, next) => {
+      this.handle0(req.webp ? imagePathWebpOrPng : imagePathPng, req, res, next);
+    }), false);
+    var _cacheOpts = options.cache;
+    if (_cacheOpts === undefined)
+      _cacheOpts = cacheOpts;
+    if(_cacheOpts === false)
+      this.cache = {
+        generate: function(key, generator, cb) {
+          generator(key, cb);
         }
-
-        const key = width + ":" + height + ":" + format;
-        const writer = this.cache.get(key);
-        if (writer) {
-            writer(res);
-            return;
-        }
-
-        const queue = this.queue[key] || (this.queue[key] = []);
-        queue.push(res);
-
-        var contentType: string;
-        var image = this.image.clone().resize(width, height);
-        switch (format) {
+      } as any;
+    else
+      this.cache = new lrucache<SharpImageWriter>(_cacheOpts);
+    const source = this.image = sharp(imagefile);
+    this.square = options.square;
+    this.sizes = options.sizes;
+    this.cacheGenerator = function(key, cb) {
+      const opts = JSON.parse(key);
+      if (opts[0] * opts[1] > imageBufferThreshold)
+        cb(undefined, function (res: Response) {
+          var contentType: string;
+          var image = source.clone().resize(opts[0], opts[1]);
+          switch (opts[2]) {
             case "png":
-                image = image.png({compressionLevel: 9});
-                contentType = "image/png";
-                break;
+              image = image.png({compressionLevel: 9});
+              contentType = "image/png";
+              break;
             case "jpg":
-                image = image.jpeg({quality: 85});
-                contentType = "image/jpeg";
-                break;
+              image = image.jpeg({quality: 85});
+              contentType = "image/jpeg";
+              break;
             case "webp":
-                image = image.webp();
-                contentType = "image/webp";
-                break;
+              image = image.webp();
+              contentType = "image/webp";
+              break;
             default:
-                throw new Error("Unknown format: " + format);
+              cb(new Error("Unknown format: " + opts[2]));
+              return;
+          }
+          res.writeHead(200, {
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=30672000",
+            "Expires": new Date(+new Date + 30672000000).toUTCString()
+          });
+          image.clone().pipe(res);
+        });
+      else {
+        var contentType: string;
+        var image = source.clone().resize(opts[0], opts[1]);
+        switch (opts[2]) {
+          case "png":
+            image = image.png({compressionLevel: 9});
+            contentType = "image/png";
+            break;
+          case "jpg":
+            image = image.jpeg({quality: 85});
+            contentType = "image/jpeg";
+            break;
+          case "webp":
+            image = image.webp();
+            contentType = "image/webp";
+            break;
+          default:
+            cb(new Error("Unknown format: " + opts[2]));
+            return;
         }
         image.toBuffer((err: Error, data?: Buffer) => {
-            delete this.queue[key];
-            if (err)
-                queue.forEach(function (res) {
-                    res.sendFailure(err);
-                });
-            else {
-                const writer = function (res: Response) {
-                    res.writeHead(200, {
-                        "Content-Type": contentType,
-                        "Cache-Control": "public, max-age=30672000",
-                        "Expires": new Date(+new Date + 30672000000).toUTCString()
-                    });
-                    res.end(data);
-                }
-                queue.forEach(writer);
-                this.cache.set(key, writer);
-            }
+          if (err)
+            cb(err);
+          else
+            cb(undefined, function (res: Response) {
+              res.writeHead(200, {
+                "Content-Type": contentType,
+                "Content-Length": data.length,
+                "Cache-Control": "public, max-age=30672000",
+                "Expires": new Date(+new Date + 30672000000).toUTCString()
+              });
+              res.end(data);
+            });
         });
+      }
     }
+  }
+  canHandleSize(width: number, height = width) {
+    if (this.sizes && this.sizes.length) {
+      if (this.square)
+        return (this.sizes as number[]).indexOf(width) > -1;
+      const length = this.sizes.length;
+      for (var i = 0; i < length; i++) {
+        const size = this.sizes[i];
+        if (size[0] === width && size[1] === height)
+          return true;
+      }
+      return false;
+    } else
+      return true;
+  }
+  private handle0square(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
+      var match = req.path.match(reg);
+      if (match) {
+        const size = parseInt(match[1]);
+        if (this.canHandleSize(size))
+          this.serve(size, size, match[2], res);
+        else
+          next();
+      } else
+        next();
+  }
+  private handle0(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
+    var match = req.path.match(reg);
+    if (match) {
+      const width = parseInt(match[1]);
+      const height = parseInt(match[2]);
+      if (this.canHandleSize(width, height))
+        this.serve(width, height, match[3], res);
+      else
+        next();
+    } else
+      next();
+  }
+  private serve(width: number, height: number, format: string, res: Response) {
+    if (res['req'] && res['req'].io) {
+      res.writeHead(200, {
+        "content-disposition": "attachment",
+        "content-type": "text/plain"
+      });
+      res.end("Cannot be served through page system.");
+      return;
+    }
+
+    this.cache.generate(JSON.stringify([width, height, format]), this.cacheGenerator, function(err: Error, writer) {
+      writer(res);
+    });
+  }
 }
 class SharpResizerRequestChildHandler extends SharpResizerRequestHandler {
-    pattern: RegExp;
-    rawPattern: string;
-    constructor(imagefile: string, options: ImageResizerOptions, pattern: string) {
-        super(imagefile, options);
-        this.rawPattern = pattern;
-        this.pattern = new RegExp("^" + pattern + "$", "i");
-    }
+  pattern: RegExp;
+  rawPattern: string;
+  constructor(imagefile: string, options: ImageResizerOptions, pattern: string) {
+    super(imagefile, options);
+    this.rawPattern = pattern;
+    this.pattern = new RegExp("^" + pattern + "$", "i");
+  }
 }
 
 class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
@@ -1187,11 +1226,11 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
             else {
                 var mapping: {[index: string]: {[index: string]: {[index: string]: FunctionOrStringOrEitherWithData}}} = {};
                 files.forEach((file) => {
-                    const filename = path.resolve(this.fspath, file);
+                    const filename = _path.resolve(this.fspath, file);
                     const match = file.match(/^([^.]+)(\.([^.]+))?\.([^.]+)$/);
                     if (match) {
                         const route = decodePath(match[1].toLowerCase());
-                        
+
                         var fmapping = mapping[route];
                         if (!fmapping)
                             mapping[route] = fmapping = {};
@@ -1221,7 +1260,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             try {
                                 const methods = extensions['js'];
                                 if (!methods)
-                                    throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                    throw new Error("No JavaScript files found for `" + _path.resolve(this.fspath, key + ".*") + "`");
                                 const mapping = processMapping(methods);
                                 const handler = function (req, res, next, skip) {
                                     const handler = resolveHandler(mapping, req);
@@ -1245,7 +1284,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             try {
                                 const methods = extensions['js'];
                                 if (!methods)
-                                    throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                    throw new Error("No JavaScript files found for `" + _path.resolve(this.fspath, key + ".*") + "`");
                                 const mapping = processMapping(methods);
                                 const handler = function (req, res, exists, doesntExist) {
                                     const handler = resolveHandler(mapping, req);
@@ -1269,7 +1308,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                             try {
                                 const methods = extensions['js'];
                                 if (!methods)
-                                    throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                    throw new Error("No JavaScript files found for `" + _path.resolve(this.fspath, key + ".*") + "`");
                                 const mapping = processMapping(methods);
                                 const handler = function (req, res, allowed, denied) {
                                     const handler = resolveHandler(mapping, req);
@@ -1334,7 +1373,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                     });
                             }
                             if (!Object.keys(methods))
-                                throw new Error("No JavaScript files found for `" + path.resolve(this.fspath, key + ".*") + "`");
+                                throw new Error("No JavaScript files found for `" + _path.posix.join(this.fspath, key + ".*") + "`");
                             processMapping(methods, handler);
                             var leaf: NHPRequestHandler;
                             if (key === "index")
@@ -1566,7 +1605,7 @@ export class NexusFramework extends events.EventEmitter {
                 value: logger
             },
             prefix: {
-                value: upath.join("/", prefix, "/")
+                value: _path.posix.join("/", prefix, "/")
             },
             cookieParser: {
                 configurable: true,
@@ -1574,8 +1613,8 @@ export class NexusFramework extends events.EventEmitter {
             },
             renderoptions: {
                 value: {
-                    legacyskeleton: _nhp.template(path.resolve(__dirname, "../legacySkeleton.nhp")),
-                    autoindexskeleton: _nhp.template(path.resolve(__dirname, "../indexOfSkeleton.nhp")),
+                    legacyskeleton: _nhp.template(_path.resolve(__dirname, "../legacySkeleton.nhp")),
+                    autoindexskeleton: _nhp.template(_path.resolve(__dirname, "../indexOfSkeleton.nhp")),
                     errordoc: {}
                 }
             }
@@ -1605,18 +1644,18 @@ export class NexusFramework extends events.EventEmitter {
         });
         app.set("view engine", "nhp");
         app.engine("nhp", this.nhp.render.bind(this.nhp));
-        const destination = path.resolve(os.tmpdir(), "nexusframework-" + +(new Date));
+        const destination = _path.resolve(os.tmpdir(), "nexusframework-" + +(new Date));
         fs.mkdirSync(destination);
         const multerStorage = multer.diskStorage({
             destination,
             filename: function (req, file, cb) {
-                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + path.extname(file.originalname));
+                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + _path.extname(file.originalname));
             }
         });
         process.on("exit", function() {
             const destroyDir = function(dir: string) {
                 fs.readdirSync(dir).forEach(function(dest) {
-                    dest = path.resolve(dir, dest);
+                    dest = _path.resolve(dir, dest);
                     if (!fs.realpathSync(dest).startsWith(destination)) {
                         console.warn(dest, "is outside", destination);
                         return; // Outside somehow...
@@ -1684,7 +1723,7 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * Set the skeleton to use for legacy browsers.
      * By default NexusFramework displays a Not Supported message.
-     * 
+     *
      * This includes IE below version 10,
      * Chrome below version 4,
      * Firefox below version 3,
@@ -1722,21 +1761,21 @@ export class NexusFramework extends events.EventEmitter {
             else
                 page = "errdoc/" + code;
         } else
-            page = upath.join("/", page).substring(1);
+            page = _path.posix.join("/", page).substring(1);
         this.renderoptions.errordoc[code] = page;
     }
     mountScripts(mpath = ":scripts") {
-        this.mountStatic(mpath, path.resolve(__dirname, "../scripts/"), {
+        this.mountStatic(mpath, _path.resolve(__dirname, "../scripts/"), {
             autoIndex: true
         });
     }
     mountAbout(mpath = ":about") {
-        this.mount(mpath, path.resolve(__dirname, "../about/"));
+        this.mount(mpath, _path.resolve(__dirname, "../about/"));
     }
     setupIO(path = ":io") {
         if (!this.server)
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
-        const iopath = upath.join(this.prefix, path);
+        const iopath = _path.posix.join(this.prefix, path);
         const io = socket_io(this.server, {
             serveClient: !has_slim_io_js,
             path: iopath
@@ -1755,7 +1794,7 @@ export class NexusFramework extends events.EventEmitter {
             });
             client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
                 try {
-                    const req: Request = new SocketIORequest(client.conn.request, method, upath.join(this.prefix, path), post, headers) as any;
+                    const req: Request = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers) as any;
                     Object.defineProperty(req, "io", {
                         value: client
                     });
@@ -1848,33 +1887,33 @@ export class NexusFramework extends events.EventEmitter {
 
     /**
      * Mount a NHP page system.
-     * 
+     *
      * @param wwwpath The web path
      * @param fspath The filesystem path
      * @param options The optional mount options
      */
     mount(webpath: string, fspath: string, options: MountOptions = {}): RequestHandlerEntry {
-        webpath = upath.join("/", stripPath(webpath));
+        webpath = _path.posix.join("/", stripPath(webpath));
         options.root = options.root || process.cwd();
-        fspath = path.resolve(options.root, fspath);
+        fspath = _path.resolve(options.root, fspath);
         if (options.iconfile) {
-            options.iconfile = path.resolve(options.root, options.iconfile);
-            const iconpath = upath.join(webpath, ":icon");
+            options.iconfile = _path.resolve(options.root, options.iconfile);
+            const iconpath = _path.posix.join(webpath, ":icon");
             this.mountImageResizer(iconpath, options.iconfile, {
                 sizes: iconSizes,
                 square: true
             });
-            (options as any).icons = upath.join(this.prefix, iconpath, "/");
+            (options as any).icons = _path.posix.join(this.prefix, iconpath, "/");
         }
-        fspath = path.resolve(options.root, fspath);
+        fspath = _path.resolve(options.root, fspath);
         if (_.isString(options.skeleton))
-            options.skeleton = this.nhp.template(path.resolve(options.root, options.skeleton));
+            options.skeleton = this.nhp.template(_path.resolve(options.root, options.skeleton));
         if (_.isString(options.pagesysskeleton))
-            options.pagesysskeleton = require(path.resolve(options.root, options.pagesysskeleton)) as PageSystemSkeleton;
+            options.pagesysskeleton = require(_path.resolve(options.root, options.pagesysskeleton)) as PageSystemSkeleton;
         if (_.isString(options.legacyskeleton))
-            options.legacyskeleton = this.nhp.template(path.resolve(options.root, options.legacyskeleton));
+            options.legacyskeleton = this.nhp.template(_path.resolve(options.root, options.legacyskeleton));
         if (_.isString(options.autoindexskeleton))
-            options.autoindexskeleton = this.nhp.template(path.resolve(options.root, options.autoindexskeleton));
+            options.autoindexskeleton = this.nhp.template(_path.resolve(options.root, options.autoindexskeleton));
         if (webpath == "/") {
             _.assign(this.renderoptions, options);
             const newHandler = options.mutable ? new FSWatcherRequestHandler(fspath, this.logger, options) : new LazyLoadingNHPRequestHandler(fspath, this.logger, options);
@@ -1896,7 +1935,7 @@ export class NexusFramework extends events.EventEmitter {
     }
 
     mountImageResizer(webpath: string, imagefile: string, options: ImageResizerOptions = {}): RequestHandlerEntry {
-        webpath = upath.join("/", stripPath(webpath));
+        webpath = _path.posix.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new SharpResizerRequestHandler(imagefile, options);
             this.setDefaultHandler(newHandler);
@@ -1918,7 +1957,7 @@ export class NexusFramework extends events.EventEmitter {
 
     /**
      * Mount a directory.
-     * 
+     *
      * @param webpath The web path
      * @param fspath The filesystem path
      * @param options The mount options
@@ -1928,21 +1967,22 @@ export class NexusFramework extends events.EventEmitter {
             maxAge: 3.154e+10,
             immutable: true
         };
-        
+
         var template = options.autoIndexSkeleton;
         if(_.isString(template))
             template = this.nhp.template(template);
 
         const self = this;
-        fspath = path.resolve(process.cwd(), fspath);
+        fspath = _path.resolve(process.cwd(), fspath);
         const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
         const handler = function (req: Request, res: Response, next: (err?: Error) => void) {
-            const filename = path.resolve(fspath, decodeURIComponent(req.path.substring(1)));
+            const filename = _path.resolve(fspath, decodeURIComponent(req.path.substring(1)));
             if (startsWith.test(filename))
                 fs.stat(filename, function (err, stats) {
                     if (err && err.code != "ENOENT")
                         next(err);
                     else if (stats) {
+                      const __path = _path;
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
@@ -1984,9 +2024,9 @@ export class NexusFramework extends events.EventEmitter {
                                             tmpl = renderoptions.autoindexskeleton;
                                         }
                                         if(!tmpl)
-                                            tmpl = self.nhp.template(path.resolve(__dirname, "../indexOfSkeleton.nhp"));
+                                            tmpl = self.nhp.template(__path.resolve(__dirname, "../indexOfSkeleton.nhp"));
                                         async.each(files, function(file, cb) {
-                                            const full = path.resolve(filename, file);
+                                            const full = __path.resolve(filename, file);
                                             fs.stat(full, function(err, stat) {
                                                 if (err || !stat)
                                                     _files.push([file, "application/octet-stream", 0, new Date(0)]);
@@ -2029,8 +2069,8 @@ export class NexusFramework extends events.EventEmitter {
                                                     res.end();
                                             });
                                         });
-                                            
-                                                
+
+
                                         /*res.write("<html><head><meta charset=\"UTF-8\"><title>Directory: ");
                                         res.write(path);
                                         res.write("</title></head><body><h1>Directory listing for ");
@@ -2038,12 +2078,12 @@ export class NexusFramework extends events.EventEmitter {
                                         res.write("</h1><ul>");
                                         if (path !== "/") {
                                             res.write("<li><a href=\"");
-                                            res.write(upath.join(path, "../"));
+                                            res.write(_path.posix.join(path, "../"));
                                             res.write("\">..</a></li>");
                                         }
                                         files.forEach(function (file) {
                                             res.write("<li><a href=\"");
-                                            res.write(upath.join(path, file));
+                                            res.write(_path.posix.join(path, file));
                                             res.write("\">");
                                             res.write(file);
                                             res.write("</a></li>");
@@ -2084,13 +2124,13 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * Set a request handler for the specified path.
      * Replaces any existing request handler.
-     * 
+     *
      * @param path The path
      * @param handler The request handler
      * @param leaf Whether or not this handler is a leaf, or branch
      */
     mountHandler(webpath: string, handler: RequestHandler, leaf = true): RequestHandlerEntry {
-        webpath = upath.join("/", stripPath(webpath));
+        webpath = _path.posix.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new LeafRequestHandler(handler, leaf);
             this.setDefaultHandler(newHandler);
@@ -2195,7 +2235,7 @@ export class NexusFramework extends events.EventEmitter {
     }
 
     private handle0(req: Request, res: Response, next: (err?: Error) => void) {
-        const path = upath.normalize(req.path);
+        const path = _path.posix.normalize(req.path);
         if (path === "/")
             this.default.handle(req, res, next);
         else
@@ -2538,16 +2578,16 @@ export class NexusFramework extends events.EventEmitter {
                 source,
                 dependencies,
                 inline
-            });
+            } as any);
         }
         const resourceQueueStack: any[] = [];
         const addScript = function (source: string, integrity?: string, ...deps: string[]) {
             addResource(scripts, source, integrity, false, deps);
         }
         const addSocketIOClient = has_slim_io_js ? () => {
-            addScript(upath.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
+            addScript(_path.posix.join(this.prefix, socket_io_slim_path), socket_io_slim_integrity);
         } : () => {
-            addScript(upath.join(this.prefix, ":io/socket.io.js"));
+            addScript(_path.posix.join(this.prefix, ":io/socket.io.js"));
         };
         try {
             Object.defineProperty(res, "pushResourceQueues", {
@@ -2623,7 +2663,7 @@ export class NexusFramework extends events.EventEmitter {
                 configurable: true,
                 value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
                     const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
-                    const path = upath.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
+                    const path = _path.posix.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
                     if (includeSocketIO) {
                         addSocketIOClient();
                         addScript(path, integrity, "socket.io");
@@ -2853,6 +2893,7 @@ export class NexusFramework extends events.EventEmitter {
             });
         } catch (e) {}
         try {
+          const self = this;
             const writefooter = res.locals.__writefooter = (out: NodeJS.WritableStream) => {
                 if (!servedAfterBody)
                     afterbodyRenderers.forEach(function (renderer) {
@@ -2862,7 +2903,7 @@ export class NexusFramework extends events.EventEmitter {
                     const user = req.user;
                     if (user)
                         addInlineScript("window.NexusFrameworkClient['currentUserID']=" + JSON.stringify("" + (user.id || user.email || user.displayName || "Logged")), "nexusframeworkclient");
-                    
+
                     if (useLoader) {
                         if (!servedLoader) {
                             const locals = res.locals;
@@ -2897,7 +2938,7 @@ export class NexusFramework extends events.EventEmitter {
                     if (!pagesys) {
                         out.write("<script type=\"text/javascript\">");
                         out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
-                        out.write("</script>");
+                        out.write("//# sourceMappingURL=" + req.protocol + "://" + req.hostname + ":" + req.socket.localPort + _path.posix.join("/", self.prefix, ":scripts/" + (es6 ? "es6" : "es5") + "/loader.min.js.map") + "</script>");
                     }
                     out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
                     out.write(JSON.stringify(getLoaderData()));
@@ -3248,7 +3289,7 @@ export class NexusFramework extends events.EventEmitter {
                     if ((handler = (errordoc["500"] || errordoc["*"])) && used["500"] != handler) {
                         req.logger.warn(_err);
                         used["500"] = handler;
-                        handler = upath.join("/", handler);
+                        handler = _path.posix.join("/", handler);
                         try {
                             Object.defineProperty(req, "errorCode", {
                                 configurable: true,
