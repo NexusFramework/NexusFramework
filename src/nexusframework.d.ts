@@ -53,6 +53,7 @@ export declare class NexusFramework extends events.EventEmitter {
     private replacements;
     private versions;
     private cookieParser;
+    private prestack;
     private stack;
     private default;
     private mounts;
@@ -135,14 +136,12 @@ export declare class NexusFramework extends events.EventEmitter {
     handle(req: Request, res: Response, next: (err?: Error) => void): void;
     /**
      * Push middleware to the end of the stack.
-     * At this point any user calculations have concluded and a logger should be available.
      */
-    pushMiddleware(middleware: RequestHandler): void;
+    pushMiddleware(middleware: RequestHandler, pre?: boolean): void;
     /**
      * Unshift middleware onto the beginning of the stack.
-     * At this point none of the nexusframework extensions will be available.
      */
-    unshiftMiddleware(middleware: RequestHandler): void;
+    unshiftMiddleware(middleware: RequestHandler, pre?: boolean): void;
     /**
      * Alias for pushMiddleware
      */

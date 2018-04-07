@@ -46,26 +46,26 @@ var socket_io_slim_integrity: string;
 const sckclpkgjson = require("socket.io-client/package.json");
 if (has_slim_io_js) {
     socket_io_slim_path = ":scripts/socket.io.slim.js?v=" + sckclpkgjson.version;
-    try {
-        const hash = crypto.createHash("sha512");
-        hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
-        socket_io_slim_integrity = "sha512-" + hash.digest("base64");
-    } catch(e) {
-        console.warn(e);
-    }
+    // try {
+    //     const hash = crypto.createHash("sha512");
+    //     hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
+    //     socket_io_slim_integrity = "sha512-" + hash.digest("base64");
+    // } catch(e) {
+    //     console.warn(e);
+    // }
 } else
     socket_io_slim_path = ":io/socket.io.js";
 var nexusframeworkclient_es5_integrity: string;
 var nexusframeworkclient_es6_integrity: string;
 try {
-    let hash = crypto.createHash("sha512");
-    hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/nexusframeworkclient.min.js"), "utf8"));
-    nexusframeworkclient_es5_integrity = "sha512-" + hash.digest("base64");
-    hash = crypto.createHash("sha512");
-    hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/nexusframeworkclient.min.js"), "utf8"));
-    nexusframeworkclient_es6_integrity = "sha512-" + hash.digest("base64");
+  let hash = crypto.createHash("sha512");
+  hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/nexusframeworkclient.min.js"), "utf8"));
+  nexusframeworkclient_es5_integrity = "sha512-" + hash.digest("base64");
+  hash = crypto.createHash("sha512");
+  hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/nexusframeworkclient.min.js"), "utf8"));
+  nexusframeworkclient_es6_integrity = "sha512-" + hash.digest("base64");
 } catch(e) {
-    console.warn(e);
+  console.warn(e);
 }
 
 const cacheAge = parseInt(process.env.NEXUSFRAMEWORK_CACHE_MIN_AGE) || 600000;
@@ -1558,6 +1558,7 @@ export class NexusFramework extends events.EventEmitter {
     ];
     private versions = [pkgjson.version, mainpkgversion];
     private cookieParser: express.RequestHandler;
+    private prestack: RequestHandler[];
     private stack: RequestHandler[];
     private default: RequestHandlerEntry;
     private mounts: RequestHandlerChildEntry[];
@@ -1580,8 +1581,11 @@ export class NexusFramework extends events.EventEmitter {
             nhp: {
                 value: _nhp
             },
-            stack: {
+            prestack: {
                 value: [this.upgrade.bind(this)]
+            },
+            stack: {
+                value: []
             },
             footer: {
                 value: []
@@ -2174,54 +2178,83 @@ export class NexusFramework extends events.EventEmitter {
         const prefix = this.prefix;
         const len = prefix.length;
         if (fullpath.length >= len && fullpath.substring(0, len) == prefix) {
-            this.cookieParser(req, res, (err?: Error) => {
-                if (err)
-                    return next(err);
+          this.cookieParser(req, res, (err?: Error) => {
+            if (err)
+              return next(err);
 
-                try {
-                    Object.defineProperty(req, "logger", {
-                        configurable: true,
-                        value: (req.logger || this.logger).extend(req.path)
-                    });
-                } catch (e) {}
+            const logger = (req.logger || this.logger).extend(req.path);
+            try {
+                Object.defineProperty(req, "logger", {
+                    configurable: true,
+                    value: logger.extend("Guest")
+                });
+            } catch (e) {}
 
-                async.eachSeries(this.stack, function (entry, cb) {
-                    entry(req, res, cb);
+            const updateUser = function() {
+              try {
+                  var userName: string;
+                  const user = req.user;
+                  if (user && !user.isGuest)
+                      userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.name || user.email || user.id || "Logged");
+                  else
+                      userName = "Guest";
+                  Object.defineProperty(req, "logger", {
+                      configurable: true,
+                      value: logger.extend(userName)
+                  });
+                  res.locals.user = user;
+              } catch (e) {}
+            }
+
+            const self = this;
+            var cuser: string | number;
+            async.eachSeries(this.prestack, function(entry, cb) {
+              entry(req, res, cb);
+              var user = req.user && (req.user.id || req.user.email || req.user.name || req.user.displayName);
+              if (user !== cuser) {
+                updateUser();
+                cuser = user;
+              }
+            }, function(err: Error) {
+              if (err)
+                next(err);
+              else
+                async.eachSeries(self.stack, function (entry, cb) {
+                  entry(req, res, cb);
                 }, (err: Error) => {
                     const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
                     if (err) {
-                        if (this.logging)
-                            req.logger.warn(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
+                        if (self.logging)
+                          req.logger.warn(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
                         next(err);
                     } else {
-                        if (this.logging)
-                            req.logger.info(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                        if (self.logging)
+                          req.logger.info(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
                         const user = req.user;
                         if (user) {
-                            const id = user.id || user.email || user.displayName || "Logged";
-                            res.set("X-User", "" + id);
+                          const id = user.id || user.email || user.displayName || "Logged";
+                          res.set("X-User", "" + id);
                         }
-                        this.handle0(req, res, next);
+                        self.handle0(req, res, next);
                     }
                 });
             });
-        } else
-            next();
+        });
+      } else
+          next();
     }
 
     /**
      * Push middleware to the end of the stack.
-     * At this point any user calculations have concluded and a logger should be available.
      */
-    pushMiddleware(middleware: RequestHandler) {
-        this.stack.push(middleware);
+    pushMiddleware(middleware: RequestHandler, pre?: boolean) {
+        this[pre ? "prestack" : "stack"].push(middleware);
     }
     /**
      * Unshift middleware onto the beginning of the stack.
-     * At this point none of the nexusframework extensions will be available.
      */
-    unshiftMiddleware(middleware: RequestHandler) {
-        this.stack.unshift(middleware);
+    unshiftMiddleware(middleware: RequestHandler, pre?: boolean) {
+        this[pre ? "prestack" : "stack"].unshift(middleware);
     }
     /**
      * Alias for pushMiddleware
@@ -2260,19 +2293,6 @@ export class NexusFramework extends events.EventEmitter {
     }
 
     upgrade(req: Request, res: Response, next: (err?: Error) => void) {
-        try {
-            var userName: string;
-            const user = req.user;
-            if (user && !user.isGuest) {
-                userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.email || user.id || "Logged");
-            } else
-                userName = "Guest";
-            Object.defineProperty(req, "logger", {
-                configurable: true,
-                value: (req.logger || this.logger.extend(req.path)).extend(userName)
-            });
-            res.locals.user = user;
-        } catch (e) {}
         try {
             Object.defineProperty(req, "matches", {
                 configurable: true,

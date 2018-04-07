@@ -42,14 +42,13 @@ var socket_io_slim_integrity;
 const sckclpkgjson = require("socket.io-client/package.json");
 if (has_slim_io_js) {
     socket_io_slim_path = ":scripts/socket.io.slim.js?v=" + sckclpkgjson.version;
-    try {
-        const hash = crypto.createHash("sha512");
-        hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
-        socket_io_slim_integrity = "sha512-" + hash.digest("base64");
-    }
-    catch (e) {
-        console.warn(e);
-    }
+    // try {
+    //     const hash = crypto.createHash("sha512");
+    //     hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
+    //     socket_io_slim_integrity = "sha512-" + hash.digest("base64");
+    // } catch(e) {
+    //     console.warn(e);
+    // }
 }
 else
     socket_io_slim_path = ":io/socket.io.js";
@@ -1454,8 +1453,11 @@ class NexusFramework extends events.EventEmitter {
             nhp: {
                 value: _nhp
             },
-            stack: {
+            prestack: {
                 value: [this.upgrade.bind(this)]
+            },
+            stack: {
+                value: []
             },
             footer: {
                 value: []
@@ -2057,32 +2059,63 @@ class NexusFramework extends events.EventEmitter {
             this.cookieParser(req, res, (err) => {
                 if (err)
                     return next(err);
+                const logger = (req.logger || this.logger).extend(req.path);
                 try {
                     Object.defineProperty(req, "logger", {
                         configurable: true,
-                        value: (req.logger || this.logger).extend(req.path)
+                        value: logger.extend("Guest")
                     });
                 }
                 catch (e) { }
-                async.eachSeries(this.stack, function (entry, cb) {
-                    entry(req, res, cb);
-                }, (err) => {
-                    const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
-                    if (err) {
-                        if (this.logging)
-                            req.logger.warn(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
-                        next(err);
-                    }
-                    else {
-                        if (this.logging)
-                            req.logger.info(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                const updateUser = function () {
+                    try {
+                        var userName;
                         const user = req.user;
-                        if (user) {
-                            const id = user.id || user.email || user.displayName || "Logged";
-                            res.set("X-User", "" + id);
-                        }
-                        this.handle0(req, res, next);
+                        if (user && !user.isGuest)
+                            userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.name || user.email || user.id || "Logged");
+                        else
+                            userName = "Guest";
+                        Object.defineProperty(req, "logger", {
+                            configurable: true,
+                            value: logger.extend(userName)
+                        });
+                        res.locals.user = user;
                     }
+                    catch (e) { }
+                };
+                const self = this;
+                var cuser;
+                async.eachSeries(this.prestack, function (entry, cb) {
+                    entry(req, res, cb);
+                    var user = req.user && (req.user.id || req.user.email || req.user.name || req.user.displayName);
+                    if (user !== cuser) {
+                        updateUser();
+                        cuser = user;
+                    }
+                }, function (err) {
+                    if (err)
+                        next(err);
+                    else
+                        async.eachSeries(self.stack, function (entry, cb) {
+                            entry(req, res, cb);
+                        }, (err) => {
+                            const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
+                            if (err) {
+                                if (self.logging)
+                                    req.logger.warn(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type, err);
+                                next(err);
+                            }
+                            else {
+                                if (self.logging)
+                                    req.logger.info(req.method, req.ip || "`Unknown IP`", "`" + (req.get("user-agent") || "User-Agent Not Set") + "`", req.get("content-length") || 0, type);
+                                const user = req.user;
+                                if (user) {
+                                    const id = user.id || user.email || user.displayName || "Logged";
+                                    res.set("X-User", "" + id);
+                                }
+                                self.handle0(req, res, next);
+                            }
+                        });
                 });
             });
         }
@@ -2091,17 +2124,15 @@ class NexusFramework extends events.EventEmitter {
     }
     /**
      * Push middleware to the end of the stack.
-     * At this point any user calculations have concluded and a logger should be available.
      */
-    pushMiddleware(middleware) {
-        this.stack.push(middleware);
+    pushMiddleware(middleware, pre) {
+        this[pre ? "prestack" : "stack"].push(middleware);
     }
     /**
      * Unshift middleware onto the beginning of the stack.
-     * At this point none of the nexusframework extensions will be available.
      */
-    unshiftMiddleware(middleware) {
-        this.stack.unshift(middleware);
+    unshiftMiddleware(middleware, pre) {
+        this[pre ? "prestack" : "stack"].unshift(middleware);
     }
     runMiddleware(req, res, next) {
         async.eachSeries(this.stack, function (middleware, cb) {
@@ -2134,21 +2165,6 @@ class NexusFramework extends events.EventEmitter {
             });
     }
     upgrade(req, res, next) {
-        try {
-            var userName;
-            const user = req.user;
-            if (user && !user.isGuest) {
-                userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.email || user.id || "Logged");
-            }
-            else
-                userName = "Guest";
-            Object.defineProperty(req, "logger", {
-                configurable: true,
-                value: (req.logger || this.logger.extend(req.path)).extend(userName)
-            });
-            res.locals.user = user;
-        }
-        catch (e) { }
         try {
             Object.defineProperty(req, "matches", {
                 configurable: true,
