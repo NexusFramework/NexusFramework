@@ -1656,85 +1656,7 @@ class NexusFramework extends events.EventEmitter {
     mountAbout(mpath = ":about") {
         this.mount(mpath, _path.resolve(__dirname, "../about/"));
     }
-    setupIO(path = ":io") {
-        if (!this.server)
-            throw new Error("No server passed in constructor, cannot setup Socket.IO");
-        const iopath = _path.posix.join(this.prefix, path);
-        const io = socket_io(this.server, {
-            serveClient: !has_slim_io_js,
-            path: iopath
-        });
-        io.on("connection", (client) => {
-            client.on("init", function (sentResources) {
-                if (!_.isArray(sentResources)) {
-                    client.emit("401", "");
-                    client.disconnect(true);
-                }
-                const sent = (client['__sent_resources'] || (client['__sent_resources'] = []));
-                sentResources.forEach(function (res) {
-                    if (sent.indexOf(res) == -1)
-                        sent.push(res);
-                });
-            });
-            client.on("page", (method, path, post, headers, cb) => {
-                try {
-                    const req = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers);
-                    Object.defineProperty(req, "io", {
-                        value: client
-                    });
-                    const res = new SocketIOResponse(cb);
-                    res['app'] = this.app;
-                    req['app'] = this.app;
-                    res['req'] = req;
-                    req['res'] = res;
-                    try {
-                        const next = (err) => {
-                            if (err) {
-                                (req.logger || this.logger).warn(err);
-                                if (res.sendFailure)
-                                    res.sendFailure(err);
-                                else
-                                    res.sendStatus(500);
-                            }
-                            else
-                                res.sendStatus(404);
-                        };
-                        if (this.app) {
-                            const stack = this.app._router.stack;
-                            async.eachSeries(stack, function (layer, next) {
-                                if (layer.name === "expressInit")
-                                    next();
-                                else
-                                    layer.handle(req, res, next);
-                            }, next);
-                        }
-                        else
-                            this.handle(req, res, next);
-                    }
-                    catch (e) {
-                        (req.logger || this.logger).warn(e);
-                        res.sendStatus(500);
-                    }
-                }
-                catch (e) {
-                    console.warn(e);
-                    client.disconnect(true);
-                }
-            });
-        });
-        Object.defineProperty(this, "io", {
-            value: io
-        });
-        if (has_slim_io_js)
-            this.mountHandler("/:scripts/socket.io.slim.js", function (req, res, next) {
-                res.sendFile(socket_io_slim_js, {
-                    maxAge: 3.154e+10,
-                    immutable: true
-                }, function (err) {
-                    if (err)
-                        next(err);
-                });
-            });
+    setupPageSystem() {
         const pagesyspath = /^\/\:pagesys(\/.*)$/;
         this.unshiftMiddleware(function (req, res, next) {
             if (!req.io) {
@@ -1774,6 +1696,89 @@ class NexusFramework extends events.EventEmitter {
             }
             next();
         }, true);
+    }
+    setupIO(path = ":io", withPageSystem = true) {
+        if (!this.server)
+            throw new Error("No server passed in constructor, cannot setup Socket.IO");
+        const iopath = _path.posix.join(this.prefix, path);
+        const io = socket_io(this.server, {
+            serveClient: !has_slim_io_js,
+            path: iopath
+        });
+        io.on("connection", (client) => {
+            client.on("init", function (sentResources) {
+                if (!_.isArray(sentResources)) {
+                    client.emit("401", "");
+                    client.disconnect(true);
+                }
+                const sent = (client['__sent_resources'] || (client['__sent_resources'] = []));
+                sentResources.forEach(function (res) {
+                    if (sent.indexOf(res) == -1)
+                        sent.push(res);
+                });
+            });
+            if (withPageSystem)
+                client.on("page", (method, path, post, headers, cb) => {
+                    try {
+                        const req = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers);
+                        Object.defineProperty(req, "io", {
+                            value: client
+                        });
+                        const res = new SocketIOResponse(cb);
+                        res['app'] = this.app;
+                        req['app'] = this.app;
+                        res['req'] = req;
+                        req['res'] = res;
+                        try {
+                            const next = (err) => {
+                                if (err) {
+                                    (req.logger || this.logger).warn(err);
+                                    if (res.sendFailure)
+                                        res.sendFailure(err);
+                                    else
+                                        res.sendStatus(500);
+                                }
+                                else
+                                    res.sendStatus(404);
+                            };
+                            if (this.app) {
+                                const stack = this.app._router.stack;
+                                async.eachSeries(stack, function (layer, next) {
+                                    if (layer.name === "expressInit")
+                                        next();
+                                    else
+                                        layer.handle(req, res, next);
+                                }, next);
+                            }
+                            else
+                                this.handle(req, res, next);
+                        }
+                        catch (e) {
+                            (req.logger || this.logger).warn(e);
+                            res.sendStatus(500);
+                        }
+                    }
+                    catch (e) {
+                        console.warn(e);
+                        client.disconnect(true);
+                    }
+                });
+        });
+        Object.defineProperty(this, "io", {
+            value: io
+        });
+        if (has_slim_io_js)
+            this.mountHandler("/:scripts/socket.io.slim.js", function (req, res, next) {
+                res.sendFile(socket_io_slim_js, {
+                    maxAge: 3.154e+10,
+                    immutable: true
+                }, function (err) {
+                    if (err)
+                        next(err);
+                });
+            });
+        if (withPageSystem)
+            this.setupPageSystem();
         this.socketIOSetup = true;
         return iopath;
     }

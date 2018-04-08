@@ -3,5 +3,4 @@
 
 *.bak
 *~
-package-lock.json
 /nbproject/private/

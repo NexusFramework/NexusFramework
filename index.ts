@@ -35,9 +35,12 @@ const _export: {
     if (!config.noio) {
       if (server)
         instance.setupIO();
-      else
+      else {
+        instance.setupPageSystem();
         logger.warn("No server provided, Socket.IO will not be available. If using nexusfork, please upgrade.");
-    }
+      }
+    } else
+      instance.setupPageSystem();
     if (!config.noloader)
         instance.enableLoader();
     if (!config.noscripts)

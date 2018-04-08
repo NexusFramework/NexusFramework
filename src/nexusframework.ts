@@ -1783,7 +1783,45 @@ export class NexusFramework extends events.EventEmitter {
     mountAbout(mpath = ":about") {
         this.mount(mpath, _path.resolve(__dirname, "../about/"));
     }
-    setupIO(path = ":io") {
+    setupPageSystem() {
+      const pagesyspath = /^\/\:pagesys(\/.*)$/;
+      this.unshiftMiddleware(function(req, res, next) {
+          if (!req.io) {
+              var match = req.url.match(pagesyspath);
+              if (match) {
+                  req.url = match[1];
+                  try {
+                      Object.defineProperty(req, "pagesys", {
+                          value: true
+                      });
+                  } catch(e) {}
+                  try {
+                      const origwriteHead = res.writeHead;
+                      res.writeHead = function(statusCode: number, reasonPhraseOrHeaders?: string | any, headers?: any) {
+                          const location = res.getHeader("location");
+                          if (location) {
+                              if (headers) {
+                                  delete headers['location'];
+                                  delete headers['Location'];
+                                  headers['X-Location'] = location;
+                              }
+                              res.setHeader("X-Location", location);
+                              res.removeHeader("location");
+                              if (typeof reasonPhraseOrHeaders === "string")
+                                origwriteHead.call(this, 200, "OK", headers);
+                              else
+                                origwriteHead.call(this, 200, "OK", reasonPhraseOrHeaders);
+                          } else
+                              origwriteHead.call(this, statusCode, reasonPhraseOrHeaders, headers);
+                      };
+                  } catch(e) {}
+                  res.locals.pagesys = true;
+              }
+          }
+          next();
+      }, true);
+    }
+    setupIO(path = ":io", withPageSystem = true) {
         if (!this.server)
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
         const iopath = _path.posix.join(this.prefix, path);
@@ -1803,47 +1841,48 @@ export class NexusFramework extends events.EventEmitter {
                         sent.push(res);
                 });
             });
-            client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
-                try {
-                    const req: Request = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers) as any;
-                    Object.defineProperty(req, "io", {
-                        value: client
-                    });
-                    const res: Response = new SocketIOResponse(cb) as any;
-                    res['app'] = this.app;
-                    req['app'] = this.app;
-                    res['req'] = req;
-                    req['res'] = res;
-                    try {
-                        const next = (err?) => {
-                            if (err) {
-                                (req.logger || this.logger).warn(err);
-                                if (res.sendFailure)
-                                    res.sendFailure(err);
-                                else
-                                    res.sendStatus(500);
-                            } else
-                                res.sendStatus(404);
-                        };
-                        if (this.app) {
-                            const stack: ({name: string, handle: express.RequestHandler})[] = this.app._router.stack;
-                            async.eachSeries(stack, function (layer, next) {
-                                if (layer.name === "expressInit")
-                                    next();
-                                else
-                                    layer.handle(req, res, next);
-                            }, next);
-                        } else
-                            this.handle(req, res, next);
-                    } catch (e) {
-                        (req.logger || this.logger).warn(e);
-                        res.sendStatus(500);
-                    }
-                } catch (e) {
-                    console.warn(e);
-                    client.disconnect(true);
-                }
-            });
+            if (withPageSystem)
+              client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
+                  try {
+                      const req: Request = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers) as any;
+                      Object.defineProperty(req, "io", {
+                          value: client
+                      });
+                      const res: Response = new SocketIOResponse(cb) as any;
+                      res['app'] = this.app;
+                      req['app'] = this.app;
+                      res['req'] = req;
+                      req['res'] = res;
+                      try {
+                          const next = (err?) => {
+                              if (err) {
+                                  (req.logger || this.logger).warn(err);
+                                  if (res.sendFailure)
+                                      res.sendFailure(err);
+                                  else
+                                      res.sendStatus(500);
+                              } else
+                                  res.sendStatus(404);
+                          };
+                          if (this.app) {
+                              const stack: ({name: string, handle: express.RequestHandler})[] = this.app._router.stack;
+                              async.eachSeries(stack, function (layer, next) {
+                                  if (layer.name === "expressInit")
+                                      next();
+                                  else
+                                      layer.handle(req, res, next);
+                              }, next);
+                          } else
+                              this.handle(req, res, next);
+                      } catch (e) {
+                          (req.logger || this.logger).warn(e);
+                          res.sendStatus(500);
+                      }
+                  } catch (e) {
+                      console.warn(e);
+                      client.disconnect(true);
+                  }
+              });
         });
         Object.defineProperty(this, "io", {
             value: io
@@ -1858,42 +1897,8 @@ export class NexusFramework extends events.EventEmitter {
                         next(err);
                 });
             });
-        const pagesyspath = /^\/\:pagesys(\/.*)$/;
-        this.unshiftMiddleware(function(req, res, next) {
-            if (!req.io) {
-                var match = req.url.match(pagesyspath);
-                if (match) {
-                    req.url = match[1];
-                    try {
-                        Object.defineProperty(req, "pagesys", {
-                            value: true
-                        });
-                    } catch(e) {}
-                    try {
-                        const origwriteHead = res.writeHead;
-                        res.writeHead = function(statusCode: number, reasonPhraseOrHeaders?: string | any, headers?: any) {
-                            const location = res.getHeader("location");
-                            if (location) {
-                                if (headers) {
-                                    delete headers['location'];
-                                    delete headers['Location'];
-                                    headers['X-Location'] = location;
-                                }
-                                res.setHeader("X-Location", location);
-                                res.removeHeader("location");
-                                if (typeof reasonPhraseOrHeaders === "string")
-                                  origwriteHead.call(this, 200, "OK", headers);
-                                else
-                                  origwriteHead.call(this, 200, "OK", reasonPhraseOrHeaders);
-                            } else
-                                origwriteHead.call(this, statusCode, reasonPhraseOrHeaders, headers);
-                        };
-                    } catch(e) {}
-                    res.locals.pagesys = true;
-                }
-            }
-            next();
-        }, true);
+        if (withPageSystem)
+          this.setupPageSystem();
         this.socketIOSetup = true;
         return iopath;
     }

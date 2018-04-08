@@ -96,7 +96,8 @@ export declare class NexusFramework extends events.EventEmitter {
     setErrorDocument(code: number | "*", page?: string): void;
     mountScripts(mpath?: string): void;
     mountAbout(mpath?: string): void;
-    setupIO(path?: string): string;
+    setupPageSystem(): void;
+    setupIO(path?: string, withPageSystem?: boolean): string;
     /**
      * Mount a NHP page system.
      *
