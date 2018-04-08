@@ -1774,6 +1774,7 @@ class NexusFramework extends events.EventEmitter {
             }
             next();
         }, true);
+        this.socketIOSetup = true;
         return iopath;
     }
     /**
@@ -2608,7 +2609,7 @@ class NexusFramework extends events.EventEmitter {
         try {
             Object.defineProperty(res, "addNexusFrameworkClient", {
                 configurable: true,
-                value: (includeSocketIO = true, autoEnabledPageSystem = false) => {
+                value: (includeSocketIO = this.socketIOSetup, autoEnabledPageSystem = false) => {
                     const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
                     const path = _path.posix.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
                     if (includeSocketIO) {

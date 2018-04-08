@@ -33,10 +33,10 @@ const _export: {
     if(config.pagesysskeleton)
         instance.setPageSystemSkeleton(config.pagesysskeleton);
     if (!config.noio) {
-        if (server)
-            instance.setupIO();
-        else
-            logger.warn("No server provided, Socket.IO will not be available. If using nexusfork, please upgrade.");
+      if (server)
+        instance.setupIO();
+      else
+        logger.warn("No server provided, Socket.IO will not be available. If using nexusfork, please upgrade.");
     }
     if (!config.noloader)
         instance.enableLoader();

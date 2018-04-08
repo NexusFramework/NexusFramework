@@ -50,6 +50,7 @@ export declare class NexusFramework extends events.EventEmitter {
     readonly server: http.Server;
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
+    private socketIOSetup;
     private replacements;
     private versions;
     private cookieParser;
