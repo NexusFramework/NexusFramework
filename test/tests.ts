@@ -62,7 +62,7 @@ it("create and configure", function(cb) {
             },
             {
                 inline: true,
-                source: "jQuery('body').bootstrapMaterialDesign();;NexusFrameworkClient.initPageSystem();",
+                source: "jQuery('body').bootstrapMaterialDesign();NexusFrameworkClient.initPageSystem({nopagesysio:true});",
                 dependencies: ["bootstrap-material-design", "nexusframeworkclient"]
             }
         ],
