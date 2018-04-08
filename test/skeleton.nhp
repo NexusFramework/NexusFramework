@@ -12,6 +12,20 @@
         <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
           <div class="container">
             <a class="navbar-brand" href="#">NexusFramework Test</a>
+            <ul class="navbar-nav mr-auto">
+              <?if user?>
+                <li class="nav-item text-white">
+                  <a class="nav-link disabled" href="#">{{user.name}}</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="/logout">Logout</a>
+                </li>
+              <?else?>
+                <li class="nav-item">
+                  <a class="nav-link" href="/login">Login</a>
+                </li>
+              <?endif?>
+            </ul>
             </div>
           </nav>
 

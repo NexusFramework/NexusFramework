@@ -23,35 +23,38 @@ Object.defineProperties(window, {
                         return this.request.responseURL || this._url;
                     }
                     get code() {
-                        return this.request.status;
+                      return this.request.status;
+                    }
+                    get contentLength() {
+                      return parseInt(this.request.getResponseHeader("content-length")) || this.request.responseText.length;
                     }
                     get contentFromJSON() {
-                        if (!this.parsedJson)
-                            this.parsedJson = JSON.parse(this.request.responseText);
-                        return this.parsedJson;
+                      if (!this.parsedJson)
+                        this.parsedJson = JSON.parse(this.request.responseText);
+                      return this.parsedJson;
                     }
                     get contentAsString() {
                         return this.request.responseText;
                     }
                     get headers(): {[index: string]: string[]} {
-                        if (!this.processedHeaders) {
-                            const headers: {[index: string]: string[]} = this.processedHeaders = {};
-                            this.request.getAllResponseHeaders().split(/\r?\n/g).forEach(function (header) {
-                                const index = header.indexOf(":");
-                                var key: string, val: string;
-                                if (index > 0) {
-                                    key = header.substring(0, index).trim().toLowerCase();
-                                    val = header.substring(index + 1).trim();
-                                } else
-                                    key = header.trim().toLowerCase();
-                                var list = headers[key];
-                                if (!list)
-                                    list = headers[key] = [];
-                                if (val)
-                                    list.push(val);
-                            });
-                        }
-                        return this.processedHeaders;
+                      if (!this.processedHeaders) {
+                        const headers: {[index: string]: string[]} = this.processedHeaders = {};
+                        this.request.getAllResponseHeaders().split(/\r?\n/g).forEach(function (header) {
+                          const index = header.indexOf(":");
+                          var key: string, val: string;
+                          if (index > 0) {
+                            key = header.substring(0, index).trim().toLowerCase();
+                            val = header.substring(index + 1).trim();
+                          } else
+                            key = header.trim().toLowerCase();
+                          var list = headers[key];
+                          if (!list)
+                            list = headers[key] = [];
+                          if (val)
+                            list.push(val);
+                        });
+                      }
+                      return this.processedHeaders;
                     }
                 }
                 const execute = function (method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void) {
@@ -101,6 +104,7 @@ Object.defineProperties(window, {
                                 throw new Error("No response to parse.");
                             },
                             contentAsString: "",
+                            contentLength: 0,
                             headers: {}
                         });
                     },
@@ -112,6 +116,7 @@ Object.defineProperties(window, {
                                 throw new Error("No response to parse.");
                             },
                             contentAsString: "",
+                            contentLength: 0,
                             headers: {}
                         });
                     },
@@ -123,6 +128,7 @@ Object.defineProperties(window, {
                                 throw new Error("No response to parse.");
                             },
                             contentAsString: "",
+                            contentLength: 0,
                             headers: {}
                         });
                     },
@@ -134,6 +140,7 @@ Object.defineProperties(window, {
                                 throw new Error("No response to parse.");
                             },
                             contentAsString: "",
+                            contentLength: 0,
                             headers: {}
                         });
                     },
@@ -145,6 +152,7 @@ Object.defineProperties(window, {
                                 throw new Error("No response to parse.");
                             },
                             contentAsString: "",
+                            contentLength: 0,
                             headers: {}
                         });
                     },
@@ -156,6 +164,7 @@ Object.defineProperties(window, {
                                 throw new Error("No response to parse.");
                             },
                             contentAsString: "",
+                            contentLength: 0,
                             headers: {}
                         });
                     }
@@ -177,13 +186,7 @@ Object.defineProperties(window, {
         get: function () {
           const loader = window.NexusFrameworkLoader;
           const showError = loader.showError;
-          const debug = console.log.bind(console);
-          var currentResponse: NexusFrameworkPageSystemResponse;
-          loader.showError = function(error) {
-            history.replaceState({error:error.stack || ""+error}, document.title, location.href);
-            currentResponse = undefined;
-            showError(error);
-          }
+          const debug = function(...args: any[]){};//console.log.bind(console);
             const GA_ANALYTICS: NexusFrameworkAnalyticsAdapter = {
                 reportError: function (err: Error, fatal?: boolean) {
                     if (window.ga)
@@ -229,28 +232,39 @@ Object.defineProperties(window, {
                 requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void;
             }
             const convertResponse = function (res: NexusFrameworkPageSystemResponse, url = location.href) {
-                var storage: any;
-                return (typeof res.data === "string" || res.data instanceof String) ? {
-                    url,
-                    code: res.code,
-                    contentAsString: res.data,
-                    get contentFromJSON() {
-                        if (!storage)
-                            storage = JSON.parse(res.data);
-                        return storage;
-                    },
-                    headers: res.headers
-                } : {
-                        url,
-                        code: res.code,
-                        get contentAsString() {
-                            if (!storage)
-                                storage = JSON.stringify(res.data);
-                            return storage;
-                        },
-                        contentFromJSON: res.data,
-                        headers: res.headers
-                    };
+              var storage: any;
+              return (typeof res.data === "string" || res.data instanceof String) ? {
+                url,
+                code: res.code,
+                contentAsString: res.data,
+                get contentLength() {
+                  return parseInt(res.headers['content-length'] && res.headers['content-length'][0]) || res.data.length
+                },
+                get contentFromJSON() {
+                  if (!storage)
+                    storage = JSON.parse(res.data);
+                  return storage;
+                },
+                headers: res.headers
+              } : {
+                url,
+                code: res.code,
+                get contentAsString() {
+                  if (!storage)
+                    storage = JSON.stringify(res.data);
+                  return storage;
+                },
+                contentFromJSON: res.data,
+                headers: res.headers,
+                get contentLength() {
+                  var length = parseInt(res.headers['content-length'] && res.headers['content-length'][0]);
+                  if (length)
+                    return length;
+                  if (!storage)
+                    storage = JSON.stringify(res.data);
+                  return storage.length;
+                }
+              };
             }
             const loaderContainerRegex = /(^|\s)loader\-(progress|error)\-container(\s|$)/;
             class NexusFrameworkBase implements NexusFrameworkClient {
@@ -578,26 +592,80 @@ Object.defineProperties(window, {
 
                 initPageSystem(opts?: NexusFrameworkPageSystemOptions) {
                     if (!loader)
-                        return console.warn("The NexusFramework Loader is required for the dynamic Page System to work correctly.");
+                      return console.error("The NexusFramework Loader is required for the dynamic Page System to work correctly.");
                     if (!history.pushState || !history.replaceState)
-                        return console.warn("This browser is missing an essential feature required for the dynamic Page System.")
+                      return console.warn("This browser is missing an essential feature required for the dynamic Page System.")
+
+                    interface PageState {
+                      data: {
+                        title?: string;
+                        scroll?: number[];
+                        user?: string | number;
+                        response?: NexusFrameworkTransportResponse;
+                        error?: Error;
+                        body?: any;
+                      };
+                      url: string;
+                      updated: number;
+                      size: number;
+                    }
 
                     opts = opts || {};
                     const self = this;
+                    var pageStatesSize = 0;
+                    const pageStates: PageState[] = [];
                     this.animationTiming = opts.animationTiming || 500;
+                    const pageStateCacheSize = opts.pageHistoryCacheSize || 25000000;
                     const wrapCB = (cb: (res: NexusFrameworkTransportResponse) => void) => {
                         return (res: NexusFrameworkTransportResponse) => {
-                            const user = res.headers['x-user'];
+                            const user = res.headers['x-logged-user'];
                             if (user)
-                                this.currentUserID = user[0];
+                              this.currentUserID = user[0];
                             else
-                                this.currentUserID = undefined;
+                              this.currentUserID = undefined;
+                            debug("Current UID", this.currentUserID);
                             cb(res);
                             if (res.code === 200)
-                                setTimeout(() => {
-                                    this._analytics.reportPage();
-                                });
+                              setTimeout(() => {
+                                this._analytics.reportPage();
+                              });
                         }
+                    }
+                    loader.showError = function(error: Error) {
+                      const match = location.href.match(beforeHash);
+                      const baseurl = match && match[1] || location.href;
+                      const length = error.stack.length;
+                      const tooBig = pageStateCacheSize <= length;
+                      try {
+                        const cPageStates = pageStates.length;
+                        for(var i=0; i<cPageStates; i++) {
+                          const state = pageStates[i];
+                          if (state.url === baseurl) {
+                            if (tooBig) {
+                              pageStates.splice(i, 1);
+                              pageStatesSize -= state.size;
+                            } else {
+                              state.data = {error};
+                              state.updated = +new Date;
+                              pageStatesSize += length - state.size;
+                            }
+                            throw true;
+                          }
+                        }
+                        if (tooBig)
+                          throw true;
+                        pageStates.push({
+                          url: baseurl,
+                          data: {error},
+                          updated: +new Date,
+                          size: length
+                        });
+                        pageStatesSize += length;
+                      } catch(e) {
+                        if (e !== true)
+                          throw e;
+                      }
+                      showError(error);
                     }
                     const transportPageSystem = {
                         requestPage(path: string, cb: (res: NexusFrameworkTransportResponse) => void, post?: any, rid?: number): void {
@@ -643,26 +711,26 @@ Object.defineProperties(window, {
                                     if (val)
                                         headers['cookie'] = val;
                                     io.emit("page", post ? "POST" : "GET", path, post, headers, function (res: NexusFrameworkPageSystemResponse) {
-                                        if (rid != self.activerid)
-                                            return;
+                                      if (rid != self.activerid)
+                                        return;
 
-                                        const cookies = res.headers['set-cookie'];
-                                        if (cookies) {
-                                            cookies.forEach(function (cookie) {
-                                                document.cookie = cookie;
-                                            });
-                                        }
+                                      const cookies = res.headers['set-cookie'];
+                                      if (cookies) {
+                                        cookies.forEach(function (cookie) {
+                                          document.cookie = cookie;
+                                        });
+                                      }
 
-                                        const _cb = opts.noprogress ? cb : function (res) {
-                                            self.fadeInProgress(() => {
-                                                cb(res);
-                                                self.enableAll();
-                                            });
-                                        };
-                                        wrapCB(_cb)(convertResponse(res, self.resolveUrl(path)));
-                                    });
+                                      const _cb = opts.noprogress ? cb : function (res) {
+                                        self.fadeInProgress(() => {
+                                          cb(res);
+                                          self.enableAll();
+                                        });
+                                      };
+                                      wrapCB(_cb)(convertResponse(res, self.resolveUrl(path)));
+                                  });
                                 } else
-                                    transportPageSystem.requestPage(path, cb, post, rid);
+                                  transportPageSystem.requestPage(path, cb, post, rid);
                             }
                         }
                     } else
@@ -785,19 +853,6 @@ Object.defineProperties(window, {
                         restore(data: any): void {}
                         save() {}
                     }
-                    const genState = (withPageState?: NexusFrameworkPageSystemResponse) => {
-                        if (withPageState) {
-                            return {
-                                title: document.title,
-                                user: this.currentUserID,
-                                scroll: [window.scrollX, window.scrollY],
-                                body: this.saveComponents(document.body),
-                                basehref: base ? base['href'] : undefined,
-                                page: withPageState
-                            }
-                        }
-                        return undefined;
-                    }
                     this.requestPage = (path: string, post?: any, replace = false) => {
                       const match = path.match(/\.([^\/]+)([\?#].*)?$/);
                         if (match && match[0] !== "htm" && match[0] !== "html") {
@@ -805,18 +860,17 @@ Object.defineProperties(window, {
                             debug("Ignoring navigation", path, match);
                         } else {
                             const rid = ++this.activerid;
-                            const url = this.resolveUrl(path);
-                            debug(replace, currentResponse, document.title);
+                            const baseurl = this.resolveUrl(path);
+                            const fullurl = baseurl + (match && match[2] || "");
                             if (replace)
-                                history.replaceState(genState(currentResponse), "Loading...", url);
+                                history.replaceState(undefined, "Loading...", fullurl);
                             else {
-                                history.replaceState(genState(currentResponse), document.title, location.href);
-                                history.pushState(genState(), "Loading...", url);
-                                currentResponse = undefined;
+                                history.replaceState(undefined, document.title, location.href);
+                                history.pushState(undefined, "Loading...", fullurl);
                                 window.scrollTo(0, 0);
                             }
                             loader.resetError();
-                            chash = url.match(beforeHash);
+                            chash = fullurl.match(beforeHash);
                             this.pagesysimpl.requestPage(path, (res) => {
                                 try {
                                     if (rid != this.activerid)
@@ -843,89 +897,146 @@ Object.defineProperties(window, {
 
                                     const contentType = res.headers['content-type'];
                                     debug("history.replaceState", document.title);
-                                    history.replaceState(genState(currentResponse = {
-                                        code: res.code,
-                                        headers: res.headers,
-                                        data: (contentType && /\/json(;.+)?$/.test(contentType[0])) ? res.contentFromJSON : res.contentAsString
-                                    }), document.title, url);
-                                    this.emit("page", path);
-                                } catch (e) {
-                                    console.warn(e);
-                                    forwardPopState = [path, post];
+
+                                    const length = res.contentLength;
+                                    const tooBig = pageStateCacheSize <= length;
+                                    const stateData = tooBig ? undefined : {
+                                        title: document.title,
+                                        user: this.currentUserID,
+                                        scroll: [window.scrollX, window.scrollY],
+                                        body: this.saveComponents(document.body),
+                                        basehref: base ? base['href'] : undefined,
+                                        response: res
+                                    };
+                                    var i: number;
+                                    const cPageStates = pageStates.length;
                                     try {
-                                        history.go(-1);
-                                    } catch (e) {}
+                                      for(i=0; i<cPageStates; i++) {
+                                        const state = pageStates[i];
+                                        if (state.url === baseurl) {
+                                          if (tooBig) {
+                                            pageStates.splice(i, 1);
+                                            pageStatesSize -= state.size;
+                                          } else {
+                                            state.data = stateData;
+                                            state.updated = +new Date;
+                                            pageStatesSize += length - state.size;
+                                          }
+                                          throw true;
+                                        }
+                                      }
+                                      if (!tooBig) {
+                                        pageStates.push({
+                                          url: baseurl,
+                                          data: stateData,
+                                          updated: +new Date,
+                                          size: length
+                                        });
+                                        pageStatesSize += length;
+                                        throw true;
+                                      } else
+                                        debug("Response too big to store", baseurl, length);
+                                    } catch(e) {
+                                      if (e === true) {
+                                        const over = pageStatesSize - pageStateCacheSize;
+                                        if (over > 0) {
+                                          pageStates.sort(function(a, b) {
+                                            return a.updated - b.updated;
+                                          });
+                                          var found = 0;
+                                          for(i=0; i<cPageStates; i++) {
+                                            found += pageStates[i].size;
+                                            if (found >= over)
+                                              break;
+                                          }
+                                          i ++;
+                                          pageStates.splice(0, i);
+                                          debug("Trimmed", i, "items...");
+                                        }
+                                      } else
+                                        throw e;
+                                    }
+
+                                    history.replaceState(undefined, document.title, fullurl);
+                                    this.emit("page", baseurl, path);
+                                } catch (e) {
+                                  debug(e);
+                                  forwardPopState = [path, post];
+                                  try {
+                                    history.go(-1);
+                                  } catch (e) {}
                                 }
                             }, post, rid);
                         }
                     };
                     this.registerComponent("a", AnchorElementComponent);
                     window.addEventListener('popstate', (e) => {
+                      var state: PageState;
+                      const bhash = location.href.match(beforeHash);
+                      const baseurl = bhash[1] || location.href;
+                      const cStates = pageStates.length;
+                      for(var i=0; i<cStates; i++) {
+                        const _state = pageStates[i];
+                        if (_state.url === baseurl) {
+                          state = _state;
+                          break;
+                        }
+                      }
+                      const hasState = !!state;
+                      if (chash && chash[1] === bhash[1]) {
+                        debug("Only hash has changed...");
+                        return;
+                      }
+                      chash = bhash;
                       self.activerid ++;
-                      currentResponse = undefined;
-                        const bhash = location.href.match(beforeHash);
-                        debug("popstate", bhash, chash, e.state);
-                        if (bhash && chash && chash[1] === bhash[1]) {
-                          debug("Only hash has changed...");
-                          return;
-                        }
-                        chash = bhash;
 
-                        const hasState = !!e.state;
-                        if (hasState && e.state.error) {
-                          showError({
-                            stack: e.state.error,
-                            toString: function() {
-                              return this.stack;
+                      const error = hasState && state.data.error;
+                      if (error) {
+                        showError(error);
+                        return;
+                      }
+
+                      if (forwardPopState) {
+                        debug("forwardPopState", forwardPopState);
+                        const forward = forwardPopState;
+                        setTimeout(() => {
+                          this.defaultRequestPage(forward[0], forward[1]);
+                        });
+                        forwardPopState = undefined;
+                        return;
+                      }
+
+                      try {
+                        if (!hasState)
+                          throw new Error("No state for: " + baseurl + ", reloading...");
+                        if (state.data.user != this.currentUserID)
+                          throw new Error("User has changed since state was created, reloading...");
+                        document.title = state.data.title;
+                        this.pagesyshandler(state.data.response);
+                        if (state.data.body)
+                          this.restoreComponents(document.body, state.data.body);
+                        if (state.data.scroll)
+                          window.scrollTo.apply(window, state.data.scroll);
+                        debug("Used stored page state!", state);
+                        loader.resetError();
+                      } catch (err) {
+                        debug(err);
+                        var url = location.href;
+                        if (startsWith.test(url)) {
+                          try {
+                            if (/reloading\.\.\.$/.test(err.message)) {
+                              (this.requestPage as any)(url.substring(self.url.length), undefined, true);
+                              return;
                             }
-                          } as Error);
-                          return;
-                        }
-
-                        if (forwardPopState) {
-                          debug("forwardPopState", forwardPopState);
-                          const forward = forwardPopState;
-                          setTimeout(() => {
-                            this.defaultRequestPage(forward[0], forward[1]);
-                          });
-                          forwardPopState = undefined;
-                          return;
-                        }
-
-                        try {
-                          if (!hasState)
-                            throw new Error("No state, reloading...");
-                          if (e.state.user != this.currentUserID)
-                            throw new Error("User has changed since state was created, reloading...");
-                          const page = e.state.page;
-                          if (!page)
-                            throw new Error("Page was never loaded or page data is corrupt, reloading...");
-                          document.title = e.state.title;
-                          debug(e.state.title, page);
-                          this.pagesyshandler(convertResponse(page));
-                          if (e.state.body)
-                            this.restoreComponents(document.body, e.state.body);
-                          if (e.state.scroll)
-                            window.scrollTo.apply(window, e.state.scroll);
-                          loader.resetError();
-                        } catch (err) {
-                          console.warn(err);
-                          var url = location.href;
-                          if (startsWith.test(url)) {
-                            try {
-                              if (/reloading\.\.\.$/.test(err.message)) {
-                                (this.requestPage as any)(url.substring(self.url.length), undefined, true);
-                                return;
-                              }
-                              console.error("Unknown error occured, actually navigating to page...");
-                            } catch (e) {
-                              console.error(e);
-                            }
+                            console.error("Unknown error occured, actually navigating to page...");
+                          } catch (e) {
+                            console.error(e);
                           }
-                          location.reload(true);
                         }
-                    });
-                    return true;
+                        location.reload(true);
+                      }
+                  });
+                  return true;
                 }
                 defaultRequestPage(path: string, post?: any) {
                     if (post)

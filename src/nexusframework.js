@@ -1772,7 +1772,7 @@ class NexusFramework extends events.EventEmitter {
                 }
             }
             next();
-        });
+        }, true);
         return iopath;
     }
     /**
@@ -1874,7 +1874,6 @@ class NexusFramework extends events.EventEmitter {
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
-                                req.logger.info(urlpath);
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
                                     var prefix;
                                     if (req.pagesys)
@@ -2074,36 +2073,50 @@ class NexusFramework extends events.EventEmitter {
                 }
                 catch (e) { }
                 const updateUser = function () {
-                    try {
-                        var userName;
-                        const user = req.user;
-                        if (user && !user.isGuest)
-                            userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.name || user.email || user.id || "Logged");
-                        else
-                            userName = "Guest";
-                        Object.defineProperty(req, "logger", {
-                            configurable: true,
-                            value: logger.extend(userName)
-                        });
-                        res.locals.user = user;
-                    }
-                    catch (e) { }
+                    var userName;
+                    const user = req.user;
+                    if (user && !user.isGuest)
+                        userName = (user.isOwner || user.isAdmin ? "red" : (user.isDeveloper ? "purple" : (user.isEditor || user.isModerator ? "green" : "blue"))) + ":" + (user.displayName || user.name || user.email || user.id || "Logged");
+                    else
+                        userName = "Guest";
+                    Object.defineProperty(req, "logger", {
+                        configurable: true,
+                        value: logger.extend(userName)
+                    });
+                    res.locals.user = user;
                 };
                 const self = this;
                 var cuser;
                 async.eachSeries(this.prestack, function (entry, cb) {
-                    entry(req, res, cb);
-                    var user = req.user && (req.user.id || req.user.email || req.user.name || req.user.displayName);
-                    if (user !== cuser) {
-                        updateUser();
-                        cuser = user;
-                    }
+                    entry(req, res, function (err) {
+                        if (err)
+                            cb(err);
+                        else {
+                            const user = req.user && (req.user.id || req.user.email || req.user.name || req.user.displayName);
+                            if (user !== cuser) {
+                                updateUser();
+                                cuser = user;
+                            }
+                            cb();
+                        }
+                    });
                 }, function (err) {
                     if (err)
                         next(err);
                     else
                         async.eachSeries(self.stack, function (entry, cb) {
-                            entry(req, res, cb);
+                            entry(req, res, function (err) {
+                                if (err)
+                                    cb(err);
+                                else {
+                                    const user = req.user && (req.user.id || req.user.email || req.user.name || req.user.displayName);
+                                    if (user !== cuser) {
+                                        updateUser();
+                                        cuser = user;
+                                    }
+                                    cb();
+                                }
+                            });
                         }, (err) => {
                             const type = req.pagesys ? "PageSystem" : (req.io ? "Socket.IO" : (req.xhr ? "XHR" : "Standard"));
                             if (err) {
@@ -2117,7 +2130,7 @@ class NexusFramework extends events.EventEmitter {
                                 const user = req.user;
                                 if (user) {
                                     const id = user.id || user.email || user.displayName || "Logged";
-                                    res.set("X-User", "" + id);
+                                    res.set("X-Logged-User", "" + id);
                                 }
                                 self.handle0(req, res, next);
                             }

@@ -26,7 +26,7 @@ const app = express();
 }*/
 
 const aboutHtml = 'NexusFramework is a NodeJS Server framework, and is powering this website!';
-const indexHtml = '<h1>Test</h1> <p>This is a test page for <a href="/:about/">NexusFramework</a>.</p> <ul><li><a href="/test.ext/">test.ext</a> </li><li><a href="/:scripts/es6/loader.min.js">Minified loader script</a> </li></ul>';
+const indexHtml = '<h1>Test</h1> <p>This is a test page for <a href="/:about/">NexusFramework</a>.</p> <ul><li><a href="/error">error</a> </li><li><a href="/test.ext/">test.ext</a> </li><li><a href="/:scripts/es6/loader.min.js">Minified loader script</a> </li></ul>';
 
 var iopath: string;
 var framework: NexusFramework;
@@ -38,7 +38,7 @@ it("create and configure", function(cb) {
         iconfile: path.resolve(__dirname,"../icon.png"),
         styles: [
             {
-                source: "https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta.2/css/bootstrap.min.css"
+                source: "//unpkg.com/bootstrap-material-design@4.1.1/dist/css/bootstrap-material-design.min.css"
             },
             {
                 inline: true,
@@ -50,20 +50,20 @@ it("create and configure", function(cb) {
                 source: "nexusframeworkclient"
             },
             {
-                source: "https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"
+                source: "//code.jquery.com/jquery-3.2.1.slim.min.js"
             },
             {
-                source: "https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js",
+                source: "//unpkg.com/popper.js@1.12.6/dist/umd/popper.js",
                 dependencies: ["jquery"]
             },
             {
-                source: "https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta/js/bootstrap.min.js",
+                source: "//unpkg.com/bootstrap-material-design@4.1.1/dist/js/bootstrap-material-design.min.js",
                 dependencies: ["popper"]
             },
             {
                 inline: true,
-                source: "$(\".modal\").modal();NexusFrameworkClient.initPageSystem();",
-                dependencies: ["bootstrap"]
+                source: "jQuery('body').bootstrapMaterialDesign();;NexusFrameworkClient.initPageSystem();",
+                dependencies: ["bootstrap-material-design", "nexusframeworkclient"]
             }
         ],
         fonts: [
@@ -88,6 +88,16 @@ it("create and configure", function(cb) {
                 res.sendStatus(404);
         });
     });
+    framework.pushMiddleware(function(req, res, next) {
+      if(req.cookies.user)
+        req.user = {
+          id: 23,
+          level: 200,
+          email: "testy@nexustools.com",
+          name: "Testy Tester"
+        };
+      next();
+    }, true);
     framework.listen(35438, cb);
 });
 describe("request", function() {

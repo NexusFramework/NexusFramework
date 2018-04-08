@@ -60,6 +60,10 @@ declare interface NexusFrameworkTransportResponse {
      */
     readonly contentAsString: string;
     /**
+      * The length in bytes of
+      */
+    readonly contentLength: number;
+    /**
      * A map of response headers, each header can occur more than once.
      */
     readonly headers: {[index: string]: string[]};
@@ -97,6 +101,11 @@ declare interface NexusFrameworkPageSystemOptions {
      * Defaults to 500.
      */
     animationTiming?: number;
+    /**
+      * The size in bytes worth of data to allow storing for caching page history.
+      * Defaults to 25000000 (25mb)
+      */
+    pageHistoryCacheSize?: number;
     /**
      * Disables using SocketIO, which would be used otherwise, when available
      */
