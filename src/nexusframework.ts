@@ -560,18 +560,16 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                     else if (this['_index']) {
                         var urlpath: string;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                            var prefix: string;
+                            var prefix = req.sitePrefix;
                             if (req.pagesys)
-                                prefix = "/:pagesys";
-                            else
-                                prefix = req.get("prefix");
+                              prefix = _path.posix.join(prefix, ":pagesys");
                             if (urlpath.startsWith(prefix + "/"))
-                                urlpath = urlpath.substring(prefix.length);
+                              urlpath = urlpath.substring(prefix.length);
                             const q = urlpath.indexOf("?");
                             if (q == -1)
-                                urlpath += "/";
+                              urlpath += "/";
                             else
-                                urlpath = urlpath.substring(0, q) + "/" + urlpath.substring(q);
+                              urlpath = urlpath.substring(0, q) + "/" + urlpath.substring(q);
                             return res.redirect(urlpath);
                         }
                         this['_index'].handle(req, res, (err, locals?) => {
@@ -810,19 +808,18 @@ export class NHPRequestHandler extends LeafRequestHandler {
                 const _next = () => {
                     var urlpath: string;
                     if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                        var prefix: string;
+                        var prefix = req.sitePrefix;
                         if (req.pagesys)
-                            prefix = "/:pagesys";
-                        else
-                            prefix = req.get("prefix");
+                          prefix = _path.posix.join(prefix, ":pagesys");
                         if (urlpath.startsWith(prefix + "/"))
-                            urlpath = urlpath.substring(prefix.length);
+                          urlpath = urlpath.substring(prefix.length);
                         const q = urlpath.indexOf("?");
                         if (q == -1)
                             urlpath = urlpath.substring(0, urlpath.length - 1);
                         else
                             urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
-                        return res.redirect(urlpath);
+                        if (urlpath.length > req.sitePrefix.length)
+                            return res.redirect(urlpath);
                     }
 
                     this.impl(req, res, (err?: Error, locals?: any) => {
@@ -2004,7 +2001,7 @@ export class NexusFramework extends events.EventEmitter {
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
-                                if (req.method.toUpperCase() === "GET" && !/.\/(\?.*)?$/.test(urlpath)) {
+                                if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
                                     var prefix = req.sitePrefix;
                                     if (req.pagesys)
                                       prefix = _path.posix.join(prefix, ":pagesys");
@@ -2087,14 +2084,17 @@ export class NexusFramework extends events.EventEmitter {
                                     });
                             } else
                                 next();
+                            return;
                         } else if (req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath)) {
-                            const q = urlpath.indexOf("?");
-                            if (q == -1)
-                                urlpath = urlpath.substring(0, urlpath.length - 1);
-                            else
-                                urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
+                          const q = urlpath.indexOf("?");
+                          if (q == -1)
+                            urlpath = urlpath.substring(0, urlpath.length - 1);
+                          else
+                            urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
+                          if (urlpath.length > req.sitePrefix.length)
                             return res.redirect(urlpath);
-                        } else if (req.pagesys) {
+                        }
+                        if (req.pagesys) {
                             res.writeHead(200, {
                                 "content-disposition": "attachment",
                                 "content-type": "text/plain"

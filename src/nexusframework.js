@@ -470,11 +470,9 @@ class RequestHandlerWithChildren {
                     else if (this['_index']) {
                         var urlpath;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                            var prefix;
+                            var prefix = req.sitePrefix;
                             if (req.pagesys)
-                                prefix = "/:pagesys";
-                            else
-                                prefix = req.get("prefix");
+                                prefix = _path.posix.join(prefix, ":pagesys");
                             if (urlpath.startsWith(prefix + "/"))
                                 urlpath = urlpath.substring(prefix.length);
                             const q = urlpath.indexOf("?");
@@ -714,11 +712,9 @@ class NHPRequestHandler extends LeafRequestHandler {
                 const _next = () => {
                     var urlpath;
                     if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                        var prefix;
+                        var prefix = req.sitePrefix;
                         if (req.pagesys)
-                            prefix = "/:pagesys";
-                        else
-                            prefix = req.get("prefix");
+                            prefix = _path.posix.join(prefix, ":pagesys");
                         if (urlpath.startsWith(prefix + "/"))
                             urlpath = urlpath.substring(prefix.length);
                         const q = urlpath.indexOf("?");
@@ -726,7 +722,8 @@ class NHPRequestHandler extends LeafRequestHandler {
                             urlpath = urlpath.substring(0, urlpath.length - 1);
                         else
                             urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
-                        return res.redirect(urlpath);
+                        if (urlpath.length > req.sitePrefix.length)
+                            return res.redirect(urlpath);
                     }
                     this.impl(req, res, (err, locals) => {
                         if (err)
@@ -1881,7 +1878,7 @@ class NexusFramework extends events.EventEmitter {
                         var urlpath = url.parse(req.originalUrl).path;
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
-                                if (req.method.toUpperCase() === "GET" && !/.\/(\?.*)?$/.test(urlpath)) {
+                                if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
                                     var prefix = req.sitePrefix;
                                     if (req.pagesys)
                                         prefix = _path.posix.join(prefix, ":pagesys");
@@ -1965,6 +1962,7 @@ class NexusFramework extends events.EventEmitter {
                             }
                             else
                                 next();
+                            return;
                         }
                         else if (req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath)) {
                             const q = urlpath.indexOf("?");
@@ -1972,9 +1970,10 @@ class NexusFramework extends events.EventEmitter {
                                 urlpath = urlpath.substring(0, urlpath.length - 1);
                             else
                                 urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
-                            return res.redirect(urlpath);
+                            if (urlpath.length > req.sitePrefix.length)
+                                return res.redirect(urlpath);
                         }
-                        else if (req.pagesys) {
+                        if (req.pagesys) {
                             res.writeHead(200, {
                                 "content-disposition": "attachment",
                                 "content-type": "text/plain"

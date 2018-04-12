@@ -5,7 +5,7 @@
         "Katelyn Slater <ktaeyln@gmail.com>"
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.69",
+    "version": "0.3.0-beta.70",
     "license": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [
@@ -17,7 +17,7 @@
         "pages",
         "views",
         "express",
-        "netgate",
+        "nexusfork",
         "javascript",
         "template",
         "html",
