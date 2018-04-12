@@ -97,7 +97,7 @@ Object.defineProperties(window, {
                     get(url, cb, extraHeaders) {
                         cb({
                             url,
-                            code: 503,
+                            code: 0,
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
@@ -109,7 +109,7 @@ Object.defineProperties(window, {
                     head(url, cb, extraHeaders) {
                         cb({
                             url,
-                            code: 503,
+                            code: 0,
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
@@ -121,7 +121,7 @@ Object.defineProperties(window, {
                     put(url, data, cb, extraHeaders) {
                         cb({
                             url,
-                            code: 503,
+                            code: 0,
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
@@ -133,7 +133,7 @@ Object.defineProperties(window, {
                     post(url, data, cb, extraHeaders) {
                         cb({
                             url,
-                            code: 503,
+                            code: 0,
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
@@ -145,7 +145,7 @@ Object.defineProperties(window, {
                     execute(method, url, data, cb, extraHeaders) {
                         cb({
                             url,
-                            code: 503,
+                            code: 0,
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
@@ -157,7 +157,7 @@ Object.defineProperties(window, {
                     del(url, cb, extraHeaders) {
                         cb({
                             url,
-                            code: 503,
+                            code: 0,
                             get contentFromJSON() {
                                 throw new Error("No response to parse.");
                             },
@@ -184,7 +184,7 @@ Object.defineProperties(window, {
         get: function () {
             const loader = window.NexusFrameworkLoader;
             const showError = loader.showError;
-            const debug = function (...args) { }; //console.log.bind(console);
+            const debug = /*function(...args: any[]){};*/ console.log.bind(console);
             const GA_ANALYTICS = {
                 reportError: function (err, fatal) {
                     if (window.ga)
@@ -270,8 +270,6 @@ Object.defineProperties(window, {
                     this.activerid = 0;
                     this.components = {};
                     this.currentUserID = undefined;
-                    this.progressBar = document.getElementsByClassName("loader-progress-bar");
-                    this.progressBarContainer = document.getElementsByClassName("loader-progress-container");
                     this.progressVisible = false;
                     this.animationTiming = 500;
                     this.requestPage = this.defaultRequestPage;
@@ -311,107 +309,6 @@ Object.defineProperties(window, {
                         const child = focusable[i];
                         child.setAttribute("tabindex", child.getAttribute("data-tabindex"));
                         child.removeAttribute("data-tabindex");
-                    }
-                }
-                fadeInProgress(cb) {
-                    if (this.progressVisible) {
-                        if (cb)
-                            cb();
-                        return;
-                    }
-                    if (this.progressFadeCallbacks) {
-                        if (cb)
-                            this.progressFadeCallbacks.push(cb);
-                        return;
-                    }
-                    for (var i = 0; i < this.progressBar.length; i++) {
-                        try {
-                            const progbar = this.progressBar[i];
-                            const origClassName = progbar.className;
-                            progbar.className += " noani";
-                            progbar['style'].width = '0%';
-                            setTimeout(function () {
-                                progbar.className = origClassName;
-                            });
-                        }
-                        catch (e) { }
-                    }
-                    if (this.progressBarContainer.length) {
-                        var timer;
-                        this.progressFadeCallbacks = [];
-                        if (cb)
-                            this.progressFadeCallbacks.push(cb);
-                        const el = this.progressBarContainer[0];
-                        const onAnimationEnd = () => {
-                            try {
-                                clearTimeout(timer);
-                            }
-                            catch (e) { }
-                            this.progressVisible = true;
-                            const callbacks = this.progressFadeCallbacks;
-                            delete this.progressFadeCallbacks;
-                            callbacks.forEach(function (cb) {
-                                cb();
-                            });
-                        };
-                        timer = setTimeout(onAnimationEnd, this.animationTiming);
-                        setTimeout(() => {
-                            for (var i = 0; i < this.progressBarContainer.length; i++) {
-                                const container = this.progressBarContainer[i];
-                                if (!/(^|\s)loader\-progress\-visible(\s|$)/.test(container.className))
-                                    container.className = (container.className + " loader-progress-visible").trim();
-                            }
-                        });
-                    }
-                    else {
-                        this.progressVisible = true;
-                        if (cb)
-                            cb();
-                    }
-                }
-                fadeOutProgress(cb) {
-                    if (!this.progressVisible) {
-                        if (cb)
-                            cb();
-                        return;
-                    }
-                    if (this.progressFadeCallbacks) {
-                        if (cb)
-                            this.progressFadeCallbacks.push(cb);
-                        return;
-                    }
-                    for (var i = 0; i < this.progressBar.length; i++)
-                        this.progressBar[i]['style'].width = '100%';
-                    if (this.progressBarContainer.length) {
-                        var timer;
-                        this.progressFadeCallbacks = [];
-                        if (cb)
-                            this.progressFadeCallbacks.push(cb);
-                        const el = this.progressBarContainer[0];
-                        const onAnimationEnd = () => {
-                            try {
-                                clearTimeout(timer);
-                            }
-                            catch (e) { }
-                            this.progressVisible = false;
-                            const callbacks = this.progressFadeCallbacks;
-                            delete this.progressFadeCallbacks;
-                            callbacks.forEach(function (cb) {
-                                cb();
-                            });
-                        };
-                        timer = setTimeout(onAnimationEnd, this.animationTiming);
-                        for (var i = 0; i < this.progressBarContainer.length; i++) {
-                            const container = this.progressBarContainer[i];
-                            container.className = container.className.replace(/(^|\s)loader\-progress\-visible(\s|$)/g, function (match) {
-                                return /^\s.+\s$/.test(match) ? " " : "";
-                            });
-                        }
-                    }
-                    else {
-                        this.progressVisible = false;
-                        if (cb)
-                            cb();
                     }
                 }
                 get analytics() {
@@ -564,7 +461,7 @@ Object.defineProperties(window, {
                             if (!component) {
                                 const componentFactory = this.components[selector];
                                 try {
-                                    (component = components[selector] = new componentFactory()).create(element);
+                                    (component = components[selector] = new componentFactory).create(element);
                                 }
                                 catch (e) {
                                     states.push(undefined);
@@ -600,14 +497,14 @@ Object.defineProperties(window, {
                         return (res) => {
                             const user = res.headers['x-logged-user'];
                             if (user)
-                                this.currentUserID = user[0];
+                                self.currentUserID = user[0];
                             else
-                                this.currentUserID = undefined;
-                            debug("Current UID", this.currentUserID);
+                                self.currentUserID = undefined;
+                            debug("Current UID", self.currentUserID);
                             cb(res);
                             if (res.code === 200)
                                 setTimeout(() => {
-                                    this._analytics.reportPage();
+                                    self._analytics.reportPage();
                                 });
                         };
                     };
@@ -647,7 +544,7 @@ Object.defineProperties(window, {
                             if (e !== true)
                                 throw e;
                         }
-                        showError(error);
+                        return showError(error);
                     };
                     const transportPageSystem = {
                         requestPage(path, cb, post, rid) {
@@ -657,14 +554,17 @@ Object.defineProperties(window, {
                             }
                             if (!opts.noprogress) {
                                 self.disableAll();
-                                self.fadeInProgress();
+                                loader.showProgress();
                             }
                             const url = self.resolveUrl(":pagesys/" + path);
                             const _cb = opts.noprogress ? cb : function (res) {
-                                self.fadeInProgress(() => {
+                                if (opts.noprogress)
                                     cb(res);
-                                    self.enableAll();
-                                });
+                                else
+                                    loader.showProgress(false, () => {
+                                        cb(res);
+                                        self.enableAll();
+                                    });
                             };
                             if (post)
                                 window.NexusFrameworkTransport.post(url, post, wrapCB(_cb));
@@ -683,7 +583,7 @@ Object.defineProperties(window, {
                                     }
                                     if (!opts.noprogress) {
                                         self.disableAll();
-                                        self.fadeInProgress();
+                                        loader.showProgress();
                                     }
                                     const headers = {
                                         "referrer": location.href
@@ -701,10 +601,13 @@ Object.defineProperties(window, {
                                             });
                                         }
                                         const _cb = opts.noprogress ? cb : function (res) {
-                                            self.fadeInProgress(() => {
+                                            if (!opts.noprogress)
                                                 cb(res);
-                                                self.enableAll();
-                                            });
+                                            else
+                                                loader.showProgress(false, () => {
+                                                    cb(res);
+                                                    self.enableAll();
+                                                });
                                         };
                                         wrapCB(_cb)(convertResponse(res, self.resolveUrl(path)));
                                     });
@@ -719,7 +622,7 @@ Object.defineProperties(window, {
                     var base = document.getElementsByTagName("base");
                     base = base && base[0];
                     this.pagesysprerequest = opts.prerequest;
-                    this.pagesyshandler = opts.handler || ((res) => {
+                    this.pagesyshandler = opts.handler || ((res, pageReady) => {
                         try {
                             const contentType = res.headers['content-type'][0];
                             if (!/\/html(;.+)?$/.test(contentType.toLowerCase())) {
@@ -786,7 +689,8 @@ Object.defineProperties(window, {
                         document.body.appendChild(fragment);
                         loader.load(loaderScript, function () {
                             self.progressVisible = true;
-                            self.fadeOutProgress();
+                            loader.resetProgress();
+                            pageReady();
                         });
                         return true;
                     });
@@ -839,14 +743,14 @@ Object.defineProperties(window, {
                         restore(data) { }
                         save() { }
                     }
-                    this.requestPage = (path, post, replace = false) => {
+                    const requestPage = this.requestPage = (path, post, replace = false) => {
                         const match = path.match(/\.([^\/]+)([\?#].*)?$/);
                         if (match && match[0] !== "htm" && match[0] !== "html") {
                             this.defaultRequestPage(path, post);
                             debug("Ignoring navigation", path, match);
                         }
                         else {
-                            const rid = ++this.activerid;
+                            const rid = ++self.activerid;
                             const baseurl = this.resolveUrl(path);
                             const fullurl = baseurl + (match && match[2] || "");
                             if (replace)
@@ -857,11 +761,23 @@ Object.defineProperties(window, {
                                 window.scrollTo(0, 0);
                             }
                             loader.resetError();
+                            loader.resetProgress();
                             chash = fullurl.match(beforeHash);
                             this.pagesysimpl.requestPage(path, (res) => {
                                 try {
-                                    if (rid != this.activerid)
+                                    if (rid !== self.activerid)
                                         return;
+                                    if (!res.code || res.code === 502 || res.code === 503) {
+                                        loader.showProgress(true);
+                                        document.title = "Maintenance";
+                                        history.replaceState(undefined, "Maintenance", fullurl);
+                                        setTimeout(function () {
+                                            if (rid !== self.activerid)
+                                                return;
+                                            requestPage(path, post, true);
+                                        }, 15000);
+                                        return;
+                                    }
                                     const location = res.headers['x-location'] || res.headers['location'];
                                     if (location) {
                                         const url = resolveUrl(location[0]);
@@ -876,82 +792,101 @@ Object.defineProperties(window, {
                                     const contentDisposition = res.headers['content-disposition'];
                                     if (contentDisposition && contentDisposition[0].toLowerCase() == "attachment")
                                         throw new Error("Attachment disposition");
-                                    if (!this.pagesyshandler(res))
-                                        throw new Error("Could not handle response");
-                                    const contentType = res.headers['content-type'];
-                                    debug("history.replaceState", document.title);
-                                    const length = res.contentLength;
-                                    const tooBig = pageStateCacheSize <= length;
-                                    const stateData = tooBig ? undefined : {
-                                        title: document.title,
-                                        user: this.currentUserID,
-                                        scroll: [window.scrollX, window.scrollY],
-                                        body: this.saveComponents(document.body),
-                                        basehref: base ? base['href'] : undefined,
-                                        response: res
-                                    };
-                                    var i;
-                                    const cPageStates = pageStates.length;
-                                    try {
-                                        for (i = 0; i < cPageStates; i++) {
-                                            const state = pageStates[i];
-                                            if (state.url === baseurl) {
-                                                if (tooBig) {
-                                                    pageStates.splice(i, 1);
-                                                    pageStatesSize -= state.size;
-                                                }
-                                                else {
-                                                    state.data = stateData;
-                                                    state.updated = +new Date;
-                                                    pageStatesSize += length - state.size;
-                                                }
-                                                throw true;
-                                            }
-                                        }
-                                        if (!tooBig) {
-                                            pageStates.push({
-                                                url: baseurl,
-                                                data: stateData,
-                                                updated: +new Date,
-                                                size: length
-                                            });
-                                            pageStatesSize += length;
-                                            throw true;
-                                        }
-                                        else
-                                            debug("Response too big to store", baseurl, length);
-                                    }
-                                    catch (e) {
-                                        if (e === true) {
-                                            const over = pageStatesSize - pageStateCacheSize;
-                                            if (over > 0) {
-                                                pageStates.sort(function (a, b) {
-                                                    return a.updated - b.updated;
-                                                });
-                                                var found = 0;
+                                    this.pagesyshandler(res, function () {
+                                        if (rid !== self.activerid)
+                                            return;
+                                        try {
+                                            const title = document.title;
+                                            const contentType = res.headers['content-type'];
+                                            debug("history.replaceState", title);
+                                            const length = res.contentLength;
+                                            const tooBig = pageStateCacheSize <= length;
+                                            const stateData = tooBig ? undefined : {
+                                                title: title,
+                                                user: self.currentUserID,
+                                                scroll: [window.scrollX, window.scrollY],
+                                                body: self.saveComponents(document.body),
+                                                basehref: base ? base['href'] : undefined,
+                                                response: res
+                                            };
+                                            var i;
+                                            const cPageStates = pageStates.length;
+                                            try {
                                                 for (i = 0; i < cPageStates; i++) {
-                                                    found += pageStates[i].size;
-                                                    if (found >= over)
-                                                        break;
+                                                    const state = pageStates[i];
+                                                    if (state.url === baseurl) {
+                                                        if (tooBig) {
+                                                            pageStates.splice(i, 1);
+                                                            pageStatesSize -= state.size;
+                                                        }
+                                                        else {
+                                                            state.data = stateData;
+                                                            state.updated = +new Date;
+                                                            pageStatesSize += length - state.size;
+                                                        }
+                                                        throw true;
+                                                    }
                                                 }
-                                                i++;
-                                                pageStates.splice(0, i);
-                                                debug("Trimmed", i, "items...");
+                                                if (!tooBig) {
+                                                    pageStates.push({
+                                                        url: baseurl,
+                                                        data: stateData,
+                                                        updated: +new Date,
+                                                        size: length
+                                                    });
+                                                    pageStatesSize += length;
+                                                    throw true;
+                                                }
+                                                else
+                                                    debug("Response too big to store", baseurl, length);
                                             }
+                                            catch (e) {
+                                                if (e === true) {
+                                                    const over = pageStatesSize - pageStateCacheSize;
+                                                    if (over > 0) {
+                                                        pageStates.sort(function (a, b) {
+                                                            return a.updated - b.updated;
+                                                        });
+                                                        var found = 0;
+                                                        for (i = 0; i < cPageStates; i++) {
+                                                            found += pageStates[i].size;
+                                                            if (found >= over)
+                                                                break;
+                                                        }
+                                                        i++;
+                                                        pageStates.splice(0, i);
+                                                        debug("Trimmed", i, "items...");
+                                                    }
+                                                }
+                                                else
+                                                    throw e;
+                                            }
+                                            history.replaceState(undefined, document.title, fullurl);
+                                            self.emit("page", baseurl, path);
                                         }
-                                        else
-                                            throw e;
-                                    }
-                                    history.replaceState(undefined, document.title, fullurl);
-                                    this.emit("page", baseurl, path);
+                                        catch (e) {
+                                            debug(e);
+                                            forwardPopState = [path, post];
+                                            debug("forwardPopState", forwardPopState);
+                                            if (!replace)
+                                                try {
+                                                    debug("Going backwards");
+                                                    history.go(-1);
+                                                }
+                                                catch (e) { }
+                                        }
+                                    });
                                 }
                                 catch (e) {
                                     debug(e);
                                     forwardPopState = [path, post];
-                                    try {
-                                        history.go(-1);
-                                    }
-                                    catch (e) { }
+                                    debug("forwardPopState", forwardPopState);
+                                    if (!replace)
+                                        try {
+                                            debug("Going backwards");
+                                            history.go(-1);
+                                        }
+                                        catch (e) { }
                                 }
                             }, post, rid);
                         }
@@ -975,7 +910,7 @@ Object.defineProperties(window, {
                             return;
                         }
                         chash = bhash;
-                        self.activerid++;
+                        const rid = ++self.activerid;
                         const error = hasState && state.data.error;
                         if (error) {
                             showError(error);
@@ -985,32 +920,19 @@ Object.defineProperties(window, {
                             debug("forwardPopState", forwardPopState);
                             const forward = forwardPopState;
                             setTimeout(() => {
-                                this.defaultRequestPage(forward[0], forward[1]);
+                                if (rid === self.activerid)
+                                    self.defaultRequestPage(forward[0], forward[1]);
                             });
                             forwardPopState = undefined;
                             return;
                         }
-                        try {
-                            if (!hasState)
-                                throw new Error("No state for: " + baseurl + ", reloading...");
-                            if (state.data.user != this.currentUserID)
-                                throw new Error("User has changed since state was created, reloading...");
-                            document.title = state.data.title;
-                            this.pagesyshandler(state.data.response);
-                            if (state.data.body)
-                                this.restoreComponents(document.body, state.data.body);
-                            if (state.data.scroll)
-                                window.scrollTo.apply(window, state.data.scroll);
-                            debug("Used stored page state!", state);
-                            loader.resetError();
-                        }
-                        catch (err) {
+                        const onError = function (err) {
                             debug(err);
                             var url = location.href;
                             if (startsWith.test(url)) {
                                 try {
                                     if (/reloading\.\.\.$/.test(err.message)) {
-                                        this.requestPage(url.substring(self.url.length), undefined, true);
+                                        self.requestPage(url.substring(self.url.length), undefined, true);
                                         return;
                                     }
                                     console.error("Unknown error occured, actually navigating to page...");
@@ -1020,6 +942,34 @@ Object.defineProperties(window, {
                                 }
                             }
                             location.reload(true);
+                        };
+                        try {
+                            if (!hasState)
+                                throw new Error("No state for: " + baseurl + ", reloading...");
+                            if (state.data.user != self.currentUserID)
+                                throw new Error("User has changed since state was created, reloading...");
+                            document.title = state.data.title;
+                            loader.resetProgress();
+                            loader.resetError();
+                            self.pagesyshandler(state.data.response, function (err) {
+                                if (rid !== self.activerid)
+                                    return;
+                                try {
+                                    if (err)
+                                        throw err;
+                                    if (state.data.body)
+                                        self.restoreComponents(document.body, state.data.body);
+                                    if (state.data.scroll)
+                                        window.scrollTo.apply(window, state.data.scroll);
+                                    debug("Used stored page state!", state);
+                                }
+                                catch (err) {
+                                    onError(err);
+                                }
+                            });
+                        }
+                        catch (err) {
+                            onError(err);
                         }
                     });
                     return true;

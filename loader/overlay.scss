@@ -4,6 +4,18 @@
   -webkit-transition: $transition;
   transition:         $transition;
 }
+@mixin animation($animation...) {
+  -moz-animation:    $animation;
+  -o-animation:      $animation;
+  -webkit-animation: $animation;
+  animation:         $animation;
+}
+
+@keyframes loader-progress-bar-working {
+  0% {left: 0%}
+  50% {left: 80%}
+  100% {left: 0%}
+}
 
 .loader-container {
   top: 0px;
@@ -63,10 +75,18 @@
     color: white;
   }
   .loader-progress-heading,
+  .loader-progress-maintenance,
   .loader-progress-bar-container {
     left: 50%;
     transform: translateX(-50%);
     position: absolute;
+  }
+  .loader-progress-maintenance {
+    text-align: center;
+    padding: 0 12px;
+    font-size: 1em;
+    bottom: 25%;
+    width: 100%;
   }
   .loader-progress-heading {
     top: 15%;
@@ -94,19 +114,28 @@
       height: 152px;
     }
   }
+
   .loader-progress-bar-container {
     width: 80%;
     border: solid 0.8pt #999;
     height: 10px;
     bottom: 5%;
   }
+
   .loader-progress-bar {
     width: 0px;
     height: 100%;
     background: #999;
     @include transition(width .2s);
-    &.noani {
+    &.loader-progress-bar-immediate {
       @include transition(none);
     }
+  }
+
+  &.loader-progress-working .loader-progress-bar {
+    position: relative;
+    width: 20% !important;
+    @include animation(loader-progress-bar-working 2s ease infinite);
+    @include transition(none);
   }
 }

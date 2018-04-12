@@ -1,7 +1,7 @@
 /// <reference types="socket.io-client" />
 /// <reference types="jquery" />
 
-interface NexusFrameworkResource {
+declare interface NexusFrameworkResource {
     name: string;
     type: string;
     source: string;
@@ -34,13 +34,25 @@ declare interface NexusFrameworkLoader {
      */
     requestedResources(): string[];
     /**
+     * Get the source for a given resource.
+     */
+    resourceSource(key: string): string;
+    /**
      * Show the specified error to the user.
      */
-    showError(err: Error): void;
+    showError(err: Error): HTMLElement | HTMLCollection;
     /**
      * Clear the error screen.
      */
     resetError(): void;
+    /**
+     * Show the specified error to the user.
+     */
+    showProgress(maintenance?: boolean, cb?: () => void): HTMLElement | HTMLCollection;
+    /**
+     * Clear the error screen.
+     */
+    resetProgress(): void;
 }
 declare interface NexusFrameworkTransportResponse {
     /**
@@ -79,7 +91,7 @@ declare interface NexusFrameworkPageSystemOptions {
      *
      * @returns True when handled correctly, false to reload the page to the request url.
      */
-    handler?: (res: NexusFrameworkTransportResponse) => boolean;
+    handler?: (res: NexusFrameworkTransportResponse, contentReady: () => void) => boolean;
     /**
      * Method to call before attempting to make a page request.
      *
@@ -111,8 +123,29 @@ declare interface NexusFrameworkPageSystemOptions {
      */
     noio?: boolean;
 }
+declare interface NexusFrameworkEvents {
+  /**
+   * Add an event listener for when pages are loaded via the dynamic page system.
+   */
+  on(event: "page", cb: (baseurl: string, path: string) => void): void;
+  /**
+   * Add an event listener for a specific event.
+   */
+  on(event: string, cb: (...args: any[]) => void): void;
+  /**
+   * Remove a event listener for when pages are loaded via the dynamic page system.
+   */
+  off(event: "page", cb: (baseurl: string, path: string) => void): void;
+  /**
+   * Remove n event listener for a specific event.
+   */
+  off(event: string, cb: (...args: any[]) => void): void;
+}
+/*declare interface NexusFrameworkComponentHelper extends NexusFrameworkEvents {
+
+}*/
 declare interface NexusFrameworkComponent {
-    create(element: HTMLElement): void;
+    create(element: HTMLElement/*, createHelper: () => NexusFrameworkComponentHelper*/): void;
     destroy(): void;
 
     restore(data: any): void;
@@ -126,7 +159,7 @@ declare interface NexusFrameworkAnalyticsAdapter {
     reportPage(path?: string): void;
     reportEvent(category: string, action: string, label?: string, value?: number): void;
 }
-declare interface NexusFrameworkClient {
+declare interface NexusFrameworkClient extends NexusFrameworkEvents {
     /**
      * The Socket.IO instance, if enabled and available.
      */
@@ -187,22 +220,6 @@ declare interface NexusFrameworkClient {
      */
     enableAll(root?: HTMLElement): void;
 
-    /**
-     * Add an event listener for when pages are loaded via the dynamic page system.
-     */
-    on(event: "page", cb: (path: string) => void): void;
-    /**
-     * Add an event listener for a specific event.
-     */
-    on(event: string, cb: (...args: any[]) => void): void;
-    /**
-     * Remove a event listener for when pages are loaded via the dynamic page system.
-     */
-    off(event: "page", cb: (path: string) => void): void;
-    /**
-     * Remove n event listener for a specific event.
-     */
-    off(event: string, cb: (...args: any[]) => void): void;
     /**
      * Remove a event listener for when pages are loaded via the dynamic page system.
      */

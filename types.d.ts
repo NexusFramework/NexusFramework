@@ -209,6 +209,7 @@ declare interface Request extends nexusfork.WebRequest {
     xhrOrIO?: boolean;
     /**
      * Contains an array of uploaded files.
+     * These files are destroyed automatically when the response ends.
      */
     files?: {[index: string]: UploadedFile|UploadedFile[]};
     /**
@@ -218,11 +219,23 @@ declare interface Request extends nexusfork.WebRequest {
      * @param cb The callback
      * @param processors The processors, all by default
      */
-    processBody(cb: (err?: Error) => void, ...processors: BodyProcessor[]): Request;
+    processBody?(cb: (err?: Error) => void, ...processors: BodyProcessor[]): Request;
     /**
      * Read the request body to a Buffer.
      */
-    readBody(cb: (err: Error, data?: Buffer) => void, limit?: number): void;
+    readBody?(cb: (err: Error, data?: Buffer) => void, limit?: number): void;
+    /**
+     * The subdirectory nexusframework was requested from, if one.
+     */
+    buildUrl?(uri?: string): string;
+    /**
+     * The site url for the directory and domain nexusframework was requested from.
+     */
+    siteUrl?: string;
+    /**
+     * The subdirectory nexusframework was requested from, if one.
+     */
+    sitePrefix?: string;
 }
 declare interface Renderer {
     (out: {write: (data: string) => void},flush?:() => void): void
@@ -275,7 +288,7 @@ declare interface Response extends nexusfork.WebResponse {
      */
     setRenderOptions(options: RenderOptions): void;
     /**
-     * Oerride the render options for this response.
+     * Override the render options for this response.
      */
     applyRenderOptions(options: RenderOptions): void;
 

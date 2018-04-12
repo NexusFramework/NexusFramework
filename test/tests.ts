@@ -26,7 +26,7 @@ const app = express();
 }*/
 
 const aboutHtml = 'NexusFramework is a NodeJS Server framework, and is powering this website!';
-const indexHtml = '<h1>Test</h1> <p>This is a test page for <a href="/:about/">NexusFramework</a>.</p> <ul><li><a href="/error">error</a> </li><li><a href="/test.ext/">test.ext</a> </li><li><a href="/:scripts/es6/loader.min.js">Minified loader script</a> </li></ul>';
+const indexHtml = '<h1>Test</h1> <p>This is a test page for <a href="/:about/">NexusFramework</a>.</p> <ul><li><a href="/error">error</a> </li><li><a href="/maintenance">maintenance</a> </li><li><a href="/test.ext/">test.ext</a> </li><li><a href="/:scripts/es6/loader.min.js">Minified loader script</a> </li></ul>';
 
 var iopath: string;
 var framework: NexusFramework;

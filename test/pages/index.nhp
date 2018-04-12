@@ -5,6 +5,9 @@
     <a href="/error">error</a>
   </li>
   <li>
+    <a href="/maintenance">maintenance</a>
+  </li>
+  <li>
     <a href="/test.ext/">test.ext</a>
   </li>
   <li>

@@ -34,12 +34,12 @@
     const errorContainerArray = errorFade ? d.getElementsByClassName("loader-error-container") : undefined;
     const errorMessageArray = d.getElementsByClassName("loader-error-message");
     const showError = function (err) {
-        console.warn(err);
+        const messageAndStack = "" + (err.stack || err);
+        console.warn(messageAndStack);
         if (errorShowed)
-            return;
+            return errorContainerArray;
         errorShowed = true;
         if (errorMessageArray.length) {
-            const messageAndStack = "" + (err.stack || err);
             const replacements = {
                 '&': '&amp;',
                 '<': '&lt;',
@@ -70,6 +70,7 @@
             if (errorFade && errorContainerArray.length)
                 addClass(errorContainerArray, errorFade);
         }
+        return errorContainerArray;
     };
     try {
         var resetProgress, incrementProgress;
@@ -125,6 +126,9 @@
         }
         if (progressBarContainer)
             addClass(progressBarContainer, "loader-progress-visible");
+        /**
+         * https://stackoverflow.com/questions/3728798/running-javascript-downloaded-with-xmlhttprequest/35247060#answer-31275143
+         */
         const base64 = function (data) {
             try {
                 return btoa(data);
@@ -166,6 +170,7 @@
         };
         var initialVersions;
         const loadCallbacks = {};
+        const resourceSources = {};
         const NexusFrameworkLoaderImpl = {
             load(data, oncomplete) {
                 if (initialVersions) {
@@ -201,7 +206,10 @@
                 }
             },
             requestedResources() {
-                return Object.keys(loadCallbacks);
+                return Object.keys(resourceSources);
+            },
+            resourceSource(key) {
+                return resourceSources[key];
             },
             loadResource(type, source, cb, deps = [], inlineOrIntegrity, name) {
                 try {
@@ -292,9 +300,12 @@
                         callbacks.forEach(function (cb) {
                             cb(err);
                         });
-                        loadCallbacks[key] = { push: function (cb) {
-                                cb(err);
-                            } };
+                        if (inlineOrIntegrity === true && type === "script")
+                            delete loadCallbacks[key];
+                        else
+                            loadCallbacks[key] = { push: function (cb) {
+                                    cb(err);
+                                } };
                     };
                     callbacks = loadCallbacks[key] = [onLoad];
                     if (inlineOrIntegrity !== true && source.indexOf("/") == -1)
@@ -306,6 +317,7 @@
                                 if (err)
                                     callCallbacks(err);
                                 else if (!--toLoad) {
+                                    resourceSources[key] = source;
                                     if (inlineOrIntegrity === true)
                                         processResource('data:' + contentType + ';base64,' + base64(source));
                                     else
@@ -332,7 +344,53 @@
         };
         NexusFrameworkLoaderImpl.showError = function (err) {
             errorShowed = false;
-            showError(err);
+            return showError(err);
+        };
+        var maintenanceOpen, progressTimeout;
+        NexusFrameworkLoaderImpl.showProgress = function (maintenance, cb) {
+            if (progressBarContainer) {
+                addClass(progressBarContainer, "loader-progress-visible");
+                if (maintenance) {
+                    Array.prototype.forEach.call(progressBarContainer, function (container) {
+                        container.querySelector(".loader-progress-maintenance").style.display = "";
+                    });
+                    addClass(progressBarContainer, "loader-progress-working");
+                    maintenanceOpen = true;
+                }
+                else if (maintenanceOpen) {
+                    Array.prototype.forEach.call(progressBarContainer, function (container) {
+                        container.querySelector(".loader-progress-maintenance").style.display = "none";
+                    });
+                    rmClass(progressBarContainer, "loader-progress-working");
+                    maintenanceOpen = undefined;
+                }
+                if (cb) {
+                    try {
+                        clearTimeout(progressTimeout);
+                    }
+                    catch (e) { }
+                    progressTimeout = setTimeout(cb, 200);
+                }
+            }
+            else if (cb)
+                cb();
+            return progressBarContainer;
+        };
+        NexusFrameworkLoaderImpl.resetProgress = function () {
+            if (progressBarContainer) {
+                try {
+                    clearTimeout(progressTimeout);
+                }
+                catch (e) { }
+                rmClass(progressBarContainer, "loader-progress-visible");
+                if (maintenanceOpen) {
+                    Array.prototype.forEach.call(progressBarContainer, function (container) {
+                        container.querySelector(".loader-progress-maintenance").style.display = "none";
+                    });
+                    rmClass(progressBarContainer, "loader-progress-working");
+                    maintenanceOpen = undefined;
+                }
+            }
         };
         Object.defineProperty(w, "NexusFrameworkLoader", {
             value: NexusFrameworkLoaderImpl
