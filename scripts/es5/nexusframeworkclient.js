@@ -21,9 +21,10 @@ Object.defineProperties(window, {
             var impl;
             if ("XMLHttpRequest" in window) {
                 var NexusFrameworkXMLHttpRequestResponse_1 = /** @class */ (function () {
-                    function NexusFrameworkXMLHttpRequestResponse(request, url) {
+                    function NexusFrameworkXMLHttpRequestResponse(request, url, hadData) {
                         this._url = url;
                         this.request = request;
+                        this.hadData = hadData;
                     }
                     Object.defineProperty(NexusFrameworkXMLHttpRequestResponse.prototype, "url", {
                         get: function () {
@@ -103,10 +104,34 @@ Object.defineProperties(window, {
                         };
                     request.onreadystatechange = function (e) {
                         if (request.readyState === XMLHttpRequest.DONE) {
-                            cb(new NexusFrameworkXMLHttpRequestResponse_1(request, url));
+                            cb(new NexusFrameworkXMLHttpRequestResponse_1(request, url, !!data));
                         }
                     };
-                    request.send(data);
+                    var type = data && data.type;
+                    if (type)
+                        switch (type) {
+                            case "":
+                            case "text/urlencoded":
+                                var dat = "";
+                                for (var _i = 0, _a = data.data; _i < _a.length; _i++) {
+                                    var entry = _a[_i];
+                                    if (dat)
+                                        dat += "&";
+                                    dat += encodeURIComponent(entry[0]);
+                                    dat += "=";
+                                    dat += encodeURIComponent(entry[1]);
+                                }
+                                request.setRequestHeader("Content-Type", "text/urlencoded");
+                                request.send(dat);
+                                break;
+                            case "multipart/form-data":
+                                request.send(data.data);
+                                break;
+                            default:
+                                request.send(data);
+                        }
+                    else
+                        request.send(data);
                 };
                 impl = {
                     get: function (url, cb, extraHeaders, progcb) {
@@ -536,6 +561,8 @@ Object.defineProperties(window, {
                         return console.error("The NexusFramework Loader is required for the dynamic Page System to work correctly.");
                     if (!history.pushState || !history.replaceState)
                         return console.warn("This browser is missing an essential feature required for the dynamic Page System.");
+                    if (this.pagesyshandler)
+                        return console.warn("Page System already initialized, ignoring additional requests to initialize.");
                     opts = opts || {};
                     var self = this;
                     var pageStatesSize = 0;
@@ -610,7 +637,7 @@ Object.defineProperties(window, {
                                 if (opts.noprogress)
                                     cb(res);
                                 else
-                                    loader.showProgress(false, function () {
+                                    loader.showProgress(function () {
                                         cb(res);
                                         self.enableAll();
                                     });
@@ -653,7 +680,7 @@ Object.defineProperties(window, {
                                             if (!opts.noprogress)
                                                 cb(res);
                                             else
-                                                loader.showProgress(false, function () {
+                                                loader.showProgress(function () {
                                                     cb(res);
                                                     self.enableAll();
                                                 });
@@ -745,7 +772,7 @@ Object.defineProperties(window, {
                     });
                     var forwardPopState;
                     var beforeHash = /^([^#]+)(#.*)?$/;
-                    var chash = location.href.match(beforeHash);
+                    var chash = location.href.match(beforeHash)[1];
                     var startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     var AnchorElementComponent = /** @class */ (function () {
                         function AnchorElementComponent() {
@@ -758,9 +785,8 @@ Object.defineProperties(window, {
                                     return;
                                 var url = _this.element.href;
                                 var bhash = url.match(beforeHash);
-                                if (bhash && chash && bhash[2] && chash[1] === bhash[1])
+                                if (bhash[2] && chash === bhash[1])
                                     return;
-                                chash = bhash;
                                 if (startsWith.test(url))
                                     try {
                                         var match = url.match(/^(.+)#.*$/);
@@ -794,6 +820,78 @@ Object.defineProperties(window, {
                         AnchorElementComponent.prototype.save = function () { };
                         return AnchorElementComponent;
                     }());
+                    var FormElementComponent = /** @class */ (function () {
+                        function FormElementComponent() {
+                            var _this = this;
+                            this.handler = function (e) {
+                                if (_this.element.hasAttribute("data-nopagesys") || _this.element.hasAttribute("data-nodynamic"))
+                                    return;
+                                var method = _this.element.getAttribute("method") || "get";
+                                var enctype = _this.element.getAttribute("enctype") || "text/urlencoded";
+                                var action = _this.element.getAttribute("action") || "";
+                                var url = resolveUrl(action);
+                                if (startsWith.test(url)) {
+                                    try {
+                                        var match = url.match(/^(.+)#.*$/);
+                                        if (match)
+                                            url = match[1];
+                                        var formData = new FormData(_this.element);
+                                        loader.showProgress(undefined, "Submitting Form", "Your form data is being processed");
+                                        if (method.trim().toLowerCase() === "post")
+                                            self.requestPage(url.substring(self.url.length), { type: enctype, data: formData });
+                                        else {
+                                            var first = true;
+                                            var reqUrl = url.substring(self.url.length) + "?";
+                                            for (var _i = 0, _a = formData; _i < _a.length; _i++) {
+                                                var entry = _a[_i];
+                                                if (first)
+                                                    first = false;
+                                                else
+                                                    reqUrl += "&";
+                                                reqUrl += encodeURIComponent(entry[0]);
+                                                reqUrl += "=";
+                                                reqUrl += encodeURIComponent(entry[1]);
+                                            }
+                                            self.requestPage(reqUrl);
+                                        }
+                                        try {
+                                            e.stopPropagation();
+                                        }
+                                        catch (e) { }
+                                        try {
+                                            e.preventDefault();
+                                        }
+                                        catch (e) { }
+                                        Array.prototype.forEach.call(_this.element.querySelectorAll("a, input, select, textarea, iframe, button, *[name]"), function (el) {
+                                            el.setAttribute("disabled", "disabled");
+                                            el.className += " disabled";
+                                        });
+                                        Array.prototype.forEach.call(_this.element.querySelectorAll("button:not([type]), button[type=submit]"), function (button) {
+                                            button.innerHTML = "Processing Request";
+                                        });
+                                        Array.prototype.forEach.call(_this.element.querySelectorAll("input[type=submit]"), function (input) {
+                                            input.value = "Processing Request";
+                                        });
+                                        return;
+                                    }
+                                    catch (e) {
+                                        debug(e);
+                                    }
+                                }
+                                debug("Submitting", url);
+                            };
+                        }
+                        FormElementComponent.prototype.create = function (element) {
+                            element.addEventListener("submit", this.handler);
+                            this.element = element;
+                        };
+                        FormElementComponent.prototype.destroy = function () {
+                            this.element.removeEventListener("submit", this.handler);
+                        };
+                        FormElementComponent.prototype.restore = function (data) { };
+                        FormElementComponent.prototype.save = function () { };
+                        return FormElementComponent;
+                    }());
                     var requestPage = this.requestPage = function (path, post, replace) {
                         if (replace === void 0) { replace = false; }
                         var match = path.match(/\.([^\/]+)([\?#].*)?$/);
@@ -802,32 +900,43 @@ Object.defineProperties(window, {
                             debug("Ignoring navigation", path, match);
                         }
                         else {
+                            debug("requestPage", path);
                             var rid_1 = ++self.activerid;
                             var baseurl_1 = _this.resolveUrl(path);
                             var fullurl_1 = baseurl_1 + (match && match[2] || "");
                             if (replace)
-                                history.replaceState(undefined, "Loading...", fullurl_1);
+                                history.replaceState(!!post, "Loading...", fullurl_1);
                             else {
-                                history.replaceState(undefined, document.title, location.href);
-                                history.pushState(undefined, "Loading...", fullurl_1);
+                                history.pushState(!!post, "Loading...", fullurl_1);
+                                chash = fullurl_1.match(beforeHash)[1];
                                 window.scrollTo(0, 0);
                             }
                             loader.resetError();
                             loader.resetProgress();
-                            chash = fullurl_1.match(beforeHash);
                             _this.pagesysimpl.requestPage(path, function (res) {
                                 try {
                                     if (rid_1 !== self.activerid)
                                         return;
-                                    if (!res.code || res.code === 502 || res.code === 503) {
-                                        loader.showProgress(true);
-                                        document.title = "Maintenance";
-                                        history.replaceState(undefined, "Maintenance", fullurl_1);
+                                    if (!res.code) {
+                                        loader.showProgress(undefined, "Connection Issue", "Check your network and try again");
+                                        document.title = "Connection Issue";
+                                        history.replaceState(res.hadData, "Connection Issue", fullurl_1);
                                         setTimeout(function () {
                                             if (rid_1 !== self.activerid)
                                                 return;
                                             requestPage(path, post, true);
-                                        }, 15000);
+                                        }, 900000);
+                                        return;
+                                    }
+                                    else if (res.code === 502 || res.code === 503) {
+                                        loader.showProgress(undefined, "Scheduled Maintenance", "Sorry but this website is undergoing scheduled maintenance");
+                                        document.title = "Scheduled Maintenance";
+                                        history.replaceState(res.hadData, "Scheduled Maintenance", fullurl_1);
+                                        setTimeout(function () {
+                                            if (rid_1 !== self.activerid)
+                                                return;
+                                            requestPage(path, post, true);
+                                        }, 900000);
                                         return;
                                     }
                                     var location_1 = res.headers['x-location'] || res.headers['location'];
@@ -850,7 +959,6 @@ Object.defineProperties(window, {
                                         try {
                                             var title = document.title;
                                             var contentType = res.headers['content-type'];
-                                            debug("history.replaceState", title);
                                             var length_1 = res.contentLength;
                                             var tooBig = pageStateCacheSize <= length_1;
                                             var stateData = tooBig ? undefined : {
@@ -913,15 +1021,17 @@ Object.defineProperties(window, {
                                                 else
                                                     throw e;
                                             }
-                                            history.replaceState(undefined, document.title, fullurl_1);
+                                            history.replaceState(res.hadData, document.title, fullurl_1);
                                             self.emit("page", baseurl_1, path);
                                         }
                                         catch (e) {
                                             debug(e);
-                                            forwardPopState = [path, post];
-                                            debug("forwardPopState", forwardPopState);
-                                            if (!replace)
+                                            if (replace)
+                                                window.location.reload(true);
+                                            else
                                                 try {
+                                                    chash = undefined;
+                                                    forwardPopState = [path, post];
                                                     debug("Going backwards");
                                                     history.go(-1);
                                                 }
@@ -931,10 +1041,12 @@ Object.defineProperties(window, {
                                 }
                                 catch (e) {
                                     debug(e);
-                                    forwardPopState = [path, post];
-                                    debug("forwardPopState", forwardPopState);
-                                    if (!replace)
+                                    if (replace)
+                                        window.location.reload(true);
+                                    else
                                         try {
+                                            chash = undefined;
+                                            forwardPopState = [path, post];
                                             debug("Going backwards");
                                             history.go(-1);
                                         }
@@ -944,41 +1056,85 @@ Object.defineProperties(window, {
                         }
                     };
                     this.registerComponent("a", AnchorElementComponent);
+                    this.registerComponent("form", FormElementComponent);
                     window.addEventListener('popstate', function (e) {
-                        var state;
-                        var bhash = location.href.match(beforeHash);
-                        var baseurl = bhash[1] || location.href;
-                        var cStates = pageStates.length;
-                        for (var i = 0; i < cStates; i++) {
-                            var _state = pageStates[i];
-                            if (_state.url === baseurl) {
-                                state = _state;
-                                break;
+                        try {
+                            var state;
+                            var bhash = location.href.match(beforeHash);
+                            var cStates = pageStates.length;
+                            var baseurl = bhash[1];
+                            for (var i = 0; i < cStates; i++) {
+                                var _state = pageStates[i];
+                                if (_state.url === baseurl) {
+                                    state = _state;
+                                    break;
+                                }
                             }
-                        }
-                        var hasState = !!state;
-                        if (chash && chash[1] === bhash[1]) {
-                            debug("Only hash has changed...");
-                            return;
-                        }
-                        chash = bhash;
-                        var rid = ++self.activerid;
-                        var error = hasState && state.data.error;
-                        if (error) {
-                            showError(error);
-                            return;
-                        }
-                        if (forwardPopState) {
-                            debug("forwardPopState", forwardPopState);
-                            var forward_1 = forwardPopState;
-                            setTimeout(function () {
-                                if (rid === self.activerid)
-                                    self.defaultRequestPage(forward_1[0], forward_1[1]);
+                            var hasState = !!state;
+                            var rid_2 = ++self.activerid;
+                            var error = hasState && state.data.error;
+                            if (error) {
+                                showError(error);
+                                return;
+                            }
+                            if (forwardPopState) {
+                                debug("forwardPopState", forwardPopState);
+                                var forward_1 = forwardPopState;
+                                setTimeout(function () {
+                                    if (rid_2 === self.activerid)
+                                        self.defaultRequestPage(forward_1[0], forward_1[1]);
+                                });
+                                forwardPopState = undefined;
+                                return;
+                            }
+                            if (chash === baseurl) {
+                                debug("Only hash has changed...", baseurl);
+                                return;
+                            }
+                            console.log(baseurl, chash, e);
+                            console.trace();
+                            chash = bhash[1];
+                            if (e.state)
+                                alert("You submitted data to this page, which cannot be re-sent. Because of this, what you're viewing may not be the same now.");
+                            if (!hasState)
+                                throw new Error("No state for: " + baseurl + ", reloading...");
+                            if (state.data.user != self.currentUserID)
+                                throw new Error("User has changed since state was created, reloading...");
+                            document.title = state.data.title;
+                            loader.resetProgress();
+                            loader.resetError();
+                            self.pagesyshandler(state.data.response, function (err) {
+                                if (rid_2 !== self.activerid)
+                                    return;
+                                try {
+                                    if (err)
+                                        throw err;
+                                    if (state.data.body)
+                                        self.restoreComponents(document.body, state.data.body);
+                                    if (state.data.scroll)
+                                        window.scrollTo.apply(window, state.data.scroll);
+                                    debug("Used stored page state!", state);
+                                }
+                                catch (err) {
+                                    debug(err);
+                                    var url = location.href;
+                                    if (startsWith.test(url)) {
+                                        try {
+                                            if (/reloading\.\.\.$/.test(err.message)) {
+                                                self.requestPage(url.substring(self.url.length), undefined, true);
+                                                return;
+                                            }
+                                            console.error("Unknown error occured, actually navigating to page...");
+                                        }
+                                        catch (e) {
+                                            console.error(e);
+                                        }
+                                    }
+                                    location.reload(true);
+                                }
                             });
-                            forwardPopState = undefined;
-                            return;
                         }
-                        var onError = function (err) {
+                        catch (err) {
                             debug(err);
                             var url = location.href;
                             if (startsWith.test(url)) {
@@ -994,34 +1150,6 @@ Object.defineProperties(window, {
                                 }
                             }
                             location.reload(true);
-                        };
-                        try {
-                            if (!hasState)
-                                throw new Error("No state for: " + baseurl + ", reloading...");
-                            if (state.data.user != self.currentUserID)
-                                throw new Error("User has changed since state was created, reloading...");
-                            document.title = state.data.title;
-                            loader.resetProgress();
-                            loader.resetError();
-                            self.pagesyshandler(state.data.response, function (err) {
-                                if (rid !== self.activerid)
-                                    return;
-                                try {
-                                    if (err)
-                                        throw err;
-                                    if (state.data.body)
-                                        self.restoreComponents(document.body, state.data.body);
-                                    if (state.data.scroll)
-                                        window.scrollTo.apply(window, state.data.scroll);
-                                    debug("Used stored page state!", state);
-                                }
-                                catch (err) {
-                                    onError(err);
-                                }
-                            });
-                        }
-                        catch (err) {
-                            onError(err);
                         }
                     });
                     return true;

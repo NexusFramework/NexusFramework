@@ -1,1 +1,2 @@
-<pre><?json body?></pre>
+<pre><?json post?></pre>
+<pre><?json files?></pre>

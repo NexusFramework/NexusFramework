@@ -58,12 +58,12 @@ if (has_slim_io_js) {
 var nexusframeworkclient_es5_integrity: string;
 var nexusframeworkclient_es6_integrity: string;
 try {
-  let hash = crypto.createHash("sha512");
-  hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/nexusframeworkclient.min.js"), "utf8"));
-  nexusframeworkclient_es5_integrity = "sha512-" + hash.digest("base64");
-  hash = crypto.createHash("sha512");
-  hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/nexusframeworkclient.min.js"), "utf8"));
-  nexusframeworkclient_es6_integrity = "sha512-" + hash.digest("base64");
+  // let hash = crypto.createHash("sha512");
+  // hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es5/nexusframeworkclient.min.js"), "utf8"));
+  // nexusframeworkclient_es5_integrity = "sha512-" + hash.digest("base64");
+  // hash = crypto.createHash("sha512");
+  // hash.update(fs.readFileSync(_path.resolve(__dirname, "../scripts/es6/nexusframeworkclient.min.js"), "utf8"));
+  // nexusframeworkclient_es6_integrity = "sha512-" + hash.digest("base64");
 } catch(e) {
   console.warn(e);
 }
@@ -560,11 +560,11 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                     else if (this['_index']) {
                         var urlpath: string;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                            var prefix = req.sitePrefix;
-                            if (req.pagesys)
-                              prefix = _path.posix.join(prefix, ":pagesys");
-                            if (urlpath.startsWith(prefix + "/"))
-                              urlpath = urlpath.substring(prefix.length);
+                            if (req.pagesys) {
+                              const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
+                              if (urlpath.startsWith(prefix))
+                                urlpath = req.sitePrefix + urlpath.substring(prefix.length);
+                            }
                             const q = urlpath.indexOf("?");
                             if (q == -1)
                               urlpath += "/";
@@ -808,11 +808,11 @@ export class NHPRequestHandler extends LeafRequestHandler {
                 const _next = () => {
                     var urlpath: string;
                     if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                        var prefix = req.sitePrefix;
-                        if (req.pagesys)
-                          prefix = _path.posix.join(prefix, ":pagesys");
-                        if (urlpath.startsWith(prefix + "/"))
-                          urlpath = urlpath.substring(prefix.length);
+                        if (req.pagesys) {
+                          const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
+                          if (urlpath.startsWith(prefix))
+                            urlpath = req.sitePrefix + urlpath.substring(prefix.length);
+                        }
                         const q = urlpath.indexOf("?");
                         if (q == -1)
                             urlpath = urlpath.substring(0, urlpath.length - 1);
@@ -1657,7 +1657,7 @@ export class NexusFramework extends events.EventEmitter {
         const multerStorage = multer.diskStorage({
             destination,
             filename: function (req, file, cb) {
-                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + "." + _path.extname(file.originalname));
+                cb(null, stringHash(file.fieldname) + '-' + stringHash("" + +(new Date)) + _path.extname(file.originalname));
             }
         });
         process.on("exit", function() {
@@ -2002,11 +2002,11 @@ export class NexusFramework extends events.EventEmitter {
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
-                                    var prefix = req.sitePrefix;
-                                    if (req.pagesys)
-                                      prefix = _path.posix.join(prefix, ":pagesys");
-                                    if (urlpath.startsWith(prefix + "/"))
-                                      urlpath = urlpath.substring(prefix.length);
+                                    if (req.pagesys) {
+                                      const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
+                                      if (urlpath.startsWith(prefix))
+                                        urlpath = req.sitePrefix + urlpath.substring(prefix.length);
+                                    }
                                     const q = urlpath.indexOf("?");
                                     if (q == -1)
                                       urlpath += "/";
@@ -2381,17 +2381,33 @@ export class NexusFramework extends events.EventEmitter {
               });
       } catch (e) {}
       try {
-          if (req.io)
+          if (req.io) {
               Object.defineProperty(req, "processBody", {
                   configurable: true,
                   value: function (cb: (err?: Error) => void, ...processors: BodyProcessor[]) {
                       cb();
                   }
               });
-          else
+              try {
+                res.locals.post = req.body;
+              } catch(e) {}
+          } else
               Object.defineProperty(req, "processBody", {
                   configurable: true,
-                  value: (cb: (err?: Error) => void, ...processors: BodyProcessor[]) => {
+                  value: (_cb: (err?: Error) => void, ...processors: BodyProcessor[]) => {
+                    const cb = function(err?: Error) {
+                      if (err)
+                        _cb(err);
+                      else {
+                        try {
+                          res.locals.post = req.body;
+                        } catch(e) {}
+                        try {
+                          res.locals.files = req.files;
+                        } catch(e) {}
+                        _cb();
+                      }
+                    }
                       const contentType = req.get("content-type");
                       if (!processors.length)
                           processors = [BodyProcessor.URLEncoded, BodyProcessor.JSONBody, BodyProcessor.MultipartFormData];
@@ -2474,9 +2490,6 @@ export class NexusFramework extends events.EventEmitter {
       } catch (e) {}
       try {
         res.locals.get = req.query;
-      } catch(e) {}
-      try {
-        res.locals.post = req.body;
       } catch(e) {}
       try {
         res.locals.sitePrefix = prefix;
@@ -2955,7 +2968,7 @@ export class NexusFramework extends events.EventEmitter {
               resarray.push(script as any);
           });
 
-          return [this.versions, resarray];
+          return [this.versions, resarray, siteUrl];
       };
       try {
           Object.defineProperty(res, "getLoaderData", {

@@ -5,7 +5,7 @@
         "Katelyn Slater <ktaeyln@gmail.com>"
     ],
     "homepage": "https://nexustools.com/projects/nexusframework/nodejs",
-    "version": "0.3.0-beta.70",
+    "version": "0.3.0-beta.71",
     "license": "Apache-2.0",
     "description": "ExpressJS and NexusFork compatible website framework.",
     "keywords": [
@@ -57,7 +57,7 @@
         "lodash": "^4.17.5",
         "lru-weak-cache": "^0.3.2",
         "multer": "^1.3.0",
-        "nhp": "^0.9.0-beta.9",
+        "nhp": "^0.9.0-beta.10",
         "sharp": "^0.20.1",
         "socket.io": "^2.1.0",
         "statuses": "^1.5.0",

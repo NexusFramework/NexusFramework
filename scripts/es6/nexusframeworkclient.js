@@ -11,9 +11,10 @@ Object.defineProperties(window, {
             var impl;
             if ("XMLHttpRequest" in window) {
                 class NexusFrameworkXMLHttpRequestResponse {
-                    constructor(request, url) {
+                    constructor(request, url, hadData) {
                         this._url = url;
                         this.request = request;
+                        this.hadData = hadData;
                     }
                     get url() {
                         return this.request.responseURL || this._url;
@@ -68,10 +69,33 @@ Object.defineProperties(window, {
                         };
                     request.onreadystatechange = function (e) {
                         if (request.readyState === XMLHttpRequest.DONE) {
-                            cb(new NexusFrameworkXMLHttpRequestResponse(request, url));
+                            cb(new NexusFrameworkXMLHttpRequestResponse(request, url, !!data));
                         }
                     };
-                    request.send(data);
+                    const type = data && data.type;
+                    if (type)
+                        switch (type) {
+                            case "":
+                            case "text/urlencoded":
+                                var dat = "";
+                                for (var entry of data.data) {
+                                    if (dat)
+                                        dat += "&";
+                                    dat += encodeURIComponent(entry[0]);
+                                    dat += "=";
+                                    dat += encodeURIComponent(entry[1]);
+                                }
+                                request.setRequestHeader("Content-Type", "text/urlencoded");
+                                request.send(dat);
+                                break;
+                            case "multipart/form-data":
+                                request.send(data.data);
+                                break;
+                            default:
+                                request.send(data);
+                        }
+                    else
+                        request.send(data);
                 };
                 impl = {
                     get: function (url, cb, extraHeaders, progcb) {
@@ -487,6 +511,8 @@ Object.defineProperties(window, {
                         return console.error("The NexusFramework Loader is required for the dynamic Page System to work correctly.");
                     if (!history.pushState || !history.replaceState)
                         return console.warn("This browser is missing an essential feature required for the dynamic Page System.");
+                    if (this.pagesyshandler)
+                        return console.warn("Page System already initialized, ignoring additional requests to initialize.");
                     opts = opts || {};
                     const self = this;
                     var pageStatesSize = 0;
@@ -561,7 +587,7 @@ Object.defineProperties(window, {
                                 if (opts.noprogress)
                                     cb(res);
                                 else
-                                    loader.showProgress(false, () => {
+                                    loader.showProgress(() => {
                                         cb(res);
                                         self.enableAll();
                                     });
@@ -604,7 +630,7 @@ Object.defineProperties(window, {
                                             if (!opts.noprogress)
                                                 cb(res);
                                             else
-                                                loader.showProgress(false, () => {
+                                                loader.showProgress(() => {
                                                     cb(res);
                                                     self.enableAll();
                                                 });
@@ -696,7 +722,7 @@ Object.defineProperties(window, {
                     });
                     var forwardPopState;
                     const beforeHash = /^([^#]+)(#.*)?$/;
-                    var chash = location.href.match(beforeHash);
+                    var chash = location.href.match(beforeHash)[1];
                     const startsWith = new RegExp("^" + this.url.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&") + "(.*)$", "i");
                     class AnchorElementComponent {
                         constructor() {
@@ -708,9 +734,8 @@ Object.defineProperties(window, {
                                     return;
                                 var url = this.element.href;
                                 const bhash = url.match(beforeHash);
-                                if (bhash && chash && bhash[2] && chash[1] === bhash[1])
+                                if (bhash[2] && chash === bhash[1])
                                     return;
-                                chash = bhash;
                                 if (startsWith.test(url))
                                     try {
                                         const match = url.match(/^(.+)#.*$/);
@@ -743,6 +768,75 @@ Object.defineProperties(window, {
                         restore(data) { }
                         save() { }
                     }
+                    class FormElementComponent {
+                        constructor() {
+                            this.handler = (e) => {
+                                if (this.element.hasAttribute("data-nopagesys") || this.element.hasAttribute("data-nodynamic"))
+                                    return;
+                                const method = this.element.getAttribute("method") || "get";
+                                const enctype = this.element.getAttribute("enctype") || "text/urlencoded";
+                                const action = this.element.getAttribute("action") || "";
+                                var url = resolveUrl(action);
+                                if (startsWith.test(url)) {
+                                    try {
+                                        const match = url.match(/^(.+)#.*$/);
+                                        if (match)
+                                            url = match[1];
+                                        const formData = new FormData(this.element);
+                                        loader.showProgress(undefined, "Submitting Form", "Your form data is being processed");
+                                        if (method.trim().toLowerCase() === "post")
+                                            self.requestPage(url.substring(self.url.length), { type: enctype, data: formData });
+                                        else {
+                                            var first = true;
+                                            var reqUrl = url.substring(self.url.length) + "?";
+                                            for (var entry of formData) {
+                                                if (first)
+                                                    first = false;
+                                                else
+                                                    reqUrl += "&";
+                                                reqUrl += encodeURIComponent(entry[0]);
+                                                reqUrl += "=";
+                                                reqUrl += encodeURIComponent(entry[1]);
+                                            }
+                                            self.requestPage(reqUrl);
+                                        }
+                                        try {
+                                            e.stopPropagation();
+                                        }
+                                        catch (e) { }
+                                        try {
+                                            e.preventDefault();
+                                        }
+                                        catch (e) { }
+                                        Array.prototype.forEach.call(this.element.querySelectorAll("a, input, select, textarea, iframe, button, *[name]"), function (el) {
+                                            el.setAttribute("disabled", "disabled");
+                                            el.className += " disabled";
+                                        });
+                                        Array.prototype.forEach.call(this.element.querySelectorAll("button:not([type]), button[type=submit]"), function (button) {
+                                            button.innerHTML = "Processing Request";
+                                        });
+                                        Array.prototype.forEach.call(this.element.querySelectorAll("input[type=submit]"), function (input) {
+                                            input.value = "Processing Request";
+                                        });
+                                        return;
+                                    }
+                                    catch (e) {
+                                        debug(e);
+                                    }
+                                }
+                                debug("Submitting", url);
+                            };
+                        }
+                        create(element) {
+                            element.addEventListener("submit", this.handler);
+                            this.element = element;
+                        }
+                        destroy() {
+                            this.element.removeEventListener("submit", this.handler);
+                        }
+                        restore(data) { }
+                        save() { }
+                    }
                     const requestPage = this.requestPage = (path, post, replace = false) => {
                         const match = path.match(/\.([^\/]+)([\?#].*)?$/);
                         if (match && match[0] !== "htm" && match[0] !== "html") {
@@ -750,32 +844,43 @@ Object.defineProperties(window, {
                             debug("Ignoring navigation", path, match);
                         }
                         else {
+                            debug("requestPage", path);
                             const rid = ++self.activerid;
                             const baseurl = this.resolveUrl(path);
                             const fullurl = baseurl + (match && match[2] || "");
                             if (replace)
-                                history.replaceState(undefined, "Loading...", fullurl);
+                                history.replaceState(!!post, "Loading...", fullurl);
                             else {
-                                history.replaceState(undefined, document.title, location.href);
-                                history.pushState(undefined, "Loading...", fullurl);
+                                history.pushState(!!post, "Loading...", fullurl);
+                                chash = fullurl.match(beforeHash)[1];
                                 window.scrollTo(0, 0);
                             }
                             loader.resetError();
                             loader.resetProgress();
-                            chash = fullurl.match(beforeHash);
                             this.pagesysimpl.requestPage(path, (res) => {
                                 try {
                                     if (rid !== self.activerid)
                                         return;
-                                    if (!res.code || res.code === 502 || res.code === 503) {
-                                        loader.showProgress(true);
-                                        document.title = "Maintenance";
-                                        history.replaceState(undefined, "Maintenance", fullurl);
+                                    if (!res.code) {
+                                        loader.showProgress(undefined, "Connection Issue", "Check your network and try again");
+                                        document.title = "Connection Issue";
+                                        history.replaceState(res.hadData, "Connection Issue", fullurl);
                                         setTimeout(function () {
                                             if (rid !== self.activerid)
                                                 return;
                                             requestPage(path, post, true);
-                                        }, 15000);
+                                        }, 900000);
+                                        return;
+                                    }
+                                    else if (res.code === 502 || res.code === 503) {
+                                        loader.showProgress(undefined, "Scheduled Maintenance", "Sorry but this website is undergoing scheduled maintenance");
+                                        document.title = "Scheduled Maintenance";
+                                        history.replaceState(res.hadData, "Scheduled Maintenance", fullurl);
+                                        setTimeout(function () {
+                                            if (rid !== self.activerid)
+                                                return;
+                                            requestPage(path, post, true);
+                                        }, 900000);
                                         return;
                                     }
                                     const location = res.headers['x-location'] || res.headers['location'];
@@ -798,7 +903,6 @@ Object.defineProperties(window, {
                                         try {
                                             const title = document.title;
                                             const contentType = res.headers['content-type'];
-                                            debug("history.replaceState", title);
                                             const length = res.contentLength;
                                             const tooBig = pageStateCacheSize <= length;
                                             const stateData = tooBig ? undefined : {
@@ -861,15 +965,17 @@ Object.defineProperties(window, {
                                                 else
                                                     throw e;
                                             }
-                                            history.replaceState(undefined, document.title, fullurl);
+                                            history.replaceState(res.hadData, document.title, fullurl);
                                             self.emit("page", baseurl, path);
                                         }
                                         catch (e) {
                                             debug(e);
-                                            forwardPopState = [path, post];
-                                            debug("forwardPopState", forwardPopState);
-                                            if (!replace)
+                                            if (replace)
+                                                window.location.reload(true);
+                                            else
                                                 try {
+                                                    chash = undefined;
+                                                    forwardPopState = [path, post];
                                                     debug("Going backwards");
                                                     history.go(-1);
                                                 }
@@ -879,10 +985,12 @@ Object.defineProperties(window, {
                                 }
                                 catch (e) {
                                     debug(e);
-                                    forwardPopState = [path, post];
-                                    debug("forwardPopState", forwardPopState);
-                                    if (!replace)
+                                    if (replace)
+                                        window.location.reload(true);
+                                    else
                                         try {
+                                            chash = undefined;
+                                            forwardPopState = [path, post];
                                             debug("Going backwards");
                                             history.go(-1);
                                         }
@@ -892,58 +1000,46 @@ Object.defineProperties(window, {
                         }
                     };
                     this.registerComponent("a", AnchorElementComponent);
+                    this.registerComponent("form", FormElementComponent);
                     window.addEventListener('popstate', (e) => {
-                        var state;
-                        const bhash = location.href.match(beforeHash);
-                        const baseurl = bhash[1] || location.href;
-                        const cStates = pageStates.length;
-                        for (var i = 0; i < cStates; i++) {
-                            const _state = pageStates[i];
-                            if (_state.url === baseurl) {
-                                state = _state;
-                                break;
-                            }
-                        }
-                        const hasState = !!state;
-                        if (chash && chash[1] === bhash[1]) {
-                            debug("Only hash has changed...");
-                            return;
-                        }
-                        chash = bhash;
-                        const rid = ++self.activerid;
-                        const error = hasState && state.data.error;
-                        if (error) {
-                            showError(error);
-                            return;
-                        }
-                        if (forwardPopState) {
-                            debug("forwardPopState", forwardPopState);
-                            const forward = forwardPopState;
-                            setTimeout(() => {
-                                if (rid === self.activerid)
-                                    self.defaultRequestPage(forward[0], forward[1]);
-                            });
-                            forwardPopState = undefined;
-                            return;
-                        }
-                        const onError = function (err) {
-                            debug(err);
-                            var url = location.href;
-                            if (startsWith.test(url)) {
-                                try {
-                                    if (/reloading\.\.\.$/.test(err.message)) {
-                                        self.requestPage(url.substring(self.url.length), undefined, true);
-                                        return;
-                                    }
-                                    console.error("Unknown error occured, actually navigating to page...");
-                                }
-                                catch (e) {
-                                    console.error(e);
-                                }
-                            }
-                            location.reload(true);
-                        };
                         try {
+                            var state;
+                            const bhash = location.href.match(beforeHash);
+                            const cStates = pageStates.length;
+                            const baseurl = bhash[1];
+                            for (var i = 0; i < cStates; i++) {
+                                const _state = pageStates[i];
+                                if (_state.url === baseurl) {
+                                    state = _state;
+                                    break;
+                                }
+                            }
+                            const hasState = !!state;
+                            const rid = ++self.activerid;
+                            const error = hasState && state.data.error;
+                            if (error) {
+                                showError(error);
+                                return;
+                            }
+                            if (forwardPopState) {
+                                debug("forwardPopState", forwardPopState);
+                                const forward = forwardPopState;
+                                setTimeout(() => {
+                                    if (rid === self.activerid)
+                                        self.defaultRequestPage(forward[0], forward[1]);
+                                });
+                                forwardPopState = undefined;
+                                return;
+                            }
+                            if (chash === baseurl) {
+                                debug("Only hash has changed...", baseurl);
+                                return;
+                            }
+                            console.log(baseurl, chash, e);
+                            console.trace();
+                            chash = bhash[1];
+                            if (e.state)
+                                alert("You submitted data to this page, which cannot be re-sent. Because of this, what you're viewing may not be the same now.");
                             if (!hasState)
                                 throw new Error("No state for: " + baseurl + ", reloading...");
                             if (state.data.user != self.currentUserID)
@@ -964,12 +1060,40 @@ Object.defineProperties(window, {
                                     debug("Used stored page state!", state);
                                 }
                                 catch (err) {
-                                    onError(err);
+                                    debug(err);
+                                    var url = location.href;
+                                    if (startsWith.test(url)) {
+                                        try {
+                                            if (/reloading\.\.\.$/.test(err.message)) {
+                                                self.requestPage(url.substring(self.url.length), undefined, true);
+                                                return;
+                                            }
+                                            console.error("Unknown error occured, actually navigating to page...");
+                                        }
+                                        catch (e) {
+                                            console.error(e);
+                                        }
+                                    }
+                                    location.reload(true);
                                 }
                             });
                         }
                         catch (err) {
-                            onError(err);
+                            debug(err);
+                            var url = location.href;
+                            if (startsWith.test(url)) {
+                                try {
+                                    if (/reloading\.\.\.$/.test(err.message)) {
+                                        self.requestPage(url.substring(self.url.length), undefined, true);
+                                        return;
+                                    }
+                                    console.error("Unknown error occured, actually navigating to page...");
+                                }
+                                catch (e) {
+                                    console.error(e);
+                                }
+                            }
+                            location.reload(true);
                         }
                     });
                     return true;

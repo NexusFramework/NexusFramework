@@ -48,7 +48,7 @@ declare interface NexusFrameworkLoader {
     /**
      * Show the specified error to the user.
      */
-    showProgress(maintenance?: boolean, cb?: () => void): HTMLElement | HTMLCollection;
+    showProgress(cb?: () => void, title?: string, message?: string): HTMLElement | HTMLCollection;
     /**
      * Clear the error screen.
      */
@@ -79,6 +79,10 @@ declare interface NexusFrameworkTransportResponse {
      * A map of response headers, each header can occur more than once.
      */
     readonly headers: {[index: string]: string[]};
+    /**
+      * Whether or not this request posted data.
+      */
+    readonly hadData?: boolean;
 }
 declare interface NexusFrameworkPageSystemResponse {
     data: any;
@@ -91,7 +95,7 @@ declare interface NexusFrameworkPageSystemOptions {
      *
      * @returns True when handled correctly, false to reload the page to the request url.
      */
-    handler?: (res: NexusFrameworkTransportResponse, contentReady: () => void) => boolean;
+    handler?: (res: NexusFrameworkTransportResponse, contentReady: (err?: Error) => void) => void;
     /**
      * Method to call before attempting to make a page request.
      *
