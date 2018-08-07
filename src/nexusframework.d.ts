@@ -1,8 +1,7 @@
 /// <reference types="node" />
-/// <reference types="express" />
 /// <reference types="socket.io" />
 /// <reference types="nulllogger" />
-import { StaticMountOptions, Renderer, PageSystemSkeleton, MountOptions, ImageResizerOptions, MappedRequestHandler, RequestHandler, RequestHandlerEntry, ExistsRequestHandler, RouteRequestHandler, AccessRequestHandler, RequestHandlerChildEntry, Request, Response } from "../types";
+import { User, APIEncoder, ResponseLocals, StaticMountOptions, Renderer, PageSystemSkeleton, MountOptions, ImageResizerOptions, MappedRequestHandler, RequestHandler, RequestHandlerEntry, ExistsRequestHandler, RouteRequestHandler, AccessRequestHandler, RequestHandlerChildEntry, Request, Response } from "../types";
 import { Template } from "nhp/lib/Template";
 import { Application } from "express";
 import express = require("express");
@@ -11,8 +10,8 @@ import http = require("http");
 import nhp = require("nhp");
 export declare class LeafRequestHandler implements RequestHandlerEntry {
     leaf: boolean;
-    handle: RequestHandler;
-    constructor(handler: RequestHandler, actuallyLeaf?: boolean);
+    handle: RequestHandler<any, any>;
+    constructor(handler: RequestHandler<any, any>, actuallyLeaf?: boolean);
     children(): RequestHandlerChildEntry[];
     childPaths(): any;
     childAt(path: string, createIfNotExists?: boolean): RequestHandlerChildEntry;
@@ -21,12 +20,12 @@ export declare class LeafRequestHandler implements RequestHandlerEntry {
     setView(filename: string, type?: string): void;
     index(): RequestHandlerEntry;
     setIndex(index: RequestHandlerEntry): void;
-    routeHandler(): RouteRequestHandler;
-    accessHandler(): AccessRequestHandler;
-    existsHandler(): ExistsRequestHandler;
-    setRouteHandler(index: RouteRequestHandler): void;
-    setAccessHandler(index: AccessRequestHandler): void;
-    setExistsHandler(index: ExistsRequestHandler): void;
+    routeHandler(): RouteRequestHandler<any, any>;
+    accessHandler(): AccessRequestHandler<any, any>;
+    existsHandler(): ExistsRequestHandler<any, any>;
+    setRouteHandler(index: RouteRequestHandler<any, any>): void;
+    setAccessHandler(index: AccessRequestHandler<any, any>): void;
+    setExistsHandler(index: ExistsRequestHandler<any, any>): void;
     destroy(): void;
 }
 export declare class NHPRequestHandler extends LeafRequestHandler {
@@ -34,13 +33,13 @@ export declare class NHPRequestHandler extends LeafRequestHandler {
     private views;
     private exists;
     private access;
-    constructor(impl: RequestHandler, redirect?: boolean);
+    constructor(impl: RequestHandler<any, any>, redirect?: boolean);
     view(type?: string): string;
     setView(filename: string, type?: string): void;
-    accessHandler(): AccessRequestHandler;
-    existsHandler(): ExistsRequestHandler;
-    setAccessHandler(index: AccessRequestHandler): void;
-    setExistsHandler(index: ExistsRequestHandler): void;
+    accessHandler(): AccessRequestHandler<any, any>;
+    existsHandler(): ExistsRequestHandler<any, any>;
+    setAccessHandler(index: AccessRequestHandler<any, any>): void;
+    setExistsHandler(index: ExistsRequestHandler<any, any>): void;
 }
 export declare function createExtendedRequestHandler(): MappedRequestHandler;
 export declare class NexusFramework extends events.EventEmitter {
@@ -50,14 +49,19 @@ export declare class NexusFramework extends events.EventEmitter {
     readonly server: http.Server;
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
+    static readonly apiencoders: {
+        [index: string]: APIEncoder<User, ResponseLocals<User>>;
+    };
+    private socketIOGuests;
     private socketIOSetup;
     private replacements;
+    private apis;
     private versions;
     private cookieParser;
     private prestack;
+    private mounts;
     private stack;
     private default;
-    private mounts;
     private renderoptions;
     private afterbody;
     private footer;
@@ -78,6 +82,8 @@ export declare class NexusFramework extends events.EventEmitter {
     installAfterBodyRenderer(renderer: Renderer): void;
     installFooterRenderer(renderer: Renderer): void;
     installHeaderRenderer(renderer: Renderer): void;
+    installAPI(ext: string, encoder: APIEncoder<User, ResponseLocals<User>>): void;
+    enableAPIs(encoders: string[]): void;
     enableLogging(): void;
     /**
      * Set the skeleton to use for legacy browsers.
@@ -95,9 +101,9 @@ export declare class NexusFramework extends events.EventEmitter {
     setPageSystemSkeleton(val: string | PageSystemSkeleton): void;
     setErrorDocument(code: number | "*", page?: string): void;
     mountScripts(mpath?: string): void;
-    mountAbout(mpath?: string): void;
+    mountAbout(mpath?: string, opts?: MountOptions): void;
     setupPageSystem(): void;
-    setupIO(path?: string, withPageSystem?: boolean): string;
+    setupIO(path?: string, withPageSystem?: boolean, guestsToo?: boolean): string;
     /**
      * Mount a NHP page system.
      *
@@ -123,7 +129,7 @@ export declare class NexusFramework extends events.EventEmitter {
      * @param handler The request handler
      * @param leaf Whether or not this handler is a leaf, or branch
      */
-    mountHandler(webpath: string, handler: RequestHandler, leaf?: boolean): RequestHandlerEntry;
+    mountHandler(webpath: string, handler: RequestHandler<any, any>, leaf?: boolean): RequestHandlerEntry;
     /**
      * Set the default handler, its the handler that gets used when no mounts take the request.
      */
@@ -135,22 +141,25 @@ export declare class NexusFramework extends events.EventEmitter {
     /**
      * NexusFork compatible handler.
      */
-    handle(req: Request, res: Response, next: (err?: Error) => void): void;
+    handle(req: Request<any>, res: Response<any, any>, next: (err?: Error) => void): void;
     /**
      * Push middleware to the end of the stack.
      */
-    pushMiddleware(middleware: RequestHandler, pre?: boolean): void;
+    pushMiddleware(middleware: RequestHandler<any, any>, pre?: boolean): void;
     /**
      * Unshift middleware onto the beginning of the stack.
      */
-    unshiftMiddleware(middleware: RequestHandler, pre?: boolean): void;
+    unshiftMiddleware(middleware: RequestHandler<any, any>, pre?: boolean): void;
     /**
      * Alias for pushMiddleware
      */
-    use: (middleware: RequestHandler) => void;
-    runMiddleware(req: Request, res: Response, next: (err?: Error) => void): void;
-    private handle0(req, res, next);
-    upgrade(req: Request, res: Response, next: (err?: Error) => void): void;
+    use: (middleware: RequestHandler<any, any>) => void;
+    runMiddleware(req: Request<any>, res: Response<any, any>, next: (err?: Error) => void): void;
+    /**
+     * Process the incoming request
+     */
+    process(req: Request<any>, res: Response<any, any>, next: (err?: Error) => void): void;
+    upgrade(req: Request<User>, res: Response<User, ResponseLocals<User>>, next: (err?: Error) => void): void;
     static nexusforkUpgrade(req: express.Request, res: express.Response): void;
     /**
      * Express compatible handler

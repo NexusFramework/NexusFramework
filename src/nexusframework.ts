@@ -1,4 +1,4 @@
-import {UploadedFile,RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource as _Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
+import {User,APIEncoder,UploadedFile,ResponseLocals,RequestHandlerMethodMapping,SocialTags,BodyProcessor,StaticMountOptions,Resource as _Resource,Renderer,PageSystemSkeleton,RenderOptions,MountOptions,ImageResizerOptions,FunctionOrStringOrEitherWithData,MappedRequestHandler,RequestHandler,RecursivePath,UserAgentDetails,RequestHandlerEntry,ExistsRequestHandler,RouteRequestHandler,AccessRequestHandler,RequestHandlerChildEntry,Request,Response} from "../types";
 import {CacheGenerator} from "lru-weak-cache/types";
 import cookieParser = require("cookie-parser");
 import querystring = require("querystring");
@@ -21,12 +21,14 @@ import async = require("async");
 import sharp = require("sharp");
 import http = require("http");
 import _path = require("path");
+import bson = require("bson");
 import _ = require("lodash");
 import url = require("url");
 import nhp = require("nhp");
 import fs = require("fs");
 import os = require("os");
 
+const BSON = new bson;
 const noop = function() {};
 
 const mainpkgversion: string = (function() {
@@ -55,6 +57,22 @@ if (has_slim_io_js) {
     // }
 } else
     socket_io_slim_path = ":io/socket.io.js";
+
+var bson_path: string;
+const bson_js = require.resolve("bson/dist/bson.js");
+const bsonpkgjson = require("bson/package.json");
+if (bson_js) {
+  bson_path = ":scripts/bson.js?v=" + bsonpkgjson.version;
+  // try {
+  //     const hash = crypto.createHash("sha512");
+  //     hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
+  //     socket_io_slim_integrity = "sha512-" + hash.digest("base64");
+  // } catch(e) {
+  //     console.warn(e);
+  // }
+} else
+  throw new Error("Could not resolve bson.js");
+
 var nexusframeworkclient_es5_integrity: string;
 var nexusframeworkclient_es6_integrity: string;
 try {
@@ -195,6 +213,7 @@ class SocketIORequest extends events.EventEmitter implements express.Request {
     method: string;
     readable: false;
     rawTrailers: any;
+    readableLength: number;
     readableHighWaterMark = 0;
     headers: {[index: string]: string[] | string};
     httpVersionMinor: number;
@@ -247,6 +266,9 @@ class SocketIORequest extends events.EventEmitter implements express.Request {
         if (event == "end" || event == "done")
             listener();
         return this;
+    }
+    [Symbol.asyncIterator](): AsyncIterableIterator<any>{
+      throw new Error("Not supported");
     }
     get rawHeaders() {
         var rawHeaders: string[] = [];
@@ -502,13 +524,13 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
     existsHandler() {
         return this.exists;
     }
-    setRouteHandler(route: RouteRequestHandler) {
+    setRouteHandler(route: RouteRequestHandler<any, any>) {
         this.route = route;
     }
-    setAccessHandler(access: AccessRequestHandler) {
+    setAccessHandler(access: AccessRequestHandler<any, any>) {
         this.access = access;
     }
-    setExistsHandler(exists: ExistsRequestHandler) {
+    setExistsHandler(exists: ExistsRequestHandler<any, any>) {
         this.exists = exists;
     }
 
@@ -519,7 +541,7 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
         this._index = index;
     }
 
-    handle(req: Request, res: Response, next: () => void) {
+    handle(req: Request<any>, res: Response<any, any>, next: () => void) {
         const _next = () => {
             const _next = () => {
                 const _next = () => {
@@ -560,16 +582,13 @@ class RequestHandlerWithChildren implements RequestHandlerEntry {
                     else if (this['_index']) {
                         var urlpath: string;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                            if (req.pagesys) {
-                              const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
-                              if (urlpath.startsWith(prefix))
-                                urlpath = req.sitePrefix + urlpath.substring(prefix.length);
-                            }
                             const q = urlpath.indexOf("?");
                             if (q == -1)
                               urlpath += "/";
                             else
                               urlpath = urlpath.substring(0, q) + "/" + urlpath.substring(q);
+                            if (req.pagesys && /^\/:pagesys\//.test(urlpath))
+                              urlpath = urlpath.substring(9);
                             return res.redirect(urlpath);
                         }
                         this['_index'].handle(req, res, (err, locals?) => {
@@ -738,8 +757,8 @@ class RequestHandlerChildWithChildren extends RequestHandlerWithChildren impleme
 
 export class LeafRequestHandler implements RequestHandlerEntry {
     leaf: boolean;
-    handle: RequestHandler;
-    constructor(handler: RequestHandler, actuallyLeaf = true) {
+    handle: RequestHandler<any, any>;
+    constructor(handler: RequestHandler<any, any>, actuallyLeaf = true) {
         this.handle = handler;
         this.leaf = actuallyLeaf;
     }
@@ -767,22 +786,22 @@ export class LeafRequestHandler implements RequestHandlerEntry {
     setIndex(index: RequestHandlerEntry): void {
         throw new Error("Cannot change Leaf index.");
     }
-    routeHandler(): RouteRequestHandler {
+    routeHandler(): RouteRequestHandler<any, any> {
         return undefined;
     }
-    accessHandler(): AccessRequestHandler {
+    accessHandler(): AccessRequestHandler<any, any> {
         return undefined;
     }
-    existsHandler(): ExistsRequestHandler {
+    existsHandler(): ExistsRequestHandler<any, any> {
         return undefined;
     }
-    setRouteHandler(index: RouteRequestHandler): void {
+    setRouteHandler(index: RouteRequestHandler<any, any>): void {
         throw new Error("Cannot route Leafs.");
     }
-    setAccessHandler(index: AccessRequestHandler): void {
+    setAccessHandler(index: AccessRequestHandler<any, any>): void {
         throw new Error("Not supported.");
     }
-    setExistsHandler(index: ExistsRequestHandler): void {
+    setExistsHandler(index: ExistsRequestHandler<any, any>): void {
         throw new Error("Not supported.");
     }
     destroy() {}
@@ -790,7 +809,7 @@ export class LeafRequestHandler implements RequestHandlerEntry {
 class LeafRequestChildHandler extends LeafRequestHandler implements RequestHandlerChildEntry {
     pattern: RegExp;
     rawPattern: string;
-    constructor(handler: RequestHandler, pattern: string, actuallyLeaf = true) {
+    constructor(handler: RequestHandler<any, any>, pattern: string, actuallyLeaf = true) {
         super(handler, actuallyLeaf);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern + "$", "i");
@@ -798,26 +817,23 @@ class LeafRequestChildHandler extends LeafRequestHandler implements RequestHandl
 }
 
 export class NHPRequestHandler extends LeafRequestHandler {
-    private impl: RequestHandler;
+    private impl: RequestHandler<any, any>;
     private views: {[index: string]: string} = {};
-    private exists: ExistsRequestHandler;
-    private access: AccessRequestHandler;
-    constructor(impl: RequestHandler, redirect = false) {
-        super((req: Request, res: Response, next: (err?: Error) => void) => {
+    private exists: ExistsRequestHandler<any, any>;
+    private access: AccessRequestHandler<any, any>;
+    constructor(impl: RequestHandler<any, any>, redirect = false) {
+        super((req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) => {
             const _next = () => {
                 const _next = () => {
                     var urlpath: string;
                     if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                        if (req.pagesys) {
-                          const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
-                          if (urlpath.startsWith(prefix))
-                            urlpath = req.sitePrefix + urlpath.substring(prefix.length);
-                        }
                         const q = urlpath.indexOf("?");
                         if (q == -1)
                             urlpath = urlpath.substring(0, urlpath.length - 1);
                         else
                             urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
+                        if (req.pagesys && /^\/:pagesys\//.test(urlpath))
+                          urlpath = urlpath.substring(9);
                         if (urlpath.length > req.sitePrefix.length)
                             return res.redirect(urlpath);
                     }
@@ -865,31 +881,31 @@ export class NHPRequestHandler extends LeafRequestHandler {
     setView(filename: string, type = "nhp"): void {
         this.views[type] = filename;
     }
-    accessHandler(): AccessRequestHandler {
+    accessHandler(): AccessRequestHandler<any, any> {
         return this.access;
     }
-    existsHandler(): ExistsRequestHandler {
+    existsHandler(): ExistsRequestHandler<any, any> {
         return this.exists;
     }
-    setAccessHandler(index: AccessRequestHandler): void {
+    setAccessHandler(index: AccessRequestHandler<any, any>): void {
         this.access = index;
     }
-    setExistsHandler(index: ExistsRequestHandler): void {
+    setExistsHandler(index: ExistsRequestHandler<any, any>): void {
         this.exists = index;
     }
 }
 class NHPRequestChildHandler extends NHPRequestHandler implements RequestHandlerChildEntry {
     rawPattern: string;
     pattern: RegExp;
-    constructor(impl: RequestHandler, pattern: string, redirect = true) {
+    constructor(impl: RequestHandler<any, any>, pattern: string, redirect = true) {
         super(impl, redirect);
         this.rawPattern = pattern;
         this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
 
-function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request, getAsFallback = false) {
-    var handler: RequestHandler;
+function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request<any>, getAsFallback = false) {
+    var handler: RequestHandler<any, any>;
     const method = req.method.toLowerCase();
     const isHead = method === "head";
 
@@ -904,7 +920,7 @@ function resolveHandler(mapping: RequestHandlerMethodMapping, req: Request, getA
     return handler || mapping.use || (getAsFallback && mapping.get);
 }
 export function createExtendedRequestHandler() {
-    const requestHandler: MappedRequestHandler = function (req: Request, res: Response, next: (err?: Error) => void) {
+    const requestHandler: MappedRequestHandler = function (req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
         var handler = resolveHandler(requestHandler, req);
         if (handler)
             handler(req, res, next);
@@ -914,11 +930,11 @@ export function createExtendedRequestHandler() {
     return requestHandler;
 }
 
-function lazyLoadMapping(impl: FunctionOrStringOrEitherWithData, method: string, mapping: RequestHandlerMethodMapping): RequestHandler {
+function lazyLoadMapping(impl: FunctionOrStringOrEitherWithData, method: string, mapping: RequestHandlerMethodMapping): RequestHandler<any, any> {
     if (impl instanceof Function)
         return impl as any;
     if (_.isString(impl))
-        return function (req: Request, res: Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
+        return function (req: Request<any>, res: Response<any, any>, next: (err?: Error, renderLocals?: any) => void, negative?) {
             try {
                 const handler = require(impl);
                 if (!(handler instanceof Function))
@@ -936,7 +952,7 @@ function lazyLoadMapping(impl: FunctionOrStringOrEitherWithData, method: string,
     const data = impl.data;
     const key = "lazy" + method;
     mapping[key] = lazyLoadMapping(impl.impl, key, mapping);
-    return function (req: Request, res: Response, next: (err?: Error, renderLocals?: any) => void, negative?) {
+    return function (req: Request<any>, res: Response<any, any>, next: (err?: Error, renderLocals?: any) => void, negative?) {
         const clocals = _.cloneDeep(res.locals);
         _.merge(res.locals, data);
         req.mapping = mapping;
@@ -1031,12 +1047,12 @@ const imagePathWebpOrPng = /^\/(\d+)x(\d+)\.(webp|png)$/;
 const imagePathWebpOrJpeg = /^\/(\d+)x(\d+)\.(webp|jpg)$/;
 const imagePathJpeg = /^\/(\d+)x(\d+)\.(jpg)$/;
 const imagePathPng = /^\/(\d+)x(\d+)\.(png)$/;
-type SharpImageWriter = (res: Response) => void;
+type SharpImageWriter = (res: Response<any, any>) => void;
 class SharpResizerRequestHandler extends LeafRequestHandler {
   private square: boolean;
   private image: sharp.SharpInstance;
   private sizes: number[] | number[][];
-  private queue: {[index: string]: Response[]} = {};
+  private queue: {[index: string]: Response<any, any>[]} = {};
   private cacheGenerator: CacheGenerator<SharpImageWriter>;
   private cache: lrucache<SharpImageWriter>;
   constructor(imagefile: string, options: ImageResizerOptions) {
@@ -1066,7 +1082,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
     this.cacheGenerator = function(key, cb) {
       const opts = JSON.parse(key);
       if (opts[0] * opts[1] > imageBufferThreshold)
-        cb(undefined, function (res: Response) {
+        cb(undefined, function (res: Response<any, any>) {
           var contentType: string;
           var image = source.clone().resize(opts[0], opts[1]);
           switch (opts[2]) {
@@ -1117,7 +1133,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
           if (err)
             cb(err);
           else
-            cb(undefined, function (res: Response) {
+            cb(undefined, function (res: Response<any, any>) {
               res.writeHead(200, {
                 "Content-Type": contentType,
                 "Content-Length": data.length,
@@ -1144,7 +1160,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
     } else
       return true;
   }
-  private handle0square(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
+  private handle0square(reg: RegExp, req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
       var match = req.path.match(reg);
       if (match) {
         const size = parseInt(match[1]);
@@ -1155,7 +1171,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
       } else
         next();
   }
-  private handle0(reg: RegExp, req: Request, res: Response, next: (err?: Error) => void) {
+  private handle0(reg: RegExp, req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
     var match = req.path.match(reg);
     if (match) {
       const width = parseInt(match[1]);
@@ -1167,7 +1183,7 @@ class SharpResizerRequestHandler extends LeafRequestHandler {
     } else
       next();
   }
-  private serve(width: number, height: number, format: string, res: Response) {
+  private serve(width: number, height: number, format: string, res: Response<any, any>) {
     if (res['req'] && res['req'].io) {
       res.writeHead(200, {
         "content-disposition": "attachment",
@@ -1199,7 +1215,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
         super();
         this.fspath = fspath;
         this.options = options;
-        this.handle = (req: Request, res: Response, next: (err?: Error) => void) => {
+        this.handle = (req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) => {
             this.load((err) => {
                 if (err)
                     next(err);
@@ -1262,7 +1278,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, next, skip) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as RouteRequestHandler)(req, res, next, skip);
+                                        (handler as RouteRequestHandler<any, any>)(req, res, next, skip);
                                     else
                                         next();
                                 }
@@ -1286,7 +1302,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, exists, doesntExist) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as ExistsRequestHandler)(req, res, exists, doesntExist);
+                                        (handler as ExistsRequestHandler<any, any>)(req, res, exists, doesntExist);
                                     else
                                         exists();
                                 }
@@ -1310,7 +1326,7 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                 const handler = function (req, res, allowed, denied) {
                                     const handler = resolveHandler(mapping, req);
                                     if (handler)
-                                        (handler as RouteRequestHandler)(req, res, allowed, denied);
+                                        (handler as RouteRequestHandler<any, any>)(req, res, allowed, denied);
                                     else
                                         allowed();
                                 }
@@ -1437,15 +1453,15 @@ class LazyLoadingNHPRequestHandler extends RequestHandlerWithChildren {
                                             });
                                         res.addInlineScript.apply(res, args);
                                     } else {
-                                        if (script.source == "nexusframeworkclient")
-                                            res.addNexusFrameworkClient();
-                                        else {
-                                            const args = [script.source, script.integrity];
-                                            if (script.dependencies)
-                                                script.dependencies.forEach(function (dep) {
-                                                    args.push(dep.toString());
-                                                });
-                                            res.addScript.apply(res, args);
+                                      if (script.source == "nexusframeworkclient")
+                                        res.addNexusFrameworkClient();
+                                      else {
+                                          const args = [script.source, script.integrity];
+                                          if (script.dependencies)
+                                            script.dependencies.forEach(function (dep) {
+                                              args.push(dep.toString());
+                                            });
+                                          res.addScript.apply(res, args);
                                         }
                                     }
                                 });
@@ -1542,6 +1558,101 @@ interface Resource extends _Resource {
     dependencies: string[];
 }
 
+class DEBUG {
+  public static encode(str: string) {
+    return str.replace(/\n/g, "\\n");
+  }
+  private static stringify0(vars, indent = "", inline = false) {
+    if (vars === true)
+      return (inline ? "" : indent) + "1";
+    if (vars === false)
+      return (inline ? "" : indent) + "0";
+    var data: string;
+    const varstype = typeof vars;
+    if (varstype === "string" || varstype === "number" || vars instanceof String || vars instanceof Number)
+      data = (inline ? "" : indent) + DEBUG.encode("" + vars);
+    else if(vars instanceof Date)
+      data = (inline ? "" : indent) + DEBUG.encode("" + (+vars));
+    else if (Array.isArray(vars)) {
+      var i = 0;
+      data = "";
+      const iindent = indent + "  ";
+      vars.forEach(function(entry) {
+        const t = i.toString();
+        data += "\n" + indent + "[" + t + "] " + DEBUG.stringify0(entry, iindent, true);
+        i++;
+      });
+    } else {
+      if (!vars)
+        return "";
+      data = "";
+      var obj;
+      try {
+        obj = (vars.toAPI || vars.toObject || vars.toJSON).call(vars);
+      } catch(e) {
+        obj = vars;
+      }
+      const iindent = indent + "  ";
+      Object.keys(obj).forEach(function(key) {
+        var k = DEBUG.encode("" + key);
+        if (/^\d+/.test(k))
+          k = "_" + k;
+        data += "\n" + indent + "[" + DEBUG.encode(key) + "] " + DEBUG.stringify0(obj[key], iindent, true);
+      });
+    }
+    return data;
+  }
+  public static stringify(vars) {
+    return "Root" + DEBUG.stringify0(vars, "  ");
+  }
+}
+class XML {
+  public static encode(str: string) {
+    return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  private static stringify0(vars) {
+    if (vars === true)
+      return "1";
+    if (vars === false)
+      return "0";
+    var data: string;
+    const varstype = typeof vars;
+    if (varstype === "string" || varstype === "number" || vars instanceof String || vars instanceof Number)
+      data = "" + XML.encode("" + vars);
+    else if(vars instanceof Date)
+      data = "" + XML.encode("" + (+vars));
+    else if (Array.isArray(vars)) {
+      var i = 0;
+      data = "";
+      vars.forEach(function(entry) {
+        const t = i.toString();
+        data += "<entry" + t + ">" + XML.stringify0(entry) + "</entry" + t + ">";
+        i++;
+      });
+    } else {
+      if (!vars)
+        return "";
+      data = "";
+      var obj;
+      try {
+        obj = (vars.toAPI || vars.toObject || vars.toJSON).call(vars);
+      } catch(e) {
+        obj = vars;
+      }
+      Object.keys(obj).forEach(function(key) {
+        var k = XML.encode("" + key);
+        if (/^\d+/.test(k))
+          k = "_" + k;
+        data += "<" + k  + ">" + XML.stringify0(obj[key]) + "</" + k + ">";
+      });
+    }
+    return data;
+  }
+  public static stringify(vars) {
+    return "<api>" + XML.stringify0(vars) + "</api>";
+  }
+}
+
 export class NexusFramework extends events.EventEmitter {
     readonly nhp: nhp;
     readonly prefix: string;
@@ -1549,6 +1660,21 @@ export class NexusFramework extends events.EventEmitter {
     readonly server: http.Server;
     readonly io?: SocketIO.Server;
     readonly logger: nulllogger.INullLogger;
+    static readonly apiencoders: {[index: string]: APIEncoder<User, ResponseLocals<User>>} = {
+      "json": function(locals, req, res) {
+        res.type("text/json").end(JSON.stringify(locals));
+      },
+      "bson": function(locals, req, res) {
+        res.type("application/bson").end(BSON.serialize(locals));
+      },
+      "debug": function(locals, req, res) {
+        res.type("text/plain").end(DEBUG.stringify(locals));
+      },
+      "xml": function(locals, req, res) {
+        res.type("text/xml").end(XML.stringify(locals));
+      }
+    }
+    private socketIOGuests: boolean;
     private socketIOSetup: boolean;
     private replacements: any[][] = [
         [
@@ -1560,12 +1686,13 @@ export class NexusFramework extends events.EventEmitter {
             mainpkgversion
         ]
     ];
+    private apis: {[index: string]: APIEncoder<User, ResponseLocals<User>>} = {};
     private versions = [pkgjson.version, mainpkgversion];
     private cookieParser: express.RequestHandler;
-    private prestack: RequestHandler[];
-    private stack: RequestHandler[];
-    private default: RequestHandlerEntry;
+    private prestack: RequestHandler<any, any>[];
     private mounts: RequestHandlerChildEntry[];
+    private stack: RequestHandler<any, any>[];
+    private default: RequestHandlerEntry;
     private renderoptions: RenderOptions;
     private afterbody: Renderer[];
     private footer: Renderer[];
@@ -1725,8 +1852,14 @@ export class NexusFramework extends events.EventEmitter {
     installHeaderRenderer(renderer: Renderer) {
         this.header.push(renderer);
     }
+    installAPI(ext: string, encoder: APIEncoder<User, ResponseLocals<User>>) {
+      this.apis[ext] = encoder;
+    }
+    enableAPIs(encoders: string[]) {
+      encoders.forEach((ext) => this.installAPI(ext, NexusFramework.apiencoders[ext]));
+    }
     enableLogging() {
-        this.logging = true;
+      this.logging = true;
     }
     /**
      * Set the skeleton to use for legacy browsers.
@@ -1777,8 +1910,8 @@ export class NexusFramework extends events.EventEmitter {
             autoIndex: true
         });
     }
-    mountAbout(mpath = ":about") {
-        this.mount(mpath, _path.resolve(__dirname, "../about/"));
+    mountAbout(mpath = ":about", opts?: MountOptions) {
+        this.mount(mpath, _path.resolve(__dirname, "../about/"), opts);
     }
     setupPageSystem() {
       const pagesyspath = /^\/\:pagesys(\/.*)$/;
@@ -1818,86 +1951,96 @@ export class NexusFramework extends events.EventEmitter {
           next();
       }, true);
     }
-    setupIO(path = ":io", withPageSystem = true) {
-        if (!this.server)
-            throw new Error("No server passed in constructor, cannot setup Socket.IO");
-        const iopath = _path.posix.join(this.prefix, path);
-        const io = socket_io(this.server, {
-            serveClient: !has_slim_io_js,
-            path: iopath
-        });
-        io.on("connection", (client) => {
-            client.on("init", function (sentResources: string[]) {
-                if (!_.isArray(sentResources)) {
-                    client.emit("401", "");
+    setupIO(path = ":io", withPageSystem = true, guestsToo = false) {
+      if (!this.server)
+          throw new Error("No server passed in constructor, cannot setup Socket.IO");
+      const iopath = _path.posix.join(this.prefix, path);
+      const io = socket_io(this.server, {
+          serveClient: !has_slim_io_js,
+          path: iopath
+      });
+      io.on("connection", (client) => {
+          client.on("init", function (sentResources: string[]) {
+              if (!_.isArray(sentResources)) {
+                  client.emit("401", "");
+                  client.disconnect(true);
+              }
+              const sent: string[] = (client['__sent_resources'] || (client['__sent_resources'] = []));
+              sentResources.forEach(function (res) {
+                  if (sent.indexOf(res) == -1)
+                      sent.push(res);
+              });
+          });
+          if (withPageSystem)
+            client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
+                try {
+                    const req: Request<any> = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers) as any;
+                    Object.defineProperty(req, "io", {
+                        value: client
+                    });
+                    const res: Response<any, any> = new SocketIOResponse(cb) as any;
+                    res['app'] = this.app;
+                    req['app'] = this.app;
+                    res['req'] = req;
+                    req['res'] = res;
+                    try {
+                        const next = (err?) => {
+                            if (err) {
+                                (req.logger || this.logger).warn(err);
+                                if (res.sendFailure)
+                                    res.sendFailure(err);
+                                else
+                                    res.sendStatus(500);
+                            } else
+                                res.sendStatus(404);
+                        };
+                        if (this.app) {
+                            const stack: ({name: string, handle: express.RequestHandler})[] = this.app._router.stack;
+                            async.eachSeries(stack, function (layer, next) {
+                                if (layer.name === "expressInit")
+                                    next();
+                                else
+                                    layer.handle(req, res, next);
+                            }, next);
+                        } else
+                            this.handle(req, res, next);
+                    } catch (e) {
+                        (req.logger || this.logger).warn(e);
+                        res.sendStatus(500);
+                    }
+                } catch (e) {
+                    console.warn(e);
                     client.disconnect(true);
                 }
-                const sent: string[] = (client['__sent_resources'] || (client['__sent_resources'] = []));
-                sentResources.forEach(function (res) {
-                    if (sent.indexOf(res) == -1)
-                        sent.push(res);
-                });
             });
-            if (withPageSystem)
-              client.on("page", (method: string, path: string, post: any, headers: {[index: string]: string[]}, cb: (res: any) => void) => {
-                  try {
-                      const req: Request = new SocketIORequest(client.conn.request, method, _path.posix.join(this.prefix, path), post, headers) as any;
-                      Object.defineProperty(req, "io", {
-                          value: client
-                      });
-                      const res: Response = new SocketIOResponse(cb) as any;
-                      res['app'] = this.app;
-                      req['app'] = this.app;
-                      res['req'] = req;
-                      req['res'] = res;
-                      try {
-                          const next = (err?) => {
-                              if (err) {
-                                  (req.logger || this.logger).warn(err);
-                                  if (res.sendFailure)
-                                      res.sendFailure(err);
-                                  else
-                                      res.sendStatus(500);
-                              } else
-                                  res.sendStatus(404);
-                          };
-                          if (this.app) {
-                              const stack: ({name: string, handle: express.RequestHandler})[] = this.app._router.stack;
-                              async.eachSeries(stack, function (layer, next) {
-                                  if (layer.name === "expressInit")
-                                      next();
-                                  else
-                                      layer.handle(req, res, next);
-                              }, next);
-                          } else
-                              this.handle(req, res, next);
-                      } catch (e) {
-                          (req.logger || this.logger).warn(e);
-                          res.sendStatus(500);
-                      }
-                  } catch (e) {
-                      console.warn(e);
-                      client.disconnect(true);
-                  }
-              });
+      });
+      Object.defineProperty(this, "io", {
+          value: io
+      });
+      this.mountHandler("/:scripts/bson.js", function (req, res, next) {
+        res.sendFile(bson_js, {
+          maxAge: 3.154e+10,
+          immutable: true
+        }, function (err) {
+          if (err)
+            next(err);
         });
-        Object.defineProperty(this, "io", {
-            value: io
+      });
+      if (has_slim_io_js)
+        this.mountHandler("/:scripts/socket.io.slim.js", function (req, res, next) {
+          res.sendFile(socket_io_slim_js, {
+              maxAge: 3.154e+10,
+              immutable: true
+          }, function (err) {
+            if (err)
+                next(err);
+          });
         });
-        if (has_slim_io_js)
-            this.mountHandler("/:scripts/socket.io.slim.js", function (req, res, next) {
-                res.sendFile(socket_io_slim_js, {
-                    maxAge: 3.154e+10,
-                    immutable: true
-                }, function (err) {
-                    if (err)
-                        next(err);
-                });
-            });
-        if (withPageSystem)
-          this.setupPageSystem();
-        this.socketIOSetup = true;
-        return iopath;
+      if (withPageSystem)
+        this.setupPageSystem();
+      this.socketIOSetup = true;
+      this.socketIOGuests = guestsToo;
+      return iopath;
     }
 
     /**
@@ -1990,7 +2133,7 @@ export class NexusFramework extends events.EventEmitter {
         const self = this;
         fspath = _path.resolve(process.cwd(), fspath);
         const startsWith = new RegExp("^" + fspath.replace(regexp_escape, "\\$&") + "(.*)$");
-        const handler = function (req: Request, res: Response, next: (err?: Error) => void) {
+        const handler = function (req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
             const filename = _path.resolve(fspath, decodeURIComponent(req.path.substring(1)));
             if (startsWith.test(filename))
                 fs.stat(filename, function (err, stats) {
@@ -2002,16 +2145,13 @@ export class NexusFramework extends events.EventEmitter {
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
-                                    if (req.pagesys) {
-                                      const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
-                                      if (urlpath.startsWith(prefix))
-                                        urlpath = req.sitePrefix + urlpath.substring(prefix.length);
-                                    }
                                     const q = urlpath.indexOf("?");
                                     if (q == -1)
                                       urlpath += "/";
                                     else
                                       urlpath = urlpath.substring(0, q) + "/" + urlpath.substring(q);
+                                    if (req.pagesys && /^\/:pagesys\//.test(urlpath))
+                                      urlpath = urlpath.substring(9);
                                     return res.redirect(urlpath);
                                 }
                                 if (req.pagesys) {
@@ -2122,7 +2262,7 @@ export class NexusFramework extends events.EventEmitter {
      * @param handler The request handler
      * @param leaf Whether or not this handler is a leaf, or branch
      */
-    mountHandler(webpath: string, handler: RequestHandler, leaf = true): RequestHandlerEntry {
+    mountHandler(webpath: string, handler: RequestHandler<any, any>, leaf = true): RequestHandlerEntry {
         webpath = _path.posix.join("/", stripPath(webpath));
         if (webpath == "/") {
             const newHandler = new LeafRequestHandler(handler, leaf);
@@ -2162,7 +2302,7 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * NexusFork compatible handler.
      */
-    handle(req: Request, res: Response, next: (err?: Error) => void) {
+    handle(req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
         const fullpath = req.path;
         const prefix = this.prefix;
         const len = prefix.length;
@@ -2239,7 +2379,7 @@ export class NexusFramework extends events.EventEmitter {
                           const id = user.id || user.email || user.displayName || "Logged";
                           res.set("X-Logged-User", "" + id);
                         }
-                        self.handle0(req, res, next);
+                        self.process(req, res, next);
                     }
                 });
             });
@@ -2251,52 +2391,52 @@ export class NexusFramework extends events.EventEmitter {
     /**
      * Push middleware to the end of the stack.
      */
-    pushMiddleware(middleware: RequestHandler, pre?: boolean) {
+    pushMiddleware(middleware: RequestHandler<any, any>, pre?: boolean) {
         this[pre ? "prestack" : "stack"].push(middleware);
     }
     /**
      * Unshift middleware onto the beginning of the stack.
      */
-    unshiftMiddleware(middleware: RequestHandler, pre?: boolean) {
+    unshiftMiddleware(middleware: RequestHandler<any, any>, pre?: boolean) {
         this[pre ? "prestack" : "stack"].unshift(middleware);
     }
     /**
      * Alias for pushMiddleware
      */
-    use: (middleware: RequestHandler) => void;
+    use: (middleware: RequestHandler<any, any>) => void;
 
-    runMiddleware(req: Request, res: Response, next: (err?: Error) => void) {
+    runMiddleware(req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
         async.eachSeries(this.stack, function (middleware, cb) {
             middleware(req, res, cb);
         }, next);
     }
 
-    private handle0(req: Request, res: Response, next: (err?: Error) => void) {
-        const path = _path.posix.normalize(req.path);
-        if (path === "/")
-            this.default.handle(req, res, next);
-        else
-            async.eachSeries(this.mounts, (mount, cb) => {
-                const targetPath = mount.rawPattern;
-                if (path === targetPath || (!mount.leaf && path.length >= targetPath.length + 1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
-                    const curl = req.url;
-                    req.mount = mount;
-                    req.url = req.url.substring(targetPath.length) || "/";
-                    mount.handle(req, res, function (err: Error) {
-                        req.url = curl;
-                        cb(err);
-                    });
-                } else
-                    cb();
-            }, (err?: Error) => {
-                if (err)
-                    next(err);
-                else
-                    this.default.handle(req, res, next);
-            });
+    /**
+     * Process the incoming request
+     */
+    process(req: Request<any>, res: Response<any, any>, next: (err?: Error) => void) {
+      const path = _path.posix.normalize(req.path);
+      async.eachSeries(this.mounts, (mount, cb) => {
+          const targetPath = mount.rawPattern;
+          if (path === targetPath || (!mount.leaf && path.length >= targetPath.length + 1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
+              const curl = req.url;
+              req.mount = mount;
+              req.url = req.url.substring(targetPath.length) || "/";
+              mount.handle(req, res, function (err: Error) {
+                  req.url = curl;
+                  cb(err);
+              });
+          } else
+              cb();
+      }, (err?: Error) => {
+          if (err)
+              next(err);
+          else
+              this.default.handle(req, res, next);
+      });
     }
 
-    upgrade(req: Request, res: Response, next: (err?: Error) => void) {
+    upgrade(req: Request<User>, res: Response<User, ResponseLocals<User>>, next: (err?: Error) => void) {
       const prefix = _path.posix.join("/", req.originalUrl.substring(0, req.originalUrl.length - req.url.length), "/");
       try {
         Object.defineProperty(req, "sitePrefix", {
@@ -2347,7 +2487,7 @@ export class NexusFramework extends events.EventEmitter {
               Object.defineProperty(req, "readBody", {
                   configurable: true,
                   value: function (cb: (err?: Error, data?: Buffer) => void) {
-                      cb(undefined, Buffer.from(JSON.stringify(req.body) || ""));
+                      cb(undefined, Buffer.from(BSON.serialize(req.body) || ""));
                   }
               });
           else
@@ -2523,6 +2663,10 @@ export class NexusFramework extends events.EventEmitter {
                   value: "webp"
               });
           } catch (e) {}
+          res.locals.webpOrPng = "webp";
+          res.locals.webpOrJpg = "webp";
+          res.locals.webpOrGif = "webp";
+          res.locals.webp = true;
       } else {
           try {
               Object.defineProperty(req, "webpOrPng", {
@@ -2539,6 +2683,9 @@ export class NexusFramework extends events.EventEmitter {
                   value: "gif"
               });
           } catch (e) {}
+          res.locals.webpOrPng = "png";
+          res.locals.webpOrJpg = "jpg";
+          res.locals.webpOrGif = "gif";
       }
       const pagesys = req.pagesys;
       if (req.xhr || req.io) {
@@ -2744,16 +2891,18 @@ export class NexusFramework extends events.EventEmitter {
       try {
           Object.defineProperty(res, "addNexusFrameworkClient", {
               configurable: true,
-              value: (includeSocketIO = this.socketIOSetup, autoEnabledPageSystem = false) => {
+              value: (includeSocketIO = this.socketIOGuests, autoEnabledPageSystem = false) => {
                   const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
                   const path = _path.posix.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
+                  addScript(_path.posix.join(this.prefix, ":scripts/{{type}}/compat.min.js?v=" + pkgjson.version));
+                  addScript(_path.posix.join(this.prefix, bson_path), undefined, "compat");
                   if (includeSocketIO) {
-                      addSocketIOClient();
-                      addScript(path, integrity, "socket.io");
+                    addSocketIOClient();
+                    addScript(path, integrity, "bson", "socket.io");
                   } else
-                      addScript(path, integrity);
+                    addScript(path, integrity, "bson");
                   if (autoEnabledPageSystem)
-                      addInlineScript("NexusFrameworkClient.initPageSystem()", "nexusframeworkclient");
+                    addInlineScript("NexusFrameworkClient.initPageSystem()", "nexusframeworkclient");
               }
           });
       } catch (e) {}
@@ -3021,7 +3170,7 @@ export class NexusFramework extends events.EventEmitter {
                   if (!pagesys) {
                       out.write("<script type=\"text/javascript\">");
                       out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
-                      out.write("//# sourceMappingURL=" + req.protocol + "://" + req.hostname + ":" + req.socket.localPort + _path.posix.join("/", self.prefix, ":scripts/" + (es6 ? "es6" : "es5") + "/loader.min.js.map") + "</script>");
+                      out.write("//# sourceMappingURL=" + req.protocol + "://" + req.hostname + _path.posix.join("/", self.prefix, ":scripts/" + (es6 ? "es6" : "es5") + "/loader.min.js.map") + "</script>");
                   }
                   out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
                   out.write(JSON.stringify(getLoaderData()));
@@ -3272,7 +3421,7 @@ export class NexusFramework extends events.EventEmitter {
                                   if (err)
                                       res.sendFailure(err);
                                   else if (data)
-                                      res.json(data);
+                                    res.type("application/bson").end(BSON.serialize(data));
                                   else
                                       res.sendFailure(new Error("Server Error: No data passed"));
                               });
@@ -3290,7 +3439,7 @@ export class NexusFramework extends events.EventEmitter {
                       var skeleton = (legacy && renderoptions.legacyskeleton) || renderoptions.skeleton;
                       if (!res.get("content-type"))
                           try {
-                              res.type("text/html; charset=utf-8"); // Default to utf8 html
+                            res.type("text/html; charset=utf-8"); // Default to utf8 html
                           } catch (e) {}
                       if (skeleton) {
                           vars['page'] = filename;
@@ -3350,7 +3499,7 @@ export class NexusFramework extends events.EventEmitter {
                       res.addBodyClassName("error-page");
                       res.addBodyClassName("error-" + code);
                       req.url = url.resolve("/", handler);
-                      this.handle0(req, res, function (err?: Error) {
+                      this.process(req, res, function (err?: Error) {
                           if (err) {
                               console.warn(err);
                               builtInSendStatus(500, new Error("Error with error page script"));
@@ -3395,7 +3544,7 @@ export class NexusFramework extends events.EventEmitter {
                       res.addBodyClassName("error-page");
                       res.addBodyClassName("error-500");
                       req.url = url.resolve("/", handler);
-                      this.handle0(req, res, function (err?: Error) {
+                      this.process(req, res, function (err?: Error) {
                           if (err) {
                               console.warn(err);
                               builtInSendStatus(500, new Error("Error with error page script"));

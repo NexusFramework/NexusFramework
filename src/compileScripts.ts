@@ -35,13 +35,13 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
             async.eachLimit(files, _cpus, function(tsRaw, cb) {
                 if (!/\.ts$/.test(tsRaw))
                     return cb();
-                    
+
                 const base = path.basename(tsRaw, ".ts");
                 const minOut = base + ".min.js";
                 const minOutJs = path.resolve(typeOutDir, minOut);
                 const jsOut = path.resolve(typeOutDir, base + ".js");
                 const tsIn = path.resolve(indir, tsRaw);
-                
+
                 var inmtime: number, outmtime: number;
                 async.series([
                     function(cb) {
@@ -70,7 +70,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                         return cb(err);
                     if (outmtime >= inmtime)
                         return cb();
-                        
+
                     const args = ["--module", "AMD", "--out", jsOut];
                     const opts = typeOptions[_type];
                     if (sourcemap)
@@ -94,7 +94,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                                 return cb(err);
                             const data: any = {};
                             data["../src/" + tsRaw] = code;
-                            const _opts: any = sourcemap ? _.clone(options) : options;
+                            const _opts: any = _.cloneDeep(options);
                             const next = function() {
                                 const output = uglify.minify(data as any, _opts);
                                 err = output['error'];
@@ -119,7 +119,7 @@ const compile = function(indir: string, outdir: string, cb: (err?: Error) => voi
                                         content: smap,
                                         filename: base + ".min.js"
                                     };
-                                    next(); 
+                                    next();
                                 });
                             else
                                 fs.unlink(jsOut, function(err) {

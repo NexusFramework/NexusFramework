@@ -15,6 +15,16 @@ const _export = function (config, logger, server, app) {
     const instance = new nexusframework_1.NexusFramework(app, server, logger, config.prefix);
     if (!config.nologging)
         instance.enableLogging();
+    if (!config.noapi) {
+        const blacklist = config.apiblacklist;
+        var apis = Object.keys(nexusframework_1.NexusFramework.apiencoders);
+        if (blacklist)
+            apis = apis.filter(function (api) {
+                return blacklist.indexOf(api) === -1;
+            });
+        if (apis.length)
+            instance.enableAPIs(apis);
+    }
     if (config.root)
         instance.mount("/", config.pages || "pages", config);
     if (config.skeleton)
@@ -24,21 +34,24 @@ const _export = function (config, logger, server, app) {
     if (config.pagesysskeleton)
         instance.setPageSystemSkeleton(config.pagesysskeleton);
     if (!config.noio) {
-        if (server)
-            instance.setupIO();
-        else {
+        if (server) {
+            instance.setupIO(config.iopath || ":io", !config.nopagesys && config.iopagesys, config.guestio);
+            if (!config.nopagesys && !config.iopagesys)
+                instance.setupPageSystem();
+        }
+        else if (!config.nopagesys) {
             instance.setupPageSystem();
             logger.warn("No server provided, Socket.IO will not be available. If using nexusfork, please upgrade.");
         }
     }
-    else
+    else if (!config.nopagesys)
         instance.setupPageSystem();
     if (!config.noloader)
         instance.enableLoader();
     if (!config.noscripts)
         instance.mountScripts();
     if (!config.noabout)
-        instance.mountAbout();
+        instance.mountAbout(":about", config);
     if (config.errordoc)
         Object.keys(config.errordoc).forEach(function (key) {
             instance.setErrorDocument(key, config.errordoc[key]);

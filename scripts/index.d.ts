@@ -68,9 +68,17 @@ declare interface NexusFrameworkTransportResponse {
      */
     readonly contentFromJSON: any;
     /**
+     * Parses a BSON representation from the response string or throws an error.
+     */
+    readonly contentFromBSON: any;
+    /**
      * The content as a String.
      */
     readonly contentAsString: string;
+    /**
+     * The content as an ArrayBuffer.
+     */
+    readonly contentAsArrayBuffer: ArrayBuffer;
     /**
       * The length in bytes of
       */
@@ -107,12 +115,6 @@ declare interface NexusFrameworkPageSystemOptions {
      */
     noprogress?: boolean;
     /**
-     * Disables using SocketIO for the Page System.
-     * The Page System over SocketIO cannot pass some HttpOnly cookies,
-     * as such this might be required for some websites.
-     */
-    nopagesysio?: boolean;
-    /**
      * The timing in milliseconds the page transition animation will take.
      * Defaults to 500.
      */
@@ -123,7 +125,9 @@ declare interface NexusFrameworkPageSystemOptions {
       */
     pageHistoryCacheSize?: number;
     /**
-     * Disables using SocketIO, which would be used otherwise, when available
+     * Disables using SocketIO for the Page System.
+     * The Page System over SocketIO cannot pass some HttpOnly cookies,
+     * as such this might be required for some websites.
      */
     noio?: boolean;
 }
@@ -172,6 +176,10 @@ declare interface NexusFrameworkClient extends NexusFrameworkEvents {
      * The base URL for this client.
      */
     readonly url: string;
+    /**
+      * The ID of the current user, if any.
+      */
+    readonly currentUser: string | undefined;
     /**
      * The analytics adapter.
      */
@@ -230,12 +238,12 @@ declare interface NexusFrameworkClient extends NexusFrameworkEvents {
     emit(event: string, ...args: any[]): void;
 }
 declare interface NexusFrameworkTransport {
-    get(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;
-    head(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;
-    put(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;
-    post(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;
-    execute(method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;
-    del(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void): void;
+    get(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void, wantsBinary?: boolean): void;
+    head(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void, wantsBinary?: boolean): void;
+    put(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void, wantsBinary?: boolean): void;
+    post(url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number) => void, wantsBinary?: boolean): void;
+    execute(method: string, url: string, data: any, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number, wantsBinary?: boolean) => void): void;
+    del(url: string, cb: (res: NexusFrameworkTransportResponse) => void, extraHeaders?: {[index: string]: string}, progcb?: (complete: number, total: number, wantsBinary?: boolean) => void): void;
 }
 declare interface GoogleAnalytics {
     (cmd: string, ...args: any[]): void;

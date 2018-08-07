@@ -87,7 +87,7 @@ const compile = function (indir, outdir, cb, types = ["es5", "es6"]) {
                                 return cb(err);
                             const data = {};
                             data["../src/" + tsRaw] = code;
-                            const _opts = sourcemap ? _.clone(options) : options;
+                            const _opts = _.cloneDeep(options);
                             const next = function () {
                                 const output = uglify.minify(data, _opts);
                                 err = output['error'];

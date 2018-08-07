@@ -19,11 +19,13 @@ const async = require("async");
 const sharp = require("sharp");
 const http = require("http");
 const _path = require("path");
+const bson = require("bson");
 const _ = require("lodash");
 const url = require("url");
 const nhp = require("nhp");
 const fs = require("fs");
 const os = require("os");
+const BSON = new bson;
 const noop = function () { };
 const mainpkgversion = (function () {
     try {
@@ -51,6 +53,21 @@ if (has_slim_io_js) {
 }
 else
     socket_io_slim_path = ":io/socket.io.js";
+var bson_path;
+const bson_js = require.resolve("bson/dist/bson.js");
+const bsonpkgjson = require("bson/package.json");
+if (bson_js) {
+    bson_path = ":scripts/bson.js?v=" + bsonpkgjson.version;
+    // try {
+    //     const hash = crypto.createHash("sha512");
+    //     hash.update(fs.readFileSync(socket_io_slim_js, "utf8"));
+    //     socket_io_slim_integrity = "sha512-" + hash.digest("base64");
+    // } catch(e) {
+    //     console.warn(e);
+    // }
+}
+else
+    throw new Error("Could not resolve bson.js");
 var nexusframeworkclient_es5_integrity;
 var nexusframeworkclient_es6_integrity;
 try {
@@ -218,6 +235,9 @@ class SocketIORequest extends events.EventEmitter {
         if (event == "end" || event == "done")
             listener();
         return this;
+    }
+    [Symbol.asyncIterator]() {
+        throw new Error("Not supported");
     }
     get rawHeaders() {
         var rawHeaders = [];
@@ -469,16 +489,13 @@ class RequestHandlerWithChildren {
                     else if (this['_index']) {
                         var urlpath;
                         if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                            if (req.pagesys) {
-                                const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
-                                if (urlpath.startsWith(prefix))
-                                    urlpath = req.sitePrefix + urlpath.substring(prefix.length);
-                            }
                             const q = urlpath.indexOf("?");
                             if (q == -1)
                                 urlpath += "/";
                             else
                                 urlpath = urlpath.substring(0, q) + "/" + urlpath.substring(q);
+                            if (req.pagesys && /^\/:pagesys\//.test(urlpath))
+                                urlpath = urlpath.substring(9);
                             return res.redirect(urlpath);
                         }
                         this['_index'].handle(req, res, (err, locals) => {
@@ -711,16 +728,13 @@ class NHPRequestHandler extends LeafRequestHandler {
                 const _next = () => {
                     var urlpath;
                     if (redirect && !res.locals.errorCode && req.method.toUpperCase() === "GET" && /\/(\?.*)?$/.test(urlpath = url.parse(req.originalUrl).path)) {
-                        if (req.pagesys) {
-                            const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
-                            if (urlpath.startsWith(prefix))
-                                urlpath = req.sitePrefix + urlpath.substring(prefix.length);
-                        }
                         const q = urlpath.indexOf("?");
                         if (q == -1)
                             urlpath = urlpath.substring(0, urlpath.length - 1);
                         else
                             urlpath = urlpath.substring(0, q - 1) + urlpath.substring(q);
+                        if (req.pagesys && /^\/:pagesys\//.test(urlpath))
+                            urlpath = urlpath.substring(9);
                         if (urlpath.length > req.sitePrefix.length)
                             return res.redirect(urlpath);
                     }
@@ -1431,6 +1445,104 @@ class FSWatcherRequestChildHandler extends FSWatcherRequestHandler {
         this.pattern = new RegExp("^" + pattern + "$", "i");
     }
 }
+class DEBUG {
+    static encode(str) {
+        return str.replace(/\n/g, "\\n");
+    }
+    static stringify0(vars, indent = "", inline = false) {
+        if (vars === true)
+            return (inline ? "" : indent) + "1";
+        if (vars === false)
+            return (inline ? "" : indent) + "0";
+        var data;
+        const varstype = typeof vars;
+        if (varstype === "string" || varstype === "number" || vars instanceof String || vars instanceof Number)
+            data = (inline ? "" : indent) + DEBUG.encode("" + vars);
+        else if (vars instanceof Date)
+            data = (inline ? "" : indent) + DEBUG.encode("" + (+vars));
+        else if (Array.isArray(vars)) {
+            var i = 0;
+            data = "";
+            const iindent = indent + "  ";
+            vars.forEach(function (entry) {
+                const t = i.toString();
+                data += "\n" + indent + "[" + t + "] " + DEBUG.stringify0(entry, iindent, true);
+                i++;
+            });
+        }
+        else {
+            if (!vars)
+                return "";
+            data = "";
+            var obj;
+            try {
+                obj = (vars.toAPI || vars.toObject || vars.toJSON).call(vars);
+            }
+            catch (e) {
+                obj = vars;
+            }
+            const iindent = indent + "  ";
+            Object.keys(obj).forEach(function (key) {
+                var k = DEBUG.encode("" + key);
+                if (/^\d+/.test(k))
+                    k = "_" + k;
+                data += "\n" + indent + "[" + DEBUG.encode(key) + "] " + DEBUG.stringify0(obj[key], iindent, true);
+            });
+        }
+        return data;
+    }
+    static stringify(vars) {
+        return "Root" + DEBUG.stringify0(vars, "  ");
+    }
+}
+class XML {
+    static encode(str) {
+        return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    static stringify0(vars) {
+        if (vars === true)
+            return "1";
+        if (vars === false)
+            return "0";
+        var data;
+        const varstype = typeof vars;
+        if (varstype === "string" || varstype === "number" || vars instanceof String || vars instanceof Number)
+            data = "" + XML.encode("" + vars);
+        else if (vars instanceof Date)
+            data = "" + XML.encode("" + (+vars));
+        else if (Array.isArray(vars)) {
+            var i = 0;
+            data = "";
+            vars.forEach(function (entry) {
+                const t = i.toString();
+                data += "<entry" + t + ">" + XML.stringify0(entry) + "</entry" + t + ">";
+                i++;
+            });
+        }
+        else {
+            if (!vars)
+                return "";
+            data = "";
+            var obj;
+            try {
+                obj = (vars.toAPI || vars.toObject || vars.toJSON).call(vars);
+            }
+            catch (e) {
+                obj = vars;
+            }
+            Object.keys(obj).forEach(function (key) {
+                var k = XML.encode("" + key);
+                if (/^\d+/.test(k))
+                    k = "_" + k;
+                data += "<" + k + ">" + XML.stringify0(obj[key]) + "</" + k + ">";
+            });
+        }
+        return data;
+    }
+    static stringify(vars) {
+        return "<api>" + XML.stringify0(vars) + "</api>";
+    }
+}
 class NexusFramework extends events.EventEmitter {
     constructor(app = express(), server, logger = new nulllogger("NexusFramework"), prefix = "/", nhpoptions = {}) {
         super();
@@ -1444,6 +1556,7 @@ class NexusFramework extends events.EventEmitter {
                 mainpkgversion
             ]
         ];
+        this.apis = {};
         this.versions = [pkgjson.version, mainpkgversion];
         if (!server)
             server = new http.Server(app);
@@ -1596,6 +1709,12 @@ class NexusFramework extends events.EventEmitter {
     installHeaderRenderer(renderer) {
         this.header.push(renderer);
     }
+    installAPI(ext, encoder) {
+        this.apis[ext] = encoder;
+    }
+    enableAPIs(encoders) {
+        encoders.forEach((ext) => this.installAPI(ext, NexusFramework.apiencoders[ext]));
+    }
     enableLogging() {
         this.logging = true;
     }
@@ -1649,8 +1768,8 @@ class NexusFramework extends events.EventEmitter {
             autoIndex: true
         });
     }
-    mountAbout(mpath = ":about") {
-        this.mount(mpath, _path.resolve(__dirname, "../about/"));
+    mountAbout(mpath = ":about", opts) {
+        this.mount(mpath, _path.resolve(__dirname, "../about/"), opts);
     }
     setupPageSystem() {
         const pagesyspath = /^\/\:pagesys(\/.*)$/;
@@ -1693,7 +1812,7 @@ class NexusFramework extends events.EventEmitter {
             next();
         }, true);
     }
-    setupIO(path = ":io", withPageSystem = true) {
+    setupIO(path = ":io", withPageSystem = true, guestsToo = false) {
         if (!this.server)
             throw new Error("No server passed in constructor, cannot setup Socket.IO");
         const iopath = _path.posix.join(this.prefix, path);
@@ -1763,6 +1882,15 @@ class NexusFramework extends events.EventEmitter {
         Object.defineProperty(this, "io", {
             value: io
         });
+        this.mountHandler("/:scripts/bson.js", function (req, res, next) {
+            res.sendFile(bson_js, {
+                maxAge: 3.154e+10,
+                immutable: true
+            }, function (err) {
+                if (err)
+                    next(err);
+            });
+        });
         if (has_slim_io_js)
             this.mountHandler("/:scripts/socket.io.slim.js", function (req, res, next) {
                 res.sendFile(socket_io_slim_js, {
@@ -1776,6 +1904,7 @@ class NexusFramework extends events.EventEmitter {
         if (withPageSystem)
             this.setupPageSystem();
         this.socketIOSetup = true;
+        this.socketIOGuests = guestsToo;
         return iopath;
     }
     /**
@@ -1878,16 +2007,13 @@ class NexusFramework extends events.EventEmitter {
                         if (stats.isDirectory()) {
                             if (options.autoIndex) {
                                 if (req.method.toUpperCase() === "GET" && !/\/(\?.*)?$/.test(urlpath)) {
-                                    if (req.pagesys) {
-                                        const prefix = _path.posix.join(req.sitePrefix, ":pagesys/");
-                                        if (urlpath.startsWith(prefix))
-                                            urlpath = req.sitePrefix + urlpath.substring(prefix.length);
-                                    }
                                     const q = urlpath.indexOf("?");
                                     if (q == -1)
                                         urlpath += "/";
                                     else
                                         urlpath = urlpath.substring(0, q) + "/" + urlpath.substring(q);
+                                    if (req.pagesys && /^\/:pagesys\//.test(urlpath))
+                                        urlpath = urlpath.substring(9);
                                     return res.redirect(urlpath);
                                 }
                                 if (req.pagesys) {
@@ -2115,7 +2241,7 @@ class NexusFramework extends events.EventEmitter {
                                     const id = user.id || user.email || user.displayName || "Logged";
                                     res.set("X-Logged-User", "" + id);
                                 }
-                                self.handle0(req, res, next);
+                                self.process(req, res, next);
                             }
                         });
                 });
@@ -2141,30 +2267,30 @@ class NexusFramework extends events.EventEmitter {
             middleware(req, res, cb);
         }, next);
     }
-    handle0(req, res, next) {
+    /**
+     * Process the incoming request
+     */
+    process(req, res, next) {
         const path = _path.posix.normalize(req.path);
-        if (path === "/")
-            this.default.handle(req, res, next);
-        else
-            async.eachSeries(this.mounts, (mount, cb) => {
-                const targetPath = mount.rawPattern;
-                if (path === targetPath || (!mount.leaf && path.length >= targetPath.length + 1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
-                    const curl = req.url;
-                    req.mount = mount;
-                    req.url = req.url.substring(targetPath.length) || "/";
-                    mount.handle(req, res, function (err) {
-                        req.url = curl;
-                        cb(err);
-                    });
-                }
-                else
-                    cb();
-            }, (err) => {
-                if (err)
-                    next(err);
-                else
-                    this.default.handle(req, res, next);
-            });
+        async.eachSeries(this.mounts, (mount, cb) => {
+            const targetPath = mount.rawPattern;
+            if (path === targetPath || (!mount.leaf && path.length >= targetPath.length + 1 && path.substring(0, mount.rawPattern.length) === targetPath && path[mount.rawPattern.length] == '/')) {
+                const curl = req.url;
+                req.mount = mount;
+                req.url = req.url.substring(targetPath.length) || "/";
+                mount.handle(req, res, function (err) {
+                    req.url = curl;
+                    cb(err);
+                });
+            }
+            else
+                cb();
+        }, (err) => {
+            if (err)
+                next(err);
+            else
+                this.default.handle(req, res, next);
+        });
     }
     upgrade(req, res, next) {
         const prefix = _path.posix.join("/", req.originalUrl.substring(0, req.originalUrl.length - req.url.length), "/");
@@ -2223,7 +2349,7 @@ class NexusFramework extends events.EventEmitter {
                 Object.defineProperty(req, "readBody", {
                     configurable: true,
                     value: function (cb) {
-                        cb(undefined, Buffer.from(JSON.stringify(req.body) || ""));
+                        cb(undefined, Buffer.from(BSON.serialize(req.body) || ""));
                     }
                 });
             else
@@ -2417,6 +2543,10 @@ class NexusFramework extends events.EventEmitter {
                 });
             }
             catch (e) { }
+            res.locals.webpOrPng = "webp";
+            res.locals.webpOrJpg = "webp";
+            res.locals.webpOrGif = "webp";
+            res.locals.webp = true;
         }
         else {
             try {
@@ -2437,6 +2567,9 @@ class NexusFramework extends events.EventEmitter {
                 });
             }
             catch (e) { }
+            res.locals.webpOrPng = "png";
+            res.locals.webpOrJpg = "jpg";
+            res.locals.webpOrGif = "gif";
         }
         const pagesys = req.pagesys;
         if (req.xhr || req.io) {
@@ -2660,15 +2793,17 @@ class NexusFramework extends events.EventEmitter {
         try {
             Object.defineProperty(res, "addNexusFrameworkClient", {
                 configurable: true,
-                value: (includeSocketIO = this.socketIOSetup, autoEnabledPageSystem = false) => {
+                value: (includeSocketIO = this.socketIOGuests, autoEnabledPageSystem = false) => {
                     const integrity = legacy ? undefined : (es6 ? nexusframeworkclient_es6_integrity : nexusframeworkclient_es5_integrity);
                     const path = _path.posix.join(this.prefix, ":scripts/{{type}}/nexusframeworkclient.min.js?v=" + pkgjson.version);
+                    addScript(_path.posix.join(this.prefix, ":scripts/{{type}}/compat.min.js?v=" + pkgjson.version));
+                    addScript(_path.posix.join(this.prefix, bson_path), undefined, "compat");
                     if (includeSocketIO) {
                         addSocketIOClient();
-                        addScript(path, integrity, "socket.io");
+                        addScript(path, integrity, "bson", "socket.io");
                     }
                     else
-                        addScript(path, integrity);
+                        addScript(path, integrity, "bson");
                     if (autoEnabledPageSystem)
                         addInlineScript("NexusFrameworkClient.initPageSystem()", "nexusframeworkclient");
                 }
@@ -2947,7 +3082,7 @@ class NexusFramework extends events.EventEmitter {
                     if (!pagesys) {
                         out.write("<script type=\"text/javascript\">");
                         out.write(es6 ? loaderScriptEs6 : loaderScriptEs5);
-                        out.write("//# sourceMappingURL=" + req.protocol + "://" + req.hostname + ":" + req.socket.localPort + _path.posix.join("/", self.prefix, ":scripts/" + (es6 ? "es6" : "es5") + "/loader.min.js.map") + "</script>");
+                        out.write("//# sourceMappingURL=" + req.protocol + "://" + req.hostname + _path.posix.join("/", self.prefix, ":scripts/" + (es6 ? "es6" : "es5") + "/loader.min.js.map") + "</script>");
                     }
                     out.write("<script type=\"text/javascript\">NexusFrameworkLoader.load(");
                     out.write(JSON.stringify(getLoaderData()));
@@ -3206,7 +3341,7 @@ class NexusFramework extends events.EventEmitter {
                                     if (err)
                                         res.sendFailure(err);
                                     else if (data)
-                                        res.json(data);
+                                        res.type("application/bson").end(BSON.serialize(data));
                                     else
                                         res.sendFailure(new Error("Server Error: No data passed"));
                                 });
@@ -3291,7 +3426,7 @@ class NexusFramework extends events.EventEmitter {
                         res.addBodyClassName("error-page");
                         res.addBodyClassName("error-" + code);
                         req.url = url.resolve("/", handler);
-                        this.handle0(req, res, function (err) {
+                        this.process(req, res, function (err) {
                             if (err) {
                                 console.warn(err);
                                 builtInSendStatus(500, new Error("Error with error page script"));
@@ -3343,7 +3478,7 @@ class NexusFramework extends events.EventEmitter {
                         res.addBodyClassName("error-page");
                         res.addBodyClassName("error-500");
                         req.url = url.resolve("/", handler);
-                        this.handle0(req, res, function (err) {
+                        this.process(req, res, function (err) {
                             if (err) {
                                 console.warn(err);
                                 builtInSendStatus(500, new Error("Error with error page script"));
@@ -3415,6 +3550,20 @@ class NexusFramework extends events.EventEmitter {
         return !!this.io;
     }
 }
+NexusFramework.apiencoders = {
+    "json": function (locals, req, res) {
+        res.type("text/json").end(JSON.stringify(locals));
+    },
+    "bson": function (locals, req, res) {
+        res.type("application/bson").end(BSON.serialize(locals));
+    },
+    "debug": function (locals, req, res) {
+        res.type("text/plain").end(DEBUG.stringify(locals));
+    },
+    "xml": function (locals, req, res) {
+        res.type("text/xml").end(XML.stringify(locals));
+    }
+};
 exports.NexusFramework = NexusFramework;
 NexusFramework.prototype.use = NexusFramework.prototype.pushMiddleware;
 const json = SocketIOResponse.prototype.json;

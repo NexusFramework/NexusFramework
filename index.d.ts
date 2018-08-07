@@ -1,6 +1,5 @@
 /// <reference types="nulllogger" />
 /// <reference types="node" />
-/// <reference types="express" />
 import compileScripts = require("./src/compileScripts");
 import { NexusFramework } from "./src/nexusframework";
 import { nexusfork } from "nexusfork/types";
